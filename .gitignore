@@ -1,0 +1,5 @@
+# data pipeline inputs/outputs
+data_pipeline/input/JMdict*.xml
+data_pipeline/output/*.sqlite
+data_pipeline/output/*.json
+data_pipeline/output/*.db
