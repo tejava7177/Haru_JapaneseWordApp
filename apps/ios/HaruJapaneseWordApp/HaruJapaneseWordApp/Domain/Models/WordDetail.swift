@@ -7,6 +7,7 @@ struct WordDetail: Identifiable, Hashable {
     let meanings: [String]
 
     var meaningsJoined: String {
-        meanings.joined(separator: " / ")
+        let joined = meanings.joined(separator: " / ")
+        return joined.isEmpty ? "—" : joined
     }
 }

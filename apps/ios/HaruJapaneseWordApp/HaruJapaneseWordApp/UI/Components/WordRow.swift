@@ -4,11 +4,12 @@ struct WordRow: View {
     let word: WordSummary
 
     var body: some View {
+        let meaningsText = word.meanings.isEmpty ? "—" : word.meanings
         VStack(alignment: .leading, spacing: 6) {
             Text(word.expression)
                 .font(.headline)
 
-            Text(word.meanings)
+            Text(meaningsText)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }

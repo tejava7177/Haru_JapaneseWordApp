@@ -4,22 +4,50 @@ import SQLite3
 final class SQLiteDictionaryRepository: DictionaryRepository {
     enum RepositoryError: Error {
         case databaseNotFound
+        case fileCopyFailed(message: String)
+        case schemaVerificationFailed(message: String)
+        case recoveryFailed(message: String)
     }
 
-    private let db: SQLiteDB
+    private var db: SQLiteDB
+    private let openFlags: Int32 = SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX
+    private var hasLoggedFirstFetch: Bool = false
 
     init(bundle: Bundle = .main) throws {
-        guard let url = bundle.url(
+        let bundledURL = bundle.url(
             forResource: "jlpt_starter",
             withExtension: "sqlite",
             subdirectory: "Dictionary"
-        ) ?? bundle.url(forResource: "jlpt_starter", withExtension: "sqlite") else {
+        ) ?? bundle.url(forResource: "jlpt_starter", withExtension: "sqlite")
+
+        print("[DB] bundled path=\(bundledURL?.path ?? "nil") \(SQLiteDictionaryRepository.fileInfo(for: bundledURL))")
+
+        guard let sourceURL = bundledURL else {
             throw RepositoryError.databaseNotFound
         }
-        self.db = try SQLiteDB(path: url.path)
+
+        let writableURL = try SQLiteDictionaryRepository.writableDatabaseURL()
+        print("[DB] writable path=\(writableURL.path) \(SQLiteDictionaryRepository.fileInfo(for: writableURL))")
+
+        try SQLiteDictionaryRepository.copyBundledDatabaseIfNeeded(
+            from: sourceURL,
+            to: writableURL,
+            force: false
+        )
+        print("[DB] writable path=\(writableURL.path) \(SQLiteDictionaryRepository.fileInfo(for: writableURL))")
+
+        self.db = try SQLiteDB(path: writableURL.path, flags: openFlags)
+        print("[DB] open flags=READWRITE")
+        configureJournalMode(db: db)
+        try verifySchemaOrRecover(bundledURL: sourceURL, writableURL: writableURL)
+        try logDataCounts(db: db)
     }
 
     func fetchWords(level: JLPTLevel, limit: Int?, offset: Int?) throws -> [WordSummary] {
+        if hasLoggedFirstFetch == false {
+            print("[DB] fetchWords level=\(level.rawValue)")
+            hasLoggedFirstFetch = true
+        }
         let sql = """
         SELECT w.id, w.expression, w.reading,
                GROUP_CONCAT(m.text, ' / ') AS meanings
@@ -40,10 +68,10 @@ final class SQLiteDictionaryRepository: DictionaryRepository {
 
         var results: [WordSummary] = []
         while try db.step(statement) {
-            let id = Int(sqlite3_column_int(statement, 0))
-            let expression = SQLiteDictionaryRepository.columnText(statement, index: 1)
-            let reading = SQLiteDictionaryRepository.columnText(statement, index: 2)
-            let meanings = SQLiteDictionaryRepository.columnText(statement, index: 3)
+            let id = SQLiteDB.columnInt(statement, 0)
+            let expression = SQLiteDB.columnText(statement, 1) ?? ""
+            let reading = SQLiteDB.columnText(statement, 2) ?? ""
+            let meanings = SQLiteDB.columnText(statement, 3) ?? ""
             results.append(
                 WordSummary(
                     id: id,
@@ -80,10 +108,10 @@ final class SQLiteDictionaryRepository: DictionaryRepository {
 
         var results: [WordSummary] = []
         while try db.step(statement) {
-            let id = Int(sqlite3_column_int(statement, 0))
-            let expression = SQLiteDictionaryRepository.columnText(statement, index: 1)
-            let reading = SQLiteDictionaryRepository.columnText(statement, index: 2)
-            let meanings = SQLiteDictionaryRepository.columnText(statement, index: 3)
+            let id = SQLiteDB.columnInt(statement, 0)
+            let expression = SQLiteDB.columnText(statement, 1) ?? ""
+            let reading = SQLiteDB.columnText(statement, 2) ?? ""
+            let meanings = SQLiteDB.columnText(statement, 3) ?? ""
             results.append(
                 WordSummary(
                     id: id,
@@ -112,9 +140,9 @@ final class SQLiteDictionaryRepository: DictionaryRepository {
             return nil
         }
 
-        let id = Int(sqlite3_column_int(wordStatement, 0))
-        let expression = SQLiteDictionaryRepository.columnText(wordStatement, index: 1)
-        let reading = SQLiteDictionaryRepository.columnText(wordStatement, index: 2)
+        let id = SQLiteDB.columnInt(wordStatement, 0)
+        let expression = SQLiteDB.columnText(wordStatement, 1) ?? ""
+        let reading = SQLiteDB.columnText(wordStatement, 2) ?? ""
 
         let meaningSql = """
         SELECT m.text
@@ -130,8 +158,9 @@ final class SQLiteDictionaryRepository: DictionaryRepository {
 
         var meanings: [String] = []
         while try db.step(meaningStatement) {
-            let text = SQLiteDictionaryRepository.columnText(meaningStatement, index: 0)
-            meanings.append(text)
+            if let text = SQLiteDB.columnText(meaningStatement, 0) {
+                meanings.append(text)
+            }
         }
 
         return WordDetail(
@@ -142,10 +171,175 @@ final class SQLiteDictionaryRepository: DictionaryRepository {
         )
     }
 
-    private static func columnText(_ statement: OpaquePointer, index: Int32) -> String {
-        guard let cString = sqlite3_column_text(statement, index) else {
+    private static func writableDatabaseURL() throws -> URL {
+        let baseURL = try FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        let dirURL = baseURL.appendingPathComponent("DictionaryDB", isDirectory: true)
+        try FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: true)
+        return dirURL.appendingPathComponent("jlpt_starter.sqlite", isDirectory: false)
+    }
+
+    private static func fileInfo(for url: URL?) -> String {
+        guard let url else {
+            return "exists=false size=0 modified=nil"
+        }
+        let path = url.path
+        let exists = FileManager.default.fileExists(atPath: path)
+        guard exists else {
+            return "exists=false size=0 modified=nil"
+        }
+        do {
+            let attrs = try FileManager.default.attributesOfItem(atPath: path)
+            let size = (attrs[.size] as? NSNumber)?.intValue ?? 0
+            let modified = attrs[.modificationDate] as? Date
+            let formatter = ISO8601DateFormatter()
+            let modifiedString = modified.map { formatter.string(from: $0) } ?? "nil"
+            return "exists=true size=\(size) modified=\(modifiedString)"
+        } catch {
+            return "exists=true size=0 modified=error"
+        }
+    }
+
+    private static func copyBundledDatabaseIfNeeded(from bundledURL: URL, to writableURL: URL, force: Bool) throws {
+        let fileManager = FileManager.default
+        if force, fileManager.fileExists(atPath: writableURL.path) {
+            try fileManager.removeItem(at: writableURL)
+        }
+        if !fileManager.fileExists(atPath: writableURL.path) {
+            do {
+                try fileManager.copyItem(at: bundledURL, to: writableURL)
+            } catch {
+                throw RepositoryError.fileCopyFailed(message: "copy failed: \(error)")
+            }
+        }
+    }
+
+    private func configureJournalMode(db: SQLiteDB) {
+        if let before = try? readSingleText(sql: "PRAGMA journal_mode;", db: db) {
+            print("[DB] journal_mode(before)=\(before)")
+        }
+        if let result = try? readSingleText(sql: "PRAGMA journal_mode=DELETE;", db: db) {
+            print("[DB] journal_mode(set)=\(result)")
+        }
+        if let after = try? readSingleText(sql: "PRAGMA journal_mode;", db: db) {
+            print("[DB] journal_mode(after)=\(after)")
+        }
+    }
+
+    private func verifySchemaOrRecover(bundledURL: URL, writableURL: URL) throws {
+        do {
+            let verification = try verifySchema()
+            if verification.hasRequiredTables == false {
+                print("[DB] has_required_tables=false")
+                print("[DB] recovery: closing db before replacing file")
+                self.db.close()
+                print("[DB] recovery: deleting writable db and recopying from bundle")
+                try SQLiteDictionaryRepository.copyBundledDatabaseIfNeeded(
+                    from: bundledURL,
+                    to: writableURL,
+                    force: true
+                )
+                print("[DB] writable path=\(writableURL.path) \(SQLiteDictionaryRepository.fileInfo(for: writableURL))")
+                let recoveredDB = try SQLiteDB(path: writableURL.path, flags: openFlags)
+                print("[DB] open flags=READWRITE (recovered)")
+                configureJournalMode(db: recoveredDB)
+                let recoveredVerification = try verifySchema(using: recoveredDB)
+                if recoveredVerification.hasRequiredTables == false {
+                    throw RepositoryError.recoveryFailed(
+                        message: "recovery failed: required tables missing"
+                    )
+                }
+                self.db = recoveredDB
+                try logDataCounts(db: recoveredDB)
+            } else {
+                print("[DB] has_required_tables=true")
+            }
+        } catch {
+            throw RepositoryError.schemaVerificationFailed(message: "\(error)")
+        }
+    }
+
+    private struct SchemaVerification {
+        let userVersion: Int
+        let hasRequiredTables: Bool
+    }
+
+    private func verifySchema(using database: SQLiteDB? = nil) throws -> SchemaVerification {
+        let database = database ?? db
+
+        let userVersion = try readSingleInt(sql: "PRAGMA user_version;", db: database)
+        print("[DB] user_version=\(userVersion)")
+
+        if let integrity = try? readSingleText(sql: "PRAGMA integrity_check;", db: database) {
+            print("[DB] integrity_check=\(integrity)")
+        }
+
+        let tables = try readAllText(sql: "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;", db: database)
+        print("[DB] tables=\(tables)")
+
+        let required = try readAllText(
+            sql: "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('word','meaning');",
+            db: database
+        )
+        let hasRequired = required.contains("word") && required.contains("meaning")
+        print("[DB] has_required_tables=\(hasRequired)")
+        return SchemaVerification(userVersion: userVersion, hasRequiredTables: hasRequired)
+    }
+
+    private func readSingleText(sql: String, db: SQLiteDB? = nil) throws -> String {
+        let database = db ?? self.db
+        let statement = try database.prepare(sql)
+        defer { database.finalize(statement) }
+        guard try database.step(statement) else {
             return ""
         }
-        return String(cString: cString)
+        return SQLiteDB.columnText(statement, 0) ?? ""
+    }
+
+    private func readSingleInt(sql: String, db: SQLiteDB? = nil) throws -> Int {
+        let database = db ?? self.db
+        let statement = try database.prepare(sql)
+        defer { database.finalize(statement) }
+        guard try database.step(statement) else {
+            return 0
+        }
+        return SQLiteDB.columnInt(statement, 0)
+    }
+
+    private func readAllText(sql: String, db: SQLiteDB? = nil) throws -> [String] {
+        let database = db ?? self.db
+        let statement = try database.prepare(sql)
+        defer { database.finalize(statement) }
+        var results: [String] = []
+        while try database.step(statement) {
+            if let value = SQLiteDB.columnText(statement, 0) {
+                results.append(value)
+            }
+        }
+        return results
+    }
+
+    private func readPairs(sql: String, db: SQLiteDB? = nil) throws -> [(String, Int)] {
+        let database = db ?? self.db
+        let statement = try database.prepare(sql)
+        defer { database.finalize(statement) }
+        var results: [(String, Int)] = []
+        while try database.step(statement) {
+            let key = SQLiteDB.columnText(statement, 0) ?? ""
+            let value = SQLiteDB.columnInt(statement, 1)
+            results.append((key, value))
+        }
+        return results
+    }
+
+    private func logDataCounts(db: SQLiteDB) throws {
+        let total = try readSingleInt(sql: "SELECT COUNT(*) FROM word;", db: db)
+        print("[DB] word_count=\(total)")
+        let byLevel = try readPairs(sql: "SELECT level, COUNT(*) FROM word GROUP BY level;", db: db)
+        print("[DB] by_level=\(byLevel)")
     }
 }

@@ -40,7 +40,7 @@ final class WordListViewModel: ObservableObject {
                 words = try repository.searchWords(level: selectedLevel, query: trimmedQuery, limit: nil, offset: nil)
             }
         } catch {
-            errorMessage = "단어를 불러오지 못했습니다."
+            errorMessage = "단어를 불러오지 못했습니다.\n\(String(describing: error))"
             words = []
         }
 

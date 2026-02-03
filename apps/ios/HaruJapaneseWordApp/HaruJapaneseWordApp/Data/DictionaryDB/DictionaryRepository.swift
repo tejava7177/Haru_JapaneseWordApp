@@ -19,3 +19,19 @@ struct StubDictionaryRepository: DictionaryRepository {
         nil
     }
 }
+
+struct ErrorDictionaryRepository: DictionaryRepository {
+    let error: Error
+
+    func fetchWords(level: JLPTLevel, limit: Int?, offset: Int?) throws -> [WordSummary] {
+        throw error
+    }
+
+    func searchWords(level: JLPTLevel, query: String, limit: Int?, offset: Int?) throws -> [WordSummary] {
+        throw error
+    }
+
+    func fetchWordDetail(wordId: Int) throws -> WordDetail? {
+        throw error
+    }
+}

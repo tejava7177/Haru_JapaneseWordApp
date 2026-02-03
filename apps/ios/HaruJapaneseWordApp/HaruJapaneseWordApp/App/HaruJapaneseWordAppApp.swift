@@ -16,7 +16,12 @@ struct HaruJapaneseWordAppApp: App {
     private let repository: DictionaryRepository
 
     init() {
-        repository = (try? SQLiteDictionaryRepository()) ?? StubDictionaryRepository()
+        do {
+            repository = try SQLiteDictionaryRepository()
+        } catch {
+            print("❌ Repository init failed: \(error)")
+            repository = ErrorDictionaryRepository(error: error)
+        }
     }
 
     var body: some Scene {

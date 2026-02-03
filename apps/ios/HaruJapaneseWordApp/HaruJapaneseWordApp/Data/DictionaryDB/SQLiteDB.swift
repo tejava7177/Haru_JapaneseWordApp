@@ -13,22 +13,29 @@ final class SQLiteDB {
     // sqlite3_bind_text destructor: "SQLite가 문자열을 복사해서 보관"
     private static let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
-    private let db: OpaquePointer?
+    private var db: OpaquePointer?
+    let openFlags: Int32
 
-    init(path: String) throws {
+    init(path: String, flags: Int32 = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE) throws {
         var handle: OpaquePointer?
-        let result = sqlite3_open_v2(path, &handle, SQLITE_OPEN_READONLY, nil)
+        let result = sqlite3_open_v2(path, &handle, flags, nil)
         if result != SQLITE_OK {
             let message = SQLiteDB.errorMessage(from: handle)
             if let handle { sqlite3_close(handle) }
             throw SQLiteError.openFailed(message: message)
         }
         self.db = handle
+        self.openFlags = flags
     }
 
-    deinit {
-        if let db { sqlite3_close(db) }
+    func close() {
+        if let db {
+            sqlite3_close(db)
+            self.db = nil
+        }
     }
+
+    deinit { close() }
 
     func prepare(_ sql: String) throws -> OpaquePointer {
         guard let db else {
@@ -97,5 +104,16 @@ final class SQLiteDB {
             return "Unknown SQLite error"
         }
         return String(cString: cString)
+    }
+
+    static func columnText(_ statement: OpaquePointer, _ index: Int32) -> String? {
+        guard let cString = sqlite3_column_text(statement, index) else {
+            return nil
+        }
+        return String(cString: cString)
+    }
+
+    static func columnInt(_ statement: OpaquePointer, _ index: Int32) -> Int {
+        Int(sqlite3_column_int(statement, index))
     }
 }
