@@ -1,8 +1,8 @@
 import Foundation
 
 protocol DictionaryRepository {
-    func fetchWords(level: JLPTLevel, limit: Int?, offset: Int?) throws -> [WordSummary]
-    func searchWords(level: JLPTLevel, query: String, limit: Int?, offset: Int?) throws -> [WordSummary]
+    func fetchWords(level: JLPTLevel?, limit: Int?, offset: Int?) throws -> [WordSummary]
+    func searchWords(level: JLPTLevel?, query: String, limit: Int?, offset: Int?) throws -> [WordSummary]
     func fetchWordDetail(wordId: Int) throws -> WordDetail?
     func fetchWordSummary(wordId: Int) throws -> WordSummary?
     func randomWord(level: JLPTLevel) throws -> WordSummary?
@@ -10,11 +10,11 @@ protocol DictionaryRepository {
 }
 
 struct StubDictionaryRepository: DictionaryRepository {
-    func fetchWords(level: JLPTLevel, limit: Int?, offset: Int?) throws -> [WordSummary] {
+    func fetchWords(level: JLPTLevel?, limit: Int?, offset: Int?) throws -> [WordSummary] {
         []
     }
 
-    func searchWords(level: JLPTLevel, query: String, limit: Int?, offset: Int?) throws -> [WordSummary] {
+    func searchWords(level: JLPTLevel?, query: String, limit: Int?, offset: Int?) throws -> [WordSummary] {
         []
     }
 
@@ -38,11 +38,11 @@ struct StubDictionaryRepository: DictionaryRepository {
 struct ErrorDictionaryRepository: DictionaryRepository {
     let error: Error
 
-    func fetchWords(level: JLPTLevel, limit: Int?, offset: Int?) throws -> [WordSummary] {
+    func fetchWords(level: JLPTLevel?, limit: Int?, offset: Int?) throws -> [WordSummary] {
         throw error
     }
 
-    func searchWords(level: JLPTLevel, query: String, limit: Int?, offset: Int?) throws -> [WordSummary] {
+    func searchWords(level: JLPTLevel?, query: String, limit: Int?, offset: Int?) throws -> [WordSummary] {
         throw error
     }
 

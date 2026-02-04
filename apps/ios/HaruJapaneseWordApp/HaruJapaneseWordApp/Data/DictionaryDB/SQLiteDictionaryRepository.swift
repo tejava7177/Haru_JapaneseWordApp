@@ -43,38 +43,55 @@ final class SQLiteDictionaryRepository: DictionaryRepository {
         try logDataCounts(db: db)
     }
 
-    func fetchWords(level: JLPTLevel, limit: Int?, offset: Int?) throws -> [WordSummary] {
+    func fetchWords(level: JLPTLevel?, limit: Int?, offset: Int?) throws -> [WordSummary] {
         if hasLoggedFirstFetch == false {
-            print("[DB] fetchWords level=\(level.rawValue)")
+            print("[DB] fetchWords level=\(level?.rawValue ?? "ALL")")
             hasLoggedFirstFetch = true
         }
-        let sql = """
-        SELECT w.id, w.expression, w.reading,
-               GROUP_CONCAT(m.text, ' / ') AS meanings
-        FROM word w
-        LEFT JOIN meaning m ON m.word_id = w.id
-        WHERE w.level = ?
-        GROUP BY w.id
-        ORDER BY w.expression
-        LIMIT ? OFFSET ?;
-        """
+        var sqlParts: [String] = [
+            """
+            SELECT w.id, w.level, w.expression, w.reading,
+                   GROUP_CONCAT(m.text, ' / ') AS meanings
+            FROM word w
+            LEFT JOIN meaning m ON m.word_id = w.id
+            """
+        ]
+        if level != nil {
+            sqlParts.append("WHERE w.level = ?")
+        }
+        sqlParts.append(
+            """
+            GROUP BY w.id
+            ORDER BY w.expression
+            LIMIT ? OFFSET ?;
+            """
+        )
+        let sql = sqlParts.joined(separator: "\n")
 
         let statement = try db.prepare(sql)
         defer { db.finalize(statement) }
 
-        try db.bind(level.rawValue, to: 1, in: statement)
-        try db.bind(limit ?? -1, to: 2, in: statement)
-        try db.bind(offset ?? 0, to: 3, in: statement)
+        var bindIndex: Int32 = 1
+        if let level {
+            try db.bind(level.rawValue, to: bindIndex, in: statement)
+            bindIndex += 1
+        }
+        try db.bind(limit ?? -1, to: bindIndex, in: statement)
+        bindIndex += 1
+        try db.bind(offset ?? 0, to: bindIndex, in: statement)
 
         var results: [WordSummary] = []
         while try db.step(statement) {
             let id = SQLiteDB.columnInt(statement, 0)
-            let expression = SQLiteDB.columnText(statement, 1) ?? ""
-            let reading = SQLiteDB.columnText(statement, 2) ?? ""
-            let meanings = SQLiteDB.columnText(statement, 3) ?? ""
+            let levelRaw = SQLiteDB.columnText(statement, 1) ?? JLPTLevel.n5.rawValue
+            let levelValue = JLPTLevel(rawValue: levelRaw) ?? .n5
+            let expression = SQLiteDB.columnText(statement, 2) ?? ""
+            let reading = SQLiteDB.columnText(statement, 3) ?? ""
+            let meanings = SQLiteDB.columnText(statement, 4) ?? ""
             results.append(
                 WordSummary(
                     id: id,
+                    level: levelValue,
                     expression: expression,
                     reading: reading,
                     meanings: meanings
@@ -84,38 +101,60 @@ final class SQLiteDictionaryRepository: DictionaryRepository {
         return results
     }
 
-    func searchWords(level: JLPTLevel, query: String, limit: Int?, offset: Int?) throws -> [WordSummary] {
-        let sql = """
-        SELECT w.id, w.expression, w.reading,
-               GROUP_CONCAT(m.text, ' / ') AS meanings
-        FROM word w
-        LEFT JOIN meaning m ON m.word_id = w.id
-        WHERE w.level = ? AND (w.expression LIKE ? OR w.reading LIKE ? OR m.text LIKE ?)
-        GROUP BY w.id
-        ORDER BY w.expression
-        LIMIT ? OFFSET ?;
-        """
+    func searchWords(level: JLPTLevel?, query: String, limit: Int?, offset: Int?) throws -> [WordSummary] {
+        var sqlParts: [String] = [
+            """
+            SELECT w.id, w.level, w.expression, w.reading,
+                   GROUP_CONCAT(m.text, ' / ') AS meanings
+            FROM word w
+            LEFT JOIN meaning m ON m.word_id = w.id
+            """
+        ]
+        if level != nil {
+            sqlParts.append("WHERE w.level = ? AND (w.expression LIKE ? OR w.reading LIKE ? OR m.text LIKE ?)")
+        } else {
+            sqlParts.append("WHERE (w.expression LIKE ? OR w.reading LIKE ? OR m.text LIKE ?)")
+        }
+        sqlParts.append(
+            """
+            GROUP BY w.id
+            ORDER BY w.expression
+            LIMIT ? OFFSET ?;
+            """
+        )
+        let sql = sqlParts.joined(separator: "\n")
 
         let statement = try db.prepare(sql)
         defer { db.finalize(statement) }
 
         let likeQuery = "%\(query)%"
-        try db.bind(level.rawValue, to: 1, in: statement)
-        try db.bind(likeQuery, to: 2, in: statement)
-        try db.bind(likeQuery, to: 3, in: statement)
-        try db.bind(likeQuery, to: 4, in: statement)
-        try db.bind(limit ?? -1, to: 5, in: statement)
-        try db.bind(offset ?? 0, to: 6, in: statement)
+        var bindIndex: Int32 = 1
+        if let level {
+            try db.bind(level.rawValue, to: bindIndex, in: statement)
+            bindIndex += 1
+        }
+        try db.bind(likeQuery, to: bindIndex, in: statement)
+        bindIndex += 1
+        try db.bind(likeQuery, to: bindIndex, in: statement)
+        bindIndex += 1
+        try db.bind(likeQuery, to: bindIndex, in: statement)
+        bindIndex += 1
+        try db.bind(limit ?? -1, to: bindIndex, in: statement)
+        bindIndex += 1
+        try db.bind(offset ?? 0, to: bindIndex, in: statement)
 
         var results: [WordSummary] = []
         while try db.step(statement) {
             let id = SQLiteDB.columnInt(statement, 0)
-            let expression = SQLiteDB.columnText(statement, 1) ?? ""
-            let reading = SQLiteDB.columnText(statement, 2) ?? ""
-            let meanings = SQLiteDB.columnText(statement, 3) ?? ""
+            let levelRaw = SQLiteDB.columnText(statement, 1) ?? JLPTLevel.n5.rawValue
+            let levelValue = JLPTLevel(rawValue: levelRaw) ?? .n5
+            let expression = SQLiteDB.columnText(statement, 2) ?? ""
+            let reading = SQLiteDB.columnText(statement, 3) ?? ""
+            let meanings = SQLiteDB.columnText(statement, 4) ?? ""
             results.append(
                 WordSummary(
                     id: id,
+                    level: levelValue,
                     expression: expression,
                     reading: reading,
                     meanings: meanings
@@ -174,7 +213,7 @@ final class SQLiteDictionaryRepository: DictionaryRepository {
 
     func fetchWordSummary(wordId: Int) throws -> WordSummary? {
         let sql = """
-        SELECT w.id, w.expression, w.reading,
+        SELECT w.id, w.level, w.expression, w.reading,
                GROUP_CONCAT(m.text, ' / ') AS meanings
         FROM word w
         LEFT JOIN meaning m ON m.word_id = w.id
@@ -193,15 +232,17 @@ final class SQLiteDictionaryRepository: DictionaryRepository {
         }
 
         let id = SQLiteDB.columnInt(statement, 0)
-        let expression = SQLiteDB.columnText(statement, 1) ?? ""
-        let reading = SQLiteDB.columnText(statement, 2) ?? ""
-        let meanings = SQLiteDB.columnText(statement, 3) ?? ""
-        return WordSummary(id: id, expression: expression, reading: reading, meanings: meanings)
+        let levelRaw = SQLiteDB.columnText(statement, 1) ?? JLPTLevel.n5.rawValue
+        let levelValue = JLPTLevel(rawValue: levelRaw) ?? .n5
+        let expression = SQLiteDB.columnText(statement, 2) ?? ""
+        let reading = SQLiteDB.columnText(statement, 3) ?? ""
+        let meanings = SQLiteDB.columnText(statement, 4) ?? ""
+        return WordSummary(id: id, level: levelValue, expression: expression, reading: reading, meanings: meanings)
     }
 
     func randomWord(level: JLPTLevel) throws -> WordSummary? {
         let sql = """
-        SELECT w.id, w.expression, w.reading,
+        SELECT w.id, w.level, w.expression, w.reading,
                GROUP_CONCAT(m.text, ' / ') AS meanings
         FROM word w
         LEFT JOIN meaning m ON m.word_id = w.id
@@ -221,10 +262,12 @@ final class SQLiteDictionaryRepository: DictionaryRepository {
         }
 
         let id = SQLiteDB.columnInt(statement, 0)
-        let expression = SQLiteDB.columnText(statement, 1) ?? ""
-        let reading = SQLiteDB.columnText(statement, 2) ?? ""
-        let meanings = SQLiteDB.columnText(statement, 3) ?? ""
-        return WordSummary(id: id, expression: expression, reading: reading, meanings: meanings)
+        let levelRaw = SQLiteDB.columnText(statement, 1) ?? JLPTLevel.n5.rawValue
+        let levelValue = JLPTLevel(rawValue: levelRaw) ?? .n5
+        let expression = SQLiteDB.columnText(statement, 2) ?? ""
+        let reading = SQLiteDB.columnText(statement, 3) ?? ""
+        let meanings = SQLiteDB.columnText(statement, 4) ?? ""
+        return WordSummary(id: id, level: levelValue, expression: expression, reading: reading, meanings: meanings)
     }
 
     func randomWordIds(level: JLPTLevel, count: Int, excluding ids: Set<Int>) throws -> [Int] {

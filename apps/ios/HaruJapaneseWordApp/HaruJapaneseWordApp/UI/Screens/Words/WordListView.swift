@@ -3,6 +3,7 @@ import SwiftUI
 struct WordListView: View {
     @StateObject private var viewModel: WordListViewModel
     private let repository: DictionaryRepository
+    @State private var isRangeSheetPresented: Bool = false
 
     init(repository: DictionaryRepository) {
         self.repository = repository
@@ -12,12 +13,30 @@ struct WordListView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                Picker("레벨", selection: $viewModel.selectedLevel) {
-                    ForEach(JLPTLevel.allCases) { level in
-                        Text(level.title).tag(level)
+                HStack {
+                    Button {
+                        isRangeSheetPresented = true
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text("레벨: \(viewModel.selectedRange.displayName)")
+                                .font(.callout)
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
                     }
+                    .buttonStyle(.plain)
+
+                    Spacer()
+
+                    Button {
+                        viewModel.shuffleDisplayedWords()
+                    } label: {
+                        Text("셔플")
+                            .font(.callout)
+                    }
+                    .buttonStyle(.bordered)
                 }
-                .pickerStyle(.segmented)
                 .padding(.horizontal)
                 .padding(.top, 8)
 
@@ -30,7 +49,7 @@ struct WordListView: View {
                         .padding()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    List(viewModel.words) { word in
+                    List(viewModel.displayedWords) { word in
                         NavigationLink {
                             WordDetailView(wordId: word.id, repository: repository)
                         } label: {
@@ -42,12 +61,41 @@ struct WordListView: View {
             }
             .navigationTitle("단어")
         }
-        .searchable(text: $viewModel.query, placement: .navigationBarDrawer(displayMode: .always), prompt: "검색")
-        .onChange(of: viewModel.query) { _ in
+        .searchable(text: $viewModel.searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "검색")
+        .onChange(of: viewModel.searchText) { _ in
             viewModel.search()
         }
         .task {
             viewModel.load()
+        }
+        .sheet(isPresented: $isRangeSheetPresented) {
+            NavigationStack {
+                List {
+                    ForEach(viewModel.availableRanges) { range in
+                        Button {
+                            viewModel.selectedRange = range
+                            isRangeSheetPresented = false
+                        } label: {
+                            HStack {
+                                Text(range.displayName)
+                                Spacer()
+                                if range == viewModel.selectedRange {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                }
+                .navigationTitle("레벨 범위")
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("닫기") {
+                            isRangeSheetPresented = false
+                        }
+                    }
+                }
+            }
         }
     }
 }
