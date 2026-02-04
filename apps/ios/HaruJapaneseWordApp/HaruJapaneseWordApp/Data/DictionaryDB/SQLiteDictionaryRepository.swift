@@ -90,7 +90,7 @@ final class SQLiteDictionaryRepository: DictionaryRepository {
                GROUP_CONCAT(m.text, ' / ') AS meanings
         FROM word w
         LEFT JOIN meaning m ON m.word_id = w.id
-        WHERE w.level = ? AND (w.expression LIKE ? OR w.reading LIKE ?)
+        WHERE w.level = ? AND (w.expression LIKE ? OR w.reading LIKE ? OR m.text LIKE ?)
         GROUP BY w.id
         ORDER BY w.expression
         LIMIT ? OFFSET ?;
@@ -103,8 +103,9 @@ final class SQLiteDictionaryRepository: DictionaryRepository {
         try db.bind(level.rawValue, to: 1, in: statement)
         try db.bind(likeQuery, to: 2, in: statement)
         try db.bind(likeQuery, to: 3, in: statement)
-        try db.bind(limit ?? -1, to: 4, in: statement)
-        try db.bind(offset ?? 0, to: 5, in: statement)
+        try db.bind(likeQuery, to: 4, in: statement)
+        try db.bind(limit ?? -1, to: 5, in: statement)
+        try db.bind(offset ?? 0, to: 6, in: statement)
 
         var results: [WordSummary] = []
         while try db.step(statement) {
