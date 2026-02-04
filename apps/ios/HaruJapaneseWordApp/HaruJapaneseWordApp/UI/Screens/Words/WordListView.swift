@@ -23,14 +23,6 @@ struct WordListView: View {
                     .buttonStyle(.plain)
 
                     Spacer()
-
-                    Button {
-                        viewModel.shuffleDisplayedWords()
-                    } label: {
-                        Image(systemName: "shuffle")
-                            .font(.title3)
-                    }
-                    .buttonStyle(.bordered)
                 }
                 .padding(.horizontal)
                 .padding(.top, 8)
@@ -57,6 +49,9 @@ struct WordListView: View {
                         }
                     }
                     .listStyle(.plain)
+                    .refreshable {
+                        await viewModel.shuffleByPull()
+                    }
                 }
             }
             .navigationTitle("단어")
@@ -110,6 +105,13 @@ struct WordListView: View {
                 }
             }
         }
+        .overlay(alignment: .top) {
+            if viewModel.isShuffling {
+                ShuffleHUD()
+                    .padding(.top, 12)
+                    .transition(.opacity)
+            }
+        }
     }
 }
 
@@ -129,6 +131,30 @@ private struct LevelToggleButton: View {
                 .clipShape(Capsule())
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct ShuffleHUD: View {
+    @State private var isAnimating: Bool = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "shuffle")
+                .rotationEffect(isAnimating ? .degrees(360) : .degrees(0))
+                .animation(.linear(duration: 0.8).repeatForever(autoreverses: false), value: isAnimating)
+            Text("단어를 셔플합니다.")
+                .font(.footnote)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(Color.black.opacity(0.06))
+        .clipShape(Capsule())
+        .onAppear {
+            isAnimating = true
+        }
+        .onDisappear {
+            isAnimating = false
+        }
     }
 }
 

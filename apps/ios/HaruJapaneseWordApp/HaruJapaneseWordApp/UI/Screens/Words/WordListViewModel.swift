@@ -11,6 +11,7 @@ final class WordListViewModel: ObservableObject {
     @Published private(set) var availableLevels: [JLPTLevel] = []
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
+    @Published var isShuffling: Bool = false
 
     private let repository: DictionaryRepository
     private var baseWords: [WordSummary] = []
@@ -30,6 +31,17 @@ final class WordListViewModel: ObservableObject {
 
     func shuffleDisplayedWords() {
         displayedWords.shuffle()
+    }
+
+    func shuffleByPull() async {
+        if isShuffling {
+            return
+        }
+        isShuffling = true
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        displayedWords.shuffle()
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        isShuffling = false
     }
 
     func toggleAllLevels(_ isOn: Bool) {
