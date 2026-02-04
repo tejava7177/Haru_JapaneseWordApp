@@ -6,6 +6,7 @@ protocol DictionaryRepository {
     func fetchWordDetail(wordId: Int) throws -> WordDetail?
     func fetchWordSummary(wordId: Int) throws -> WordSummary?
     func randomWord(level: JLPTLevel) throws -> WordSummary?
+    func randomWordIds(level: JLPTLevel, count: Int, excluding ids: Set<Int>) throws -> [Int]
 }
 
 struct StubDictionaryRepository: DictionaryRepository {
@@ -27,6 +28,10 @@ struct StubDictionaryRepository: DictionaryRepository {
 
     func randomWord(level: JLPTLevel) throws -> WordSummary? {
         nil
+    }
+
+    func randomWordIds(level: JLPTLevel, count: Int, excluding ids: Set<Int>) throws -> [Int] {
+        []
     }
 }
 
@@ -50,6 +55,10 @@ struct ErrorDictionaryRepository: DictionaryRepository {
     }
 
     func randomWord(level: JLPTLevel) throws -> WordSummary? {
+        throw error
+    }
+
+    func randomWordIds(level: JLPTLevel, count: Int, excluding ids: Set<Int>) throws -> [Int] {
         throw error
     }
 }

@@ -226,6 +226,56 @@ final class SQLiteDictionaryRepository: DictionaryRepository {
         return WordSummary(id: id, expression: expression, reading: reading, meanings: meanings)
     }
 
+    func randomWordIds(level: JLPTLevel, count: Int, excluding ids: Set<Int>) throws -> [Int] {
+        let maxAttempts = 50
+        var results: [Int] = []
+        var exclusion = ids
+        var attempts = 0
+
+        while results.count < count && attempts < maxAttempts {
+            attempts += 1
+            if let id = try randomWordId(level: level, excluding: exclusion) {
+                results.append(id)
+                exclusion.insert(id)
+            } else {
+                break
+            }
+        }
+        return results
+    }
+
+    private func randomWordId(level: JLPTLevel, excluding ids: Set<Int>) throws -> Int? {
+        var sql = """
+        SELECT w.id
+        FROM word w
+        WHERE w.level = ?
+        """
+
+        let sortedIds = ids.sorted()
+        if sortedIds.isEmpty == false {
+            let placeholders = Array(repeating: "?", count: sortedIds.count).joined(separator: ", ")
+            sql += "\nAND w.id NOT IN (\(placeholders))"
+        }
+
+        sql += "\nORDER BY RANDOM()\nLIMIT 1;"
+
+        let statement = try db.prepare(sql)
+        defer { db.finalize(statement) }
+
+        try db.bind(level.rawValue, to: 1, in: statement)
+        if sortedIds.isEmpty == false {
+            for (index, id) in sortedIds.enumerated() {
+                try db.bind(id, to: Int32(index + 2), in: statement)
+            }
+        }
+
+        guard try db.step(statement) else {
+            return nil
+        }
+
+        return SQLiteDB.columnInt(statement, 0)
+    }
+
     private static func writableDatabaseURL() throws -> URL {
         let baseURL = try FileManager.default.url(
             for: .applicationSupportDirectory,
