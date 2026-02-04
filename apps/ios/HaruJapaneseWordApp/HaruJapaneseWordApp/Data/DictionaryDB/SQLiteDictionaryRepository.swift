@@ -171,6 +171,61 @@ final class SQLiteDictionaryRepository: DictionaryRepository {
         )
     }
 
+    func fetchWordSummary(wordId: Int) throws -> WordSummary? {
+        let sql = """
+        SELECT w.id, w.expression, w.reading,
+               GROUP_CONCAT(m.text, ' / ') AS meanings
+        FROM word w
+        LEFT JOIN meaning m ON m.word_id = w.id
+        WHERE w.id = ?
+        GROUP BY w.id
+        LIMIT 1;
+        """
+
+        let statement = try db.prepare(sql)
+        defer { db.finalize(statement) }
+
+        try db.bind(wordId, to: 1, in: statement)
+
+        guard try db.step(statement) else {
+            return nil
+        }
+
+        let id = SQLiteDB.columnInt(statement, 0)
+        let expression = SQLiteDB.columnText(statement, 1) ?? ""
+        let reading = SQLiteDB.columnText(statement, 2) ?? ""
+        let meanings = SQLiteDB.columnText(statement, 3) ?? ""
+        return WordSummary(id: id, expression: expression, reading: reading, meanings: meanings)
+    }
+
+    func randomWord(level: JLPTLevel) throws -> WordSummary? {
+        let sql = """
+        SELECT w.id, w.expression, w.reading,
+               GROUP_CONCAT(m.text, ' / ') AS meanings
+        FROM word w
+        LEFT JOIN meaning m ON m.word_id = w.id
+        WHERE w.level = ?
+        GROUP BY w.id
+        ORDER BY RANDOM()
+        LIMIT 1;
+        """
+
+        let statement = try db.prepare(sql)
+        defer { db.finalize(statement) }
+
+        try db.bind(level.rawValue, to: 1, in: statement)
+
+        guard try db.step(statement) else {
+            return nil
+        }
+
+        let id = SQLiteDB.columnInt(statement, 0)
+        let expression = SQLiteDB.columnText(statement, 1) ?? ""
+        let reading = SQLiteDB.columnText(statement, 2) ?? ""
+        let meanings = SQLiteDB.columnText(statement, 3) ?? ""
+        return WordSummary(id: id, expression: expression, reading: reading, meanings: meanings)
+    }
+
     private static func writableDatabaseURL() throws -> URL {
         let baseURL = try FileManager.default.url(
             for: .applicationSupportDirectory,

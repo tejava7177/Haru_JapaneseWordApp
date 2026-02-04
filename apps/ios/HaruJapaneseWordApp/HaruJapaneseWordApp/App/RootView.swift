@@ -5,7 +5,7 @@ struct RootView: View {
 
     var body: some View {
         TabView {
-            Text("Home")
+            HomeView(repository: repository)
                 .tabItem {
                     Label("Home", systemImage: "house")
                 }
