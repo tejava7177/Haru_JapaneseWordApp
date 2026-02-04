@@ -3,15 +3,18 @@ import Combine
 
 final class AppSettingsStore: ObservableObject {
     @Published private(set) var settings: AppSettings
+    @Published private(set) var hasSeenOnboarding: Bool
 
     private let userDefaults: UserDefaults
 
     private let homeDeckLevelKey = "settings_home_deck_level"
     private let excludeDaysKey = "settings_exclude_days"
+    private let onboardingKey = "has_seen_onboarding"
 
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
         self.settings = AppSettingsStore.loadSettings(userDefaults: userDefaults)
+        self.hasSeenOnboarding = userDefaults.bool(forKey: onboardingKey)
     }
 
     func updateHomeDeckLevel(_ level: JLPTLevel) {
@@ -27,6 +30,11 @@ final class AppSettingsStore: ObservableObject {
     func save(settings: AppSettings) {
         userDefaults.set(settings.homeDeckLevel.rawValue, forKey: homeDeckLevelKey)
         userDefaults.set(settings.excludeDays, forKey: excludeDaysKey)
+    }
+
+    func markOnboardingSeen() {
+        hasSeenOnboarding = true
+        userDefaults.set(true, forKey: onboardingKey)
     }
 
     private static func loadSettings(userDefaults: UserDefaults) -> AppSettings {

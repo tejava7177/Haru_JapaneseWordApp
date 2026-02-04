@@ -4,6 +4,7 @@ import UIKit
 
 struct ProfileView: View {
     @StateObject private var viewModel: ProfileViewModel
+    @State private var isGuidePresented: Bool = false
 
     init(settingsStore: AppSettingsStore) {
         _viewModel = StateObject(wrappedValue: ProfileViewModel(settingsStore: settingsStore))
@@ -76,6 +77,10 @@ struct ProfileView: View {
                     }
                     .pickerStyle(.segmented)
 
+                    Text("덱 레벨 변경은 다음 날부터 적용돼요.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
                     Picker(
                         "제외 기간",
                         selection: Binding(
@@ -88,6 +93,14 @@ struct ProfileView: View {
                         Text("30일").tag(30)
                     }
                     .pickerStyle(.segmented)
+                }
+
+                Section("도움말") {
+                    Button {
+                        isGuidePresented = true
+                    } label: {
+                        Text("사용 가이드")
+                    }
                 }
 
                 Section("데이터") {
@@ -112,6 +125,9 @@ struct ProfileView: View {
             Button("취소", role: .cancel) { }
         } message: {
             Text("오늘의 덱과 학습 체크 기록을 초기화합니다.")
+        }
+        .sheet(isPresented: $isGuidePresented) {
+            GuideView()
         }
     }
 

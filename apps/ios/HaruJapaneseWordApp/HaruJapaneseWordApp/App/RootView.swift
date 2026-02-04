@@ -3,6 +3,7 @@ import SwiftUI
 struct RootView: View {
     @Environment(\.dictionaryRepository) private var repository
     @StateObject private var settingsStore = AppSettingsStore()
+    @State private var isShowingOnboarding: Bool = false
 
     var body: some View {
         TabView {
@@ -25,6 +26,17 @@ struct RootView: View {
                 .tabItem {
                     Label("프로필", systemImage: "person.circle")
                 }
+        }
+        .onAppear {
+            if settingsStore.hasSeenOnboarding == false {
+                isShowingOnboarding = true
+            }
+        }
+        .fullScreenCover(isPresented: $isShowingOnboarding) {
+            OnboardingView {
+                settingsStore.markOnboardingSeen()
+                isShowingOnboarding = false
+            }
         }
     }
 }
