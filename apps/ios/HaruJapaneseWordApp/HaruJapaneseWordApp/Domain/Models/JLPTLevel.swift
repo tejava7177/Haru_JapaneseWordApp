@@ -10,4 +10,14 @@ enum JLPTLevel: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     var title: String { rawValue }
+
+    var rank: Int {
+        switch self {
+        case .n1: return 1
+        case .n2: return 2
+        case .n3: return 3
+        case .n4: return 4
+        case .n5: return 5
+        }
+    }
 }

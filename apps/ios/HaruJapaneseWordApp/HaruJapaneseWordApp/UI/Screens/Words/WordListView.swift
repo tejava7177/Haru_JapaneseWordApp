@@ -17,13 +17,8 @@ struct WordListView: View {
                     Button {
                         isRangeSheetPresented = true
                     } label: {
-                        HStack(spacing: 6) {
-                            Text("레벨: \(viewModel.selectedRange.displayName)")
-                                .font(.callout)
-                            Image(systemName: "chevron.up.chevron.down")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                            .font(.title3)
                     }
                     .buttonStyle(.plain)
 
@@ -32,8 +27,8 @@ struct WordListView: View {
                     Button {
                         viewModel.shuffleDisplayedWords()
                     } label: {
-                        Text("셔플")
-                            .font(.callout)
+                        Image(systemName: "shuffle")
+                            .font(.title3)
                     }
                     .buttonStyle(.bordered)
                 }
@@ -45,6 +40,11 @@ struct WordListView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if let errorMessage = viewModel.errorMessage {
                     Text(errorMessage)
+                        .foregroundStyle(.secondary)
+                        .padding()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if viewModel.enabledLevels.isEmpty {
+                    Text("선택된 레벨이 없어요.")
                         .foregroundStyle(.secondary)
                         .padding()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -70,24 +70,37 @@ struct WordListView: View {
         }
         .sheet(isPresented: $isRangeSheetPresented) {
             NavigationStack {
-                List {
-                    ForEach(viewModel.availableRanges) { range in
-                        Button {
-                            viewModel.selectedRange = range
-                            isRangeSheetPresented = false
-                        } label: {
-                            HStack {
-                                Text(range.displayName)
-                                Spacer()
-                                if range == viewModel.selectedRange {
-                                    Image(systemName: "checkmark")
-                                        .foregroundStyle(.secondary)
+                Form {
+                    Section {
+                        Toggle("전체", isOn: Binding(
+                            get: { viewModel.isAllEnabled },
+                            set: { viewModel.toggleAllLevels($0) }
+                        ))
+                    }
+
+                    Section("범위 선택") {
+                        VStack(alignment: .leading, spacing: 12) {
+                            if viewModel.availableLevels.isEmpty {
+                                Text("사용 가능한 레벨이 없습니다.")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                HStack(spacing: 8) {
+                                    ForEach(viewModel.availableLevels, id: \.self) { level in
+                                        LevelToggleButton(
+                                            title: level.title,
+                                            isOn: viewModel.enabledLevels.contains(level)
+                                        ) {
+                                            viewModel.toggleLevel(level)
+                                        }
+                                    }
                                 }
                             }
                         }
+                        .disabled(viewModel.isAllEnabled)
                     }
                 }
-                .navigationTitle("레벨 범위")
+                .navigationTitle("레벨 필터")
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button("닫기") {
@@ -97,6 +110,25 @@ struct WordListView: View {
                 }
             }
         }
+    }
+}
+
+private struct LevelToggleButton: View {
+    let title: String
+    let isOn: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.callout)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .foregroundStyle(isOn ? .white : .primary)
+                .background(isOn ? Color.black : Color.black.opacity(0.06))
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 }
 
