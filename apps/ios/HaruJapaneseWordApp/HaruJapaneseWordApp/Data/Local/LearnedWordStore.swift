@@ -85,6 +85,10 @@ struct LearnedWordStore {
         return result
     }
 
+    func resetLearnedData() {
+        userDefaults.removeObject(forKey: learnedWordsKey)
+    }
+
     private func loadLearnedMap() -> [String: String] {
         userDefaults.dictionary(forKey: learnedWordsKey) as? [String: String] ?? [:]
     }

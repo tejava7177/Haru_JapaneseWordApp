@@ -2,10 +2,11 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(\.dictionaryRepository) private var repository
+    @StateObject private var settingsStore = AppSettingsStore()
 
     var body: some View {
         TabView {
-            HomeView(repository: repository)
+            HomeView(repository: repository, settingsStore: settingsStore)
                 .tabItem {
                     Label("Home", systemImage: "house")
                 }
@@ -20,9 +21,9 @@ struct RootView: View {
                     Label("Mate", systemImage: "person.2")
                 }
 
-            Text("Record")
+            ProfileView(settingsStore: settingsStore)
                 .tabItem {
-                    Label("Record", systemImage: "chart.bar")
+                    Label("프로필", systemImage: "person.circle")
                 }
         }
     }

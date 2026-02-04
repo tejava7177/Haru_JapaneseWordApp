@@ -16,26 +16,38 @@ final class HomeViewModel: ObservableObject {
     private let repository: DictionaryRepository
     private let homeDeckStore: HomeDeckStore
     private let learnedStore: LearnedWordStore
-    private let excludeDays: Int = 14
+    private let settingsStore: AppSettingsStore
+    private var cancellables: Set<AnyCancellable> = []
 
     init(
         repository: DictionaryRepository,
         homeDeckStore: HomeDeckStore = HomeDeckStore(),
-        learnedStore: LearnedWordStore = LearnedWordStore()
+        learnedStore: LearnedWordStore = LearnedWordStore(),
+        settingsStore: AppSettingsStore
     ) {
         self.repository = repository
         self.homeDeckStore = homeDeckStore
         self.learnedStore = learnedStore
+        self.settingsStore = settingsStore
+
+        settingsStore.$settings
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.remainingRerolls = self?.homeDeckStore.remainingRerolls(date: Date()) ?? 0
+            }
+            .store(in: &cancellables)
     }
 
     func loadDeck() {
         errorMessage = nil
         let today = Date()
-        let excluded = learnedStore.loadExcludedSet(today: today, excludeDays: excludeDays)
+        let settings = settingsStore.settings
+        let excluded = learnedStore.loadExcludedSet(today: today, excludeDays: settings.excludeDays)
         let ids = homeDeckStore.getOrCreateDeck(
             date: today,
             repository: repository,
-            excluding: excluded
+            excluding: excluded,
+            level: settings.homeDeckLevel
         )
         deckWordIds = ids
         selectedIndex = 0
@@ -67,11 +79,13 @@ final class HomeViewModel: ObservableObject {
             return
         }
 
-        let excluded = learnedStore.loadExcludedSet(today: today, excludeDays: excludeDays)
+        let settings = settingsStore.settings
+        let excluded = learnedStore.loadExcludedSet(today: today, excludeDays: settings.excludeDays)
         let ids = homeDeckStore.rerollDeck(
             date: today,
             repository: repository,
-            excluding: excluded
+            excluding: excluded,
+            level: settings.homeDeckLevel
         )
         deckWordIds = ids
         selectedIndex = 0

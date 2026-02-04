@@ -3,10 +3,12 @@ import SwiftUI
 struct HomeView: View {
     @StateObject private var viewModel: HomeViewModel
     private let repository: DictionaryRepository
+    private let settingsStore: AppSettingsStore
 
-    init(repository: DictionaryRepository) {
+    init(repository: DictionaryRepository, settingsStore: AppSettingsStore) {
         self.repository = repository
-        _viewModel = StateObject(wrappedValue: HomeViewModel(repository: repository))
+        self.settingsStore = settingsStore
+        _viewModel = StateObject(wrappedValue: HomeViewModel(repository: repository, settingsStore: settingsStore))
     }
 
     var body: some View {
@@ -137,5 +139,5 @@ struct HomeView: View {
 }
 
 #Preview {
-    HomeView(repository: StubDictionaryRepository())
+    HomeView(repository: StubDictionaryRepository(), settingsStore: AppSettingsStore())
 }

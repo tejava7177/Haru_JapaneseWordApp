@@ -74,6 +74,13 @@ struct HomeDeckStore {
         return max(0, maxRerollsPerDay - count)
     }
 
+    func resetDeckData() {
+        userDefaults.removeObject(forKey: Self.deckDateKey)
+        userDefaults.removeObject(forKey: Self.deckWordIdsKey)
+        userDefaults.removeObject(forKey: Self.rerollDateKey)
+        userDefaults.removeObject(forKey: Self.rerollCountKey)
+    }
+
     private func loadDeckIds() -> [Int]? {
         if let data = userDefaults.data(forKey: Self.deckWordIdsKey) {
             if let ids = try? JSONDecoder().decode([Int].self, from: data) {
