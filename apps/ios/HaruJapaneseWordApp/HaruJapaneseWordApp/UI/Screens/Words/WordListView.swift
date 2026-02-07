@@ -35,7 +35,7 @@ struct WordListView: View {
                         .foregroundStyle(.secondary)
                         .padding()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if viewModel.enabledLevels.isEmpty {
+                } else if viewModel.selectedLevels.isEmpty {
                     Text("선택된 레벨이 없어요.")
                         .foregroundStyle(.secondary)
                         .padding()
@@ -64,46 +64,14 @@ struct WordListView: View {
             viewModel.load()
         }
         .sheet(isPresented: $isRangeSheetPresented) {
-            NavigationStack {
-                Form {
-                    Section {
-                        Toggle("전체", isOn: Binding(
-                            get: { viewModel.isAllEnabled },
-                            set: { viewModel.toggleAllLevels($0) }
-                        ))
-                    }
-
-                    Section("범위 선택") {
-                        VStack(alignment: .leading, spacing: 12) {
-                            if viewModel.availableLevels.isEmpty {
-                                Text("사용 가능한 레벨이 없습니다.")
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            } else {
-                                HStack(spacing: 8) {
-                                    ForEach(viewModel.availableLevels, id: \.self) { level in
-                                        LevelToggleButton(
-                                            title: level.title,
-                                            isOn: viewModel.enabledLevels.contains(level)
-                                        ) {
-                                            viewModel.toggleLevel(level)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        .disabled(viewModel.isAllEnabled)
-                    }
-                }
-                .navigationTitle("레벨 필터")
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button("닫기") {
-                            isRangeSheetPresented = false
-                        }
-                    }
-                }
-            }
+            LevelFilterSheetContent(
+                availableLevels: viewModel.availableLevels,
+                isAllOn: viewModel.isAllOn,
+                isLevelSelected: { viewModel.selectedLevels.contains($0) },
+                onToggleAll: { viewModel.setAllLevels($0) },
+                onToggleLevel: { viewModel.toggleLevel($0) },
+                onClose: { isRangeSheetPresented = false }
+            )
         }
         .overlay(alignment: .top) {
             if viewModel.isShuffling {
@@ -124,10 +92,14 @@ private struct LevelToggleButton: View {
         Button(action: action) {
             Text(title)
                 .font(.callout)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .foregroundStyle(isOn ? .white : .primary)
-                .background(isOn ? Color.black : Color.black.opacity(0.06))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .foregroundStyle(isOn ? .white : Color(uiColor: .darkGray))
+                .background(isOn ? Color.accentColor : Color(uiColor: .systemGray5))
+                .overlay(
+                    Capsule()
+                        .stroke(isOn ? Color.accentColor : Color(uiColor: .systemGray3), lineWidth: 1)
+                )
                 .clipShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -160,4 +132,117 @@ private struct ShuffleHUD: View {
 
 #Preview {
     WordListView(repository: StubDictionaryRepository())
+}
+
+#Preview("필터-초기") {
+    LevelFilterSheetPreview(
+        initialLevels: Set(JLPTLevel.allCases),
+        availableLevels: [.n1, .n2, .n3, .n4, .n5]
+    )
+}
+
+#Preview("필터-부분선택") {
+    LevelFilterSheetPreview(
+        initialLevels: [.n5, .n4, .n3],
+        availableLevels: [.n1, .n2, .n3, .n4, .n5]
+    )
+}
+
+private struct LevelFilterSheetContent: View {
+    let availableLevels: [JLPTLevel]
+    let isAllOn: Bool
+    let isLevelSelected: (JLPTLevel) -> Bool
+    let onToggleAll: (Bool) -> Void
+    let onToggleLevel: (JLPTLevel) -> Void
+    let onClose: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    HStack {
+                        Text("전체")
+                        Spacer()
+                        Toggle("", isOn: Binding(
+                            get: { isAllOn },
+                            set: { onToggleAll($0) }
+                        ))
+                        .labelsHidden()
+                    }
+                }
+
+                Section("범위 선택") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        if availableLevels.isEmpty {
+                            Text("사용 가능한 레벨이 없습니다.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            HStack(spacing: 8) {
+                                ForEach(availableLevels, id: \.self) { level in
+                                    LevelToggleButton(
+                                        title: level.title,
+                                        isOn: isLevelSelected(level)
+                                    ) {
+                                        onToggleLevel(level)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("필터")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("닫기") {
+                        onClose()
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct LevelFilterSheetPreview: View {
+    @State private var selectedLevels: Set<JLPTLevel>
+    private let availableLevels: [JLPTLevel]
+
+    init(initialLevels: Set<JLPTLevel>, availableLevels: [JLPTLevel]) {
+        _selectedLevels = State(initialValue: initialLevels)
+        self.availableLevels = availableLevels
+    }
+
+    private var isAllOn: Bool {
+        let availableSet = Set(availableLevels)
+        return availableSet.isEmpty == false && selectedLevels == availableSet
+    }
+
+    private func setAll(_ isOn: Bool) {
+        if isOn {
+            selectedLevels = Set(availableLevels)
+        } else if let fallback = availableLevels.last {
+            selectedLevels = [fallback]
+        }
+    }
+
+    private func toggleLevel(_ level: JLPTLevel) {
+        if selectedLevels.contains(level) {
+            if selectedLevels.count == 1 { return }
+            selectedLevels.remove(level)
+        } else {
+            selectedLevels.insert(level)
+        }
+    }
+
+    var body: some View {
+        LevelFilterSheetContent(
+            availableLevels: availableLevels,
+            isAllOn: isAllOn,
+            isLevelSelected: { selectedLevels.contains($0) },
+            onToggleAll: { setAll($0) },
+            onToggleLevel: { toggleLevel($0) },
+            onClose: {}
+        )
+    }
 }

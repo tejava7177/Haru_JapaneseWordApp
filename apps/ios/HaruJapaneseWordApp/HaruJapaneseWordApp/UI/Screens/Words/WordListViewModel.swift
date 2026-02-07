@@ -5,8 +5,7 @@ import Combine
 @MainActor
 final class WordListViewModel: ObservableObject {
     @Published var searchText: String = ""
-    @Published var enabledLevels: Set<JLPTLevel> = []
-    @Published var isAllEnabled: Bool = true
+    @Published var selectedLevels: Set<JLPTLevel> = Set(JLPTLevel.allCases)
     @Published private(set) var displayedWords: [WordSummary] = []
     @Published private(set) var availableLevels: [JLPTLevel] = []
     @Published var isLoading: Bool = false
@@ -15,10 +14,14 @@ final class WordListViewModel: ObservableObject {
 
     private let repository: DictionaryRepository
     private var baseWords: [WordSummary] = []
-    private var userDisabledLevels: Set<JLPTLevel> = []
 
     init(repository: DictionaryRepository) {
         self.repository = repository
+    }
+
+    var isAllOn: Bool {
+        let availableSet = Set(availableLevels)
+        return availableSet.isEmpty == false && selectedLevels == availableSet
     }
 
     func load() {
@@ -44,15 +47,14 @@ final class WordListViewModel: ObservableObject {
         isShuffling = false
     }
 
-    func toggleAllLevels(_ isOn: Bool) {
+    func setAllLevels(_ isOn: Bool) {
         withAnimation(.easeInOut(duration: 0.2)) {
-            isAllEnabled = isOn
             if isOn {
-                enabledLevels = Set(availableLevels)
-                userDisabledLevels = []
+                selectedLevels = Set(availableLevels)
             } else {
-                enabledLevels = []
-                userDisabledLevels = []
+                if let fallback = availableLevels.last {
+                    selectedLevels = [fallback]
+                }
             }
             applyLevelFilter()
         }
@@ -60,39 +62,24 @@ final class WordListViewModel: ObservableObject {
 
     func toggleLevel(_ level: JLPTLevel) {
         withAnimation(.easeInOut(duration: 0.2)) {
-            if enabledLevels.contains(level) {
-                enabledLevels.remove(level)
-                userDisabledLevels.insert(level)
+            if selectedLevels.contains(level) {
+                if selectedLevels.count == 1 {
+                    return
+                }
+                selectedLevels.remove(level)
             } else {
-                enabledLevels.insert(level)
-                userDisabledLevels.remove(level)
+                selectedLevels.insert(level)
             }
-            applyAutoRange()
             applyLevelFilter()
         }
     }
 
-    private func applyAutoRange() {
-        let ranks = enabledLevels.map { $0.rank }
-        guard let minRank = ranks.min(), let maxRank = ranks.max() else {
-            isAllEnabled = false
-            return
-        }
-        let rangeLevels = availableLevels.filter { level in
-            level.rank >= minRank && level.rank <= maxRank
-        }
-        for level in rangeLevels where userDisabledLevels.contains(level) == false {
-            enabledLevels.insert(level)
-        }
-        isAllEnabled = enabledLevels.count == availableLevels.count && availableLevels.isEmpty == false
-    }
-
     private func applyLevelFilter() {
-        if enabledLevels.isEmpty {
+        if selectedLevels.isEmpty {
             displayedWords = []
             return
         }
-        displayedWords = baseWords.filter { enabledLevels.contains($0.level) }
+        displayedWords = baseWords.filter { selectedLevels.contains($0.level) }
     }
 
     private func fetchWords() {
@@ -122,13 +109,13 @@ final class WordListViewModel: ObservableObject {
         let sorted = levels.sorted { $0.rank > $1.rank }
         availableLevels = sorted
 
-        if isAllEnabled {
-            enabledLevels = Set(sorted)
-            userDisabledLevels = []
+        if selectedLevels.isEmpty {
+            selectedLevels = Set(sorted)
         } else {
-            enabledLevels = enabledLevels.intersection(levels)
-            userDisabledLevels = userDisabledLevels.intersection(levels)
-            applyAutoRange()
+            selectedLevels = selectedLevels.intersection(levels)
+            if selectedLevels.isEmpty {
+                selectedLevels = Set(sorted)
+            }
         }
     }
 }
