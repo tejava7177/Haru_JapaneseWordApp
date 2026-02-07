@@ -166,7 +166,7 @@ final class SQLiteDictionaryRepository: DictionaryRepository {
 
     func fetchWordDetail(wordId: Int) throws -> WordDetail? {
         let wordSql = """
-        SELECT w.id, w.expression, w.reading
+        SELECT w.id, w.level, w.expression, w.reading
         FROM word w
         WHERE w.id = ?;
         """
@@ -181,11 +181,13 @@ final class SQLiteDictionaryRepository: DictionaryRepository {
         }
 
         let id = SQLiteDB.columnInt(wordStatement, 0)
-        let expression = SQLiteDB.columnText(wordStatement, 1) ?? ""
-        let reading = SQLiteDB.columnText(wordStatement, 2) ?? ""
+        let levelRaw = SQLiteDB.columnText(wordStatement, 1) ?? JLPTLevel.n5.rawValue
+        let levelValue = JLPTLevel(rawValue: levelRaw) ?? .n5
+        let expression = SQLiteDB.columnText(wordStatement, 2) ?? ""
+        let reading = SQLiteDB.columnText(wordStatement, 3) ?? ""
 
         let meaningSql = """
-        SELECT m.text
+        SELECT m.ord, m.text
         FROM meaning m
         WHERE m.word_id = ?
         ORDER BY m.ord;
@@ -196,15 +198,16 @@ final class SQLiteDictionaryRepository: DictionaryRepository {
 
         try db.bind(wordId, to: 1, in: meaningStatement)
 
-        var meanings: [String] = []
+        var meanings: [Meaning] = []
         while try db.step(meaningStatement) {
-            if let text = SQLiteDB.columnText(meaningStatement, 0) {
-                meanings.append(text)
-            }
+            let ord = SQLiteDB.columnInt(meaningStatement, 0)
+            let text = SQLiteDB.columnText(meaningStatement, 1) ?? ""
+            meanings.append(Meaning(ord: ord, text: text))
         }
 
         return WordDetail(
             id: id,
+            level: levelValue,
             expression: expression,
             reading: reading,
             meanings: meanings

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="DataSourceManagerImpl" format="xml" multifile-model="true">
+    <data-source source="LOCAL" name="jlpt_starter.sqlite [2]" uuid="ee7f19c3-f0ad-4866-b33d-838258fdcf4d">
+      <driver-ref>sqlite.xerial</driver-ref>
+      <synchronize>true</synchronize>
+      <jdbc-driver>org.sqlite.JDBC</jdbc-driver>
+      <jdbc-url>jdbc:sqlite:$PROJECT_DIR$/../../개인프로젝트/Haru_JapaneseWordApp/apps/ios/HaruJapaneseWordApp/HaruJapaneseWordApp/Resources/Dictionary/jlpt_starter.sqlite</jdbc-url>
+      <working-dir>$ProjectFileDir$</working-dir>
+    </data-source>
+  </component>
+</project>
