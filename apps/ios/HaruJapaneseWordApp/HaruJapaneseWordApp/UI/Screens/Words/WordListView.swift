@@ -4,6 +4,8 @@ struct WordListView: View {
     @StateObject private var viewModel: WordListViewModel
     private let repository: DictionaryRepository
     @State private var isRangeSheetPresented: Bool = false
+    @State private var reviewWordIds: Set<Int> = []
+    private let reviewStore = ReviewWordStore()
 
     init(repository: DictionaryRepository) {
         self.repository = repository
@@ -45,7 +47,24 @@ struct WordListView: View {
                         NavigationLink {
                             WordDetailView(wordId: word.id, repository: repository)
                         } label: {
-                            WordRow(word: word)
+                            WordRow(word: word, isReviewWord: isReviewWord(word.id))
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            if isReviewWord(word.id) {
+                                Button {
+                                    removeFromReview(word.id)
+                                } label: {
+                                    Label("해제", systemImage: "pin.slash")
+                                }
+                                .tint(.secondary)
+                            } else {
+                                Button {
+                                    addToReview(word.id)
+                                } label: {
+                                    Label("복습", systemImage: "pin.fill")
+                                }
+                                .tint(.orange)
+                            }
                         }
                     }
                     .listStyle(.plain)
@@ -62,6 +81,7 @@ struct WordListView: View {
         }
         .task {
             viewModel.load()
+            reviewWordIds = reviewStore.loadReviewSet()
         }
         .sheet(isPresented: $isRangeSheetPresented) {
             LevelFilterSheetContent(
@@ -80,6 +100,24 @@ struct WordListView: View {
                     .transition(.opacity)
             }
         }
+    }
+
+    private func isReviewWord(_ wordId: Int) -> Bool {
+        reviewWordIds.contains(wordId)
+    }
+
+    private func addToReview(_ wordId: Int) {
+        reviewWordIds.insert(wordId)
+        reviewStore.saveReviewSet(reviewWordIds)
+        let feedback = UINotificationFeedbackGenerator()
+        feedback.notificationOccurred(.success)
+    }
+
+    private func removeFromReview(_ wordId: Int) {
+        reviewWordIds.remove(wordId)
+        reviewStore.saveReviewSet(reviewWordIds)
+        let feedback = UINotificationFeedbackGenerator()
+        feedback.notificationOccurred(.success)
     }
 }
 
