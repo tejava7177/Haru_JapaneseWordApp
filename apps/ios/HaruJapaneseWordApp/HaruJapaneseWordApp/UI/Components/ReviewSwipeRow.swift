@@ -32,6 +32,7 @@ struct ReviewSwipeRow<Content: View>: View {
                 .frame(width: actionWidth)
                 .opacity(shouldShowBackground ? 1 : 0)
             }
+            .allowsHitTesting(false)
 
             content
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -39,34 +40,38 @@ struct ReviewSwipeRow<Content: View>: View {
                 .offset(x: dragOffset)
         }
         .contentShape(Rectangle())
-        .highPriorityGesture(
-            DragGesture()
+        .simultaneousGesture(
+            TapGesture()
+                .onEnded {
+                    if didDragHorizontally {
+                        return
+                    }
+                    onTap()
+                }
+        )
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 12, coordinateSpace: .local)
                 .onChanged { value in
                     let dx = value.translation.width
                     let dy = value.translation.height
-                    if abs(dx) <= abs(dy) {
+                    if abs(dx) < abs(dy) {
+                        return
+                    }
+                    if abs(dx) < 8 {
                         return
                     }
                     if dx >= 0 {
-                        dragOffset = 0
-                        progress = 0
                         return
                     }
                     didDragHorizontally = true
-                    let translation = dx
-                    dragOffset = max(translation, -actionWidth * 1.2)
+                    dragOffset = max(dx, -actionWidth * 1.2)
                     let threshold = actionWidth * 0.9
                     progress = min(1, abs(dragOffset) / max(1, threshold))
                 }
                 .onEnded { value in
                     let dx = value.translation.width
                     let dy = value.translation.height
-                    if abs(dx) <= abs(dy) {
-                        reset()
-                        scheduleDragReset()
-                        return
-                    }
-                    if dx >= 0 {
+                    if abs(dx) < abs(dy) || abs(dx) < 8 || dx >= 0 {
                         reset()
                         scheduleDragReset()
                         return
@@ -76,15 +81,6 @@ struct ReviewSwipeRow<Content: View>: View {
                     }
                     reset()
                     scheduleDragReset()
-                }
-        )
-        .simultaneousGesture(
-            TapGesture()
-                .onEnded {
-                    if didDragHorizontally {
-                        return
-                    }
-                    onTap()
                 }
         )
     }
@@ -127,5 +123,6 @@ private struct ReviewBackgroundView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(baseColor.opacity(fillOpacity))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .allowsHitTesting(false)
     }
 }

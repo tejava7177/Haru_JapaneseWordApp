@@ -45,13 +45,16 @@ struct WordListView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     List(viewModel.displayedWords) { word in
-                        ReviewSwipeRow(
-                            isReviewWord: isReviewWord(word.id),
-                            onToggleReview: { toggleReview(word.id) },
-                            onTap: { navigationPath.append(word.id) }
-                        ) {
-                            WordRow(word: word, isReviewWord: isReviewWord(word.id))
+                        NavigationLink(value: word.id) {
+                            ReviewSwipeRow(
+                                isReviewWord: isReviewWord(word.id),
+                                onToggleReview: { toggleReview(word.id) },
+                                onTap: {}
+                            ) {
+                                WordRow(word: word, isReviewWord: isReviewWord(word.id))
+                            }
                         }
+                        .buttonStyle(.plain)
                         .listRowSeparator(.visible)
                         .listRowInsets(EdgeInsets(top: 10, leading: 20, bottom: 10, trailing: 20))
                         .listRowBackground(Color.clear)
@@ -63,9 +66,9 @@ struct WordListView: View {
                 }
             }
             .navigationTitle("단어")
-        }
-        .navigationDestination(for: Int.self) { wordId in
-            WordDetailView(wordId: wordId, repository: repository)
+            .navigationDestination(for: Int.self) { wordId in
+                WordDetailView(wordId: wordId, repository: repository)
+            }
         }
         .searchable(text: $viewModel.searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "검색")
         .onChange(of: viewModel.searchText) { _ in
@@ -90,6 +93,7 @@ struct WordListView: View {
                 ShuffleHUD()
                     .padding(.top, 12)
                     .transition(.opacity)
+                    .allowsHitTesting(false)
             }
         }
     }
