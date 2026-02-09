@@ -125,14 +125,19 @@ private struct LevelToggleButton: View {
     let title: String
     let isOn: Bool
     let action: () -> Void
+    private let chipHeight: CGFloat = 36
+    private let chipMinWidth: CGFloat = 52
 
     var body: some View {
         Button(action: action) {
             Text(title)
                 .font(.callout)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
                 .foregroundStyle(isOn ? .white : Color(uiColor: .darkGray))
+                .frame(minWidth: chipMinWidth, minHeight: chipHeight)
                 .background(isOn ? Color.accentColor : Color(uiColor: .systemGray5))
                 .overlay(
                     Capsule()
@@ -141,6 +146,31 @@ private struct LevelToggleButton: View {
                 .clipShape(Capsule())
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct BookChip: View {
+    let onTap: () -> Void
+    private let chipHeight: CGFloat = 36
+    private let chipMinWidth: CGFloat = 52
+
+    var body: some View {
+        Button(action: onTap) {
+            Image(systemName: "book.fill")
+                .font(.callout)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .foregroundStyle(Color(uiColor: .darkGray))
+                .frame(minWidth: chipMinWidth, minHeight: chipHeight)
+                .background(Color(uiColor: .systemGray5))
+                .overlay(
+                    Capsule()
+                        .stroke(Color(uiColor: .systemGray3), lineWidth: 1)
+                )
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("복습")
     }
 }
 
@@ -225,7 +255,17 @@ private struct LevelFilterSheetContent: View {
                                         onToggleLevel(level)
                                     }
                                 }
+                                BookChip {
+                                    // TODO: review filter
+                                }
                             }
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(
+                                Capsule()
+                                    .fill(Color.white)
+                            )
                         }
                     }
                 }
