@@ -7,11 +7,9 @@ struct ReviewSwipeRow<Content: View>: View {
     private let content: Content
 
     @State private var dragOffset: CGFloat = 0
-    @State private var rowWidth: CGFloat = 0
     @State private var didDragHorizontally: Bool = false
     @State private var progress: CGFloat = 0
     private let actionWidth: CGFloat = 92
-    private let maxOffsetRatio: CGFloat = 0.95
 
     init(isReviewWord: Bool, onToggleReview: @escaping () -> Void, onTap: @escaping () -> Void, @ViewBuilder content: () -> Content) {
         self.isReviewWord = isReviewWord
@@ -41,36 +39,39 @@ struct ReviewSwipeRow<Content: View>: View {
                 .offset(x: dragOffset)
         }
         .contentShape(Rectangle())
-        .background(
-            GeometryReader { proxy in
-                Color.clear
-                    .preference(key: ReviewSwipeRowWidthKey.self, value: proxy.size.width)
-            }
-        )
-        .onPreferenceChange(ReviewSwipeRowWidthKey.self) { value in
-            rowWidth = value
-        }
         .highPriorityGesture(
             DragGesture()
                 .onChanged { value in
-                    if abs(value.translation.width) <= abs(value.translation.height) {
+                    let dx = value.translation.width
+                    let dy = value.translation.height
+                    if abs(dx) <= abs(dy) {
+                        return
+                    }
+                    if dx >= 0 {
+                        dragOffset = 0
+                        progress = 0
                         return
                     }
                     didDragHorizontally = true
-                    let translation = min(0, value.translation.width)
-                    let maxOffset = actionWidth * 1.15
-                    dragOffset = max(translation, -maxOffset)
-                    let threshold = actionWidth * 0.55
+                    let translation = dx
+                    dragOffset = max(translation, -actionWidth * 1.2)
+                    let threshold = actionWidth * 0.9
                     progress = min(1, abs(dragOffset) / max(1, threshold))
                 }
                 .onEnded { value in
-                    if abs(value.translation.width) <= abs(value.translation.height) {
+                    let dx = value.translation.width
+                    let dy = value.translation.height
+                    if abs(dx) <= abs(dy) {
                         reset()
+                        scheduleDragReset()
                         return
                     }
-                    let translation = min(0, value.translation.width)
-                    let threshold = actionWidth * 0.55
-                    if translation <= -threshold {
+                    if dx >= 0 {
+                        reset()
+                        scheduleDragReset()
+                        return
+                    }
+                    if abs(dragOffset) >= actionWidth * 0.75 {
                         onToggleReview()
                     }
                     reset()
@@ -108,10 +109,9 @@ private struct ReviewBackgroundView: View {
     let isReviewWord: Bool
 
     var body: some View {
-        let isArmed = progress >= 1
         let baseColor = isReviewWord ? Color.secondary : Color.orange
         let fillOpacity = 0.18 + (0.3 * progress)
-        let iconScale = 0.9 + (0.3 * progress)
+        let iconScale = 0.9 + (0.35 * progress)
         let iconOpacity = 0.6 + (0.4 * progress)
 
         VStack(spacing: 4) {
@@ -124,21 +124,8 @@ private struct ReviewBackgroundView: View {
                 .fontWeight(.semibold)
         }
         .foregroundStyle(baseColor)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(baseColor.opacity(fillOpacity))
-        .overlay(
-            Capsule()
-                .stroke(baseColor.opacity(isArmed ? 0.6 : 0.3), lineWidth: 1)
-        )
-        .clipShape(Capsule())
-    }
-}
-
-private struct ReviewSwipeRowWidthKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }

@@ -13,16 +13,22 @@ struct WordRow: View {
 
                 Spacer(minLength: 8)
 
-                Text(word.level.title)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color.black.opacity(0.04))
-                    .clipShape(Capsule())
+                HStack(spacing: 6) {
+                    Text(word.level.title)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.black.opacity(0.04))
+                        .clipShape(Capsule())
 
-                if isReviewWord {
-                    Image(systemName: "book.fill")
+                    if isReviewWord {
+                        Image(systemName: "book.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Image(systemName: "chevron.right")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -33,8 +39,7 @@ struct WordRow: View {
                 .foregroundStyle(.secondary)
                 .padding(.top, 2)
         }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 20)
+        .padding(.vertical, 10)
     }
 }
 
