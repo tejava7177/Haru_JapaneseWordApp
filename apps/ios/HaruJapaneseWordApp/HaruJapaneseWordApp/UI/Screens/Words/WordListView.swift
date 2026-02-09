@@ -6,6 +6,7 @@ struct WordListView: View {
     @State private var isRangeSheetPresented: Bool = false
     @State private var reviewWordIds: Set<Int> = []
     private let reviewStore = ReviewWordStore()
+    @State private var navigationPath = NavigationPath()
 
     init(repository: DictionaryRepository) {
         self.repository = repository
@@ -13,7 +14,7 @@ struct WordListView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             VStack(spacing: 0) {
                 HStack {
                     Button {
@@ -44,28 +45,14 @@ struct WordListView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     List(viewModel.displayedWords) { word in
-                        NavigationLink {
-                            WordDetailView(wordId: word.id, repository: repository)
-                        } label: {
+                        ReviewSwipeRow(
+                            isReviewWord: isReviewWord(word.id),
+                            onToggleReview: { toggleReview(word.id) },
+                            onTap: { navigationPath.append(word.id) }
+                        ) {
                             WordRow(word: word, isReviewWord: isReviewWord(word.id))
                         }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            if isReviewWord(word.id) {
-                                Button {
-                                    removeFromReview(word.id)
-                                } label: {
-                                    Label("해제", systemImage: "pin.slash")
-                                }
-                                .tint(.secondary)
-                            } else {
-                                Button {
-                                    addToReview(word.id)
-                                } label: {
-                                    Label("복습", systemImage: "pin.fill")
-                                }
-                                .tint(.orange)
-                            }
-                        }
+                        .listRowBackground(Color.clear)
                     }
                     .listStyle(.plain)
                     .refreshable {
@@ -74,6 +61,9 @@ struct WordListView: View {
                 }
             }
             .navigationTitle("단어")
+        }
+        .navigationDestination(for: Int.self) { wordId in
+            WordDetailView(wordId: wordId, repository: repository)
         }
         .searchable(text: $viewModel.searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "검색")
         .onChange(of: viewModel.searchText) { _ in
@@ -118,6 +108,14 @@ struct WordListView: View {
         reviewStore.saveReviewSet(reviewWordIds)
         let feedback = UINotificationFeedbackGenerator()
         feedback.notificationOccurred(.success)
+    }
+
+    private func toggleReview(_ wordId: Int) {
+        if isReviewWord(wordId) {
+            removeFromReview(wordId)
+        } else {
+            addToReview(wordId)
+        }
     }
 }
 
