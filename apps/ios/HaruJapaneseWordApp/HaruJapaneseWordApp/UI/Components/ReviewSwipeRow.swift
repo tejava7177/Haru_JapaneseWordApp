@@ -9,8 +9,6 @@ struct ReviewSwipeRow<Content: View>: View {
     @State private var dragOffset: CGFloat = 0
     @State private var rowWidth: CGFloat = 0
     @State private var didDragHorizontally: Bool = false
-    @State private var didCommit: Bool = false
-    @State private var commitIcon: String? = nil
     @State private var progress: CGFloat = 0
     private let actionWidth: CGFloat = 92
     private let maxOffsetRatio: CGFloat = 0.95
@@ -23,7 +21,7 @@ struct ReviewSwipeRow<Content: View>: View {
     }
 
     var body: some View {
-        let shouldShowBackground = dragOffset != 0 || didCommit
+        let shouldShowBackground = dragOffset != 0
 
         ZStack {
             HStack {
@@ -31,8 +29,7 @@ struct ReviewSwipeRow<Content: View>: View {
                 Spacer()
                 ReviewBackgroundView(
                     progress: progress,
-                    isReviewWord: isReviewWord,
-                    commitIcon: commitIcon
+                    isReviewWord: isReviewWord
                 )
                 .frame(width: actionWidth)
                 .opacity(shouldShowBackground ? 1 : 0)
@@ -75,7 +72,6 @@ struct ReviewSwipeRow<Content: View>: View {
                     let threshold = actionWidth * 0.55
                     if translation <= -threshold {
                         onToggleReview()
-                        commitFeedback(isRemoving: isReviewWord)
                     }
                     reset()
                     scheduleDragReset()
@@ -105,22 +101,11 @@ struct ReviewSwipeRow<Content: View>: View {
         }
     }
 
-    private func commitFeedback(isRemoving: Bool) {
-        let feedback = UINotificationFeedbackGenerator()
-        feedback.notificationOccurred(.success)
-        commitIcon = isRemoving ? "book.slash.fill" : "checkmark.circle.fill"
-        didCommit = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
-            didCommit = false
-            commitIcon = nil
-        }
-    }
 }
 
 private struct ReviewBackgroundView: View {
     let progress: CGFloat
     let isReviewWord: Bool
-    let commitIcon: String?
 
     var body: some View {
         let isArmed = progress >= 1
@@ -130,7 +115,7 @@ private struct ReviewBackgroundView: View {
         let iconOpacity = 0.6 + (0.4 * progress)
 
         VStack(spacing: 4) {
-            Image(systemName: commitIcon ?? "book.fill")
+            Image(systemName: "book.fill")
                 .font(.system(size: 16, weight: .semibold))
                 .scaleEffect(iconScale)
                 .opacity(iconOpacity)
