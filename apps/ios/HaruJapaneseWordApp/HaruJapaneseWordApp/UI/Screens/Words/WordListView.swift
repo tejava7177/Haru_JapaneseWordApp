@@ -52,6 +52,7 @@ struct WordListView: View {
                         ) {
                             WordRow(word: word, isReviewWord: isReviewWord(word.id))
                         }
+                        .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)
                     }
                     .listStyle(.plain)

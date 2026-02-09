@@ -32,7 +32,8 @@ struct WordRow: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 20)
     }
 }
 

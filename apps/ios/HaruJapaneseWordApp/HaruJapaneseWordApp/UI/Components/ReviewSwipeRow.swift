@@ -39,6 +39,8 @@ struct ReviewSwipeRow<Content: View>: View {
             }
 
             content
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
                 .offset(x: dragOffset)
         }
         .contentShape(Rectangle())
@@ -59,9 +61,9 @@ struct ReviewSwipeRow<Content: View>: View {
                     }
                     didDragHorizontally = true
                     let translation = min(0, value.translation.width)
-                    let maxOffset = max(1, rowWidth * maxOffsetRatio)
+                    let maxOffset = actionWidth * 1.15
                     dragOffset = max(translation, -maxOffset)
-                    let threshold = rowWidth * 0.38
+                    let threshold = actionWidth * 0.55
                     progress = min(1, abs(dragOffset) / max(1, threshold))
                 }
                 .onEnded { value in
@@ -70,7 +72,7 @@ struct ReviewSwipeRow<Content: View>: View {
                         return
                     }
                     let translation = min(0, value.translation.width)
-                    let threshold = rowWidth * 0.38
+                    let threshold = actionWidth * 0.55
                     if translation <= -threshold {
                         onToggleReview()
                         commitFeedback(isRemoving: isReviewWord)
