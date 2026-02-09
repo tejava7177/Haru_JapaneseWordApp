@@ -31,8 +31,9 @@ struct WordRow: View {
             Text(meaningsText)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .padding(.top, 2)
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, 8)
         .padding(.horizontal, 20)
     }
 }

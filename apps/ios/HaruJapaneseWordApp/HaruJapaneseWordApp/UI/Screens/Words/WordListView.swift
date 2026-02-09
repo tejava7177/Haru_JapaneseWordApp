@@ -52,10 +52,11 @@ struct WordListView: View {
                         ) {
                             WordRow(word: word, isReviewWord: isReviewWord(word.id))
                         }
-                        .listRowInsets(EdgeInsets())
+                        .listRowInsets(EdgeInsets(top: 10, leading: 20, bottom: 10, trailing: 20))
                         .listRowBackground(Color.clear)
                     }
                     .listStyle(.plain)
+                    .listRowSpacing(12)
                     .refreshable {
                         await viewModel.shuffleByPull()
                     }
