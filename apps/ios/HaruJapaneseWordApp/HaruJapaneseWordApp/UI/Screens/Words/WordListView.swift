@@ -103,9 +103,7 @@ struct WordListView: View {
         .sheet(isPresented: $isRangeSheetPresented) {
             LevelFilterSheetContent(
                 availableLevels: viewModel.availableLevels,
-                isAllOn: viewModel.isAllOn,
                 isLevelSelected: { viewModel.selectedLevels.contains($0) },
-                onToggleAll: { viewModel.setAllLevels($0) },
                 onToggleLevel: { viewModel.toggleLevel($0) },
                 onClose: { isRangeSheetPresented = false }
             )
@@ -230,7 +228,7 @@ private struct ShuffleHUD: View {
 
 #Preview("필터-초기") {
     LevelFilterSheetPreview(
-        initialLevels: Set(JLPTLevel.allCases),
+        initialLevels: [],
         availableLevels: [.n1, .n2, .n3, .n4, .n5]
     )
 }
@@ -244,27 +242,13 @@ private struct ShuffleHUD: View {
 
 private struct LevelFilterSheetContent: View {
     let availableLevels: [JLPTLevel]
-    let isAllOn: Bool
     let isLevelSelected: (JLPTLevel) -> Bool
-    let onToggleAll: (Bool) -> Void
     let onToggleLevel: (JLPTLevel) -> Void
     let onClose: () -> Void
 
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    HStack {
-                        Text("전체")
-                        Spacer()
-                        Toggle("", isOn: Binding(
-                            get: { isAllOn },
-                            set: { onToggleAll($0) }
-                        ))
-                        .labelsHidden()
-                    }
-                }
-
                 Section("범위 선택") {
                     VStack(alignment: .leading, spacing: 12) {
                         if availableLevels.isEmpty {
@@ -317,22 +301,8 @@ private struct LevelFilterSheetPreview: View {
         self.availableLevels = availableLevels
     }
 
-    private var isAllOn: Bool {
-        let availableSet = Set(availableLevels)
-        return availableSet.isEmpty == false && selectedLevels == availableSet
-    }
-
-    private func setAll(_ isOn: Bool) {
-        if isOn {
-            selectedLevels = Set(availableLevels)
-        } else if let fallback = availableLevels.last {
-            selectedLevels = [fallback]
-        }
-    }
-
     private func toggleLevel(_ level: JLPTLevel) {
         if selectedLevels.contains(level) {
-            if selectedLevels.count == 1 { return }
             selectedLevels.remove(level)
         } else {
             selectedLevels.insert(level)
@@ -342,9 +312,7 @@ private struct LevelFilterSheetPreview: View {
     var body: some View {
         LevelFilterSheetContent(
             availableLevels: availableLevels,
-            isAllOn: isAllOn,
             isLevelSelected: { selectedLevels.contains($0) },
-            onToggleAll: { setAll($0) },
             onToggleLevel: { toggleLevel($0) },
             onClose: {}
         )

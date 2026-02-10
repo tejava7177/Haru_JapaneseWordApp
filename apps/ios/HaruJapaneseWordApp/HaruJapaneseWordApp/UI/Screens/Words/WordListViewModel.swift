@@ -4,6 +4,7 @@ import Combine
 
 @MainActor
 final class WordListViewModel: ObservableObject {
+    private static let selectedLevelsKey = "WordFilter.selectedLevels"
     @Published var searchText: String = ""
     @Published var selectedLevels: Set<JLPTLevel> = Set(JLPTLevel.allCases)
     @Published private(set) var displayedWords: [WordSummary] = []
@@ -24,12 +25,7 @@ final class WordListViewModel: ObservableObject {
         self.repository = repository
         let sortedLevels = JLPTLevel.allCases.sorted { $0.rank > $1.rank }
         self.availableLevels = sortedLevels
-        self.selectedLevels = Set(sortedLevels)
-    }
-
-    var isAllOn: Bool {
-        let availableSet = Set(availableLevels)
-        return availableSet.isEmpty == false && selectedLevels == availableSet
+        self.selectedLevels = Self.loadSelectedLevels()
     }
 
     func load() {
@@ -48,32 +44,15 @@ final class WordListViewModel: ObservableObject {
         displayedWords.shuffle()
     }
 
-    func setAllLevels(_ isOn: Bool) {
-        withAnimation(.easeInOut(duration: 0.2)) {
-            if isOn {
-                selectedLevels = Set(availableLevels)
-            } else {
-                if let fallback = availableLevels.last {
-                    selectedLevels = [fallback]
-                }
-            }
-        }
-        Task {
-            await resetAndLoadFirstPage()
-        }
-    }
-
     func toggleLevel(_ level: JLPTLevel) {
         withAnimation(.easeInOut(duration: 0.2)) {
             if selectedLevels.contains(level) {
-                if selectedLevels.count == 1 {
-                    return
-                }
                 selectedLevels.remove(level)
             } else {
                 selectedLevels.insert(level)
             }
         }
+        persistSelectedLevels()
         Task {
             await resetAndLoadFirstPage()
         }
@@ -130,7 +109,7 @@ final class WordListViewModel: ObservableObject {
             errorMessage = nil
         }
 
-        let levels = selectedLevels
+        let levels = selectedLevels.isEmpty ? Set(availableLevels) : selectedLevels
         if levels.isEmpty {
             displayedWords = []
             hasMore = false
@@ -168,5 +147,15 @@ final class WordListViewModel: ObservableObject {
 
         isLoadingPage = false
         isLoading = false
+    }
+
+    private func persistSelectedLevels() {
+        let raw = selectedLevels.map { $0.rawValue }
+        UserDefaults.standard.set(raw, forKey: Self.selectedLevelsKey)
+    }
+
+    private static func loadSelectedLevels() -> Set<JLPTLevel> {
+        let raw = UserDefaults.standard.stringArray(forKey: selectedLevelsKey) ?? []
+        return Set(raw.compactMap { JLPTLevel(rawValue: $0) })
     }
 }
