@@ -315,6 +315,10 @@ private struct PreviewDictionaryRepository: DictionaryRepository {
         []
     }
 
+    func fetchWordsPaged(levels: Set<JLPTLevel>, query: String?, limit: Int, offset: Int) async throws -> [WordSummary] {
+        []
+    }
+
     func fetchWordDetail(wordId: Int) throws -> WordDetail? {
         detail
     }

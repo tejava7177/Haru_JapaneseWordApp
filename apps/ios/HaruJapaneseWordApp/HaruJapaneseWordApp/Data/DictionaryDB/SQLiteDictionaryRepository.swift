@@ -164,6 +164,90 @@ final class SQLiteDictionaryRepository: DictionaryRepository {
         return results
     }
 
+    func fetchWordsPaged(levels: Set<JLPTLevel>, query: String?, limit: Int, offset: Int) async throws -> [WordSummary] {
+        try await Task.detached(priority: .userInitiated) { [levels, query, limit, offset, db] in
+            if levels.isEmpty {
+                return []
+            }
+
+            var sqlParts: [String] = [
+                """
+                SELECT w.id, w.level, w.expression, w.reading,
+                       GROUP_CONCAT(m.text, ' / ') AS meanings
+                FROM word w
+                LEFT JOIN meaning m ON m.word_id = w.id
+                """
+            ]
+
+            var whereClauses: [String] = []
+            let sortedLevels = levels.sorted { $0.rank > $1.rank }
+            if sortedLevels.isEmpty == false {
+                let placeholders = Array(repeating: "?", count: sortedLevels.count).joined(separator: ", ")
+                whereClauses.append("w.level IN (\(placeholders))")
+            }
+
+            let trimmedQuery = query?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let hasQuery = trimmedQuery.isEmpty == false
+            if hasQuery {
+                whereClauses.append("(w.expression LIKE ? OR w.reading LIKE ? OR m.text LIKE ?)")
+            }
+
+            if whereClauses.isEmpty == false {
+                sqlParts.append("WHERE \(whereClauses.joined(separator: " AND "))")
+            }
+
+            sqlParts.append(
+                """
+                GROUP BY w.id
+                ORDER BY w.expression
+                LIMIT ? OFFSET ?;
+                """
+            )
+
+            let sql = sqlParts.joined(separator: "\n")
+            let statement = try db.prepare(sql)
+            defer { db.finalize(statement) }
+
+            var bindIndex: Int32 = 1
+            for level in sortedLevels {
+                try db.bind(level.rawValue, to: bindIndex, in: statement)
+                bindIndex += 1
+            }
+            if hasQuery {
+                let likeQuery = "%\(trimmedQuery)%"
+                try db.bind(likeQuery, to: bindIndex, in: statement)
+                bindIndex += 1
+                try db.bind(likeQuery, to: bindIndex, in: statement)
+                bindIndex += 1
+                try db.bind(likeQuery, to: bindIndex, in: statement)
+                bindIndex += 1
+            }
+            try db.bind(limit, to: bindIndex, in: statement)
+            bindIndex += 1
+            try db.bind(offset, to: bindIndex, in: statement)
+
+            var results: [WordSummary] = []
+            while try db.step(statement) {
+                let id = SQLiteDB.columnInt(statement, 0)
+                let levelRaw = SQLiteDB.columnText(statement, 1) ?? JLPTLevel.n5.rawValue
+                let levelValue = JLPTLevel(rawValue: levelRaw) ?? .n5
+                let expression = SQLiteDB.columnText(statement, 2) ?? ""
+                let reading = SQLiteDB.columnText(statement, 3) ?? ""
+                let meanings = SQLiteDB.columnText(statement, 4) ?? ""
+                results.append(
+                    WordSummary(
+                        id: id,
+                        level: levelValue,
+                        expression: expression,
+                        reading: reading,
+                        meanings: meanings
+                    )
+                )
+            }
+            return results
+        }.value
+    }
+
     func fetchWordDetail(wordId: Int) throws -> WordDetail? {
         let wordSql = """
         SELECT w.id, w.level, w.expression, w.reading

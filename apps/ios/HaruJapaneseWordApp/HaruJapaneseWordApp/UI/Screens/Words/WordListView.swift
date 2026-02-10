@@ -30,38 +30,61 @@ struct WordListView: View {
                 .padding(.horizontal)
                 .padding(.top, 8)
 
-                if viewModel.isLoading {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let errorMessage = viewModel.errorMessage {
-                    Text(errorMessage)
-                        .foregroundStyle(.secondary)
-                        .padding()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if viewModel.selectedLevels.isEmpty {
-                    Text("선택된 레벨이 없어요.")
-                        .foregroundStyle(.secondary)
-                        .padding()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    List(viewModel.displayedWords) { word in
-                        NavigationLink(value: word.id) {
-                            ReviewSwipeRow(
-                                isReviewWord: isReviewWord(word.id),
-                                onToggleReview: { toggleReview(word.id) }
-                            ) {
-                                WordRow(word: word, isReviewWord: isReviewWord(word.id))
+                List {
+                    if viewModel.isLoading {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                            Spacer()
+                        }
+                        .listRowSeparator(.hidden)
+                    } else if let errorMessage = viewModel.errorMessage {
+                        Text(errorMessage)
+                            .foregroundStyle(.secondary)
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .listRowSeparator(.hidden)
+                    } else if viewModel.selectedLevels.isEmpty {
+                        Text("선택된 레벨이 없어요.")
+                            .foregroundStyle(.secondary)
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .listRowSeparator(.hidden)
+                    } else {
+                        ForEach(viewModel.displayedWords) { word in
+                            NavigationLink(value: word.id) {
+                                ReviewSwipeRow(
+                                    isReviewWord: isReviewWord(word.id),
+                                    onToggleReview: { toggleReview(word.id) }
+                                ) {
+                                    WordRow(word: word, isReviewWord: isReviewWord(word.id))
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .listRowSeparator(.visible)
+                            .listRowInsets(EdgeInsets(top: 10, leading: 20, bottom: 10, trailing: 20))
+                            .listRowBackground(Color.clear)
+                            .onAppear {
+                                Task {
+                                    await viewModel.loadNextPageIfNeeded(currentItem: word)
+                                }
                             }
                         }
-                        .buttonStyle(.plain)
-                        .listRowSeparator(.visible)
-                        .listRowInsets(EdgeInsets(top: 10, leading: 20, bottom: 10, trailing: 20))
+                    }
+
+                    if viewModel.isLoadingPage {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                            Spacer()
+                        }
                         .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                     }
-                    .listStyle(.plain)
-                    .refreshable {
-                        await viewModel.shuffleByPull()
-                    }
+                }
+                .listStyle(.plain)
+                .refreshable {
+                    await viewModel.refresh()
                 }
             }
             .navigationTitle("단어")
