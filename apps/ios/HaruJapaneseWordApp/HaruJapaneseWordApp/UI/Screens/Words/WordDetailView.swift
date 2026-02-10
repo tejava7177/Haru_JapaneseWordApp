@@ -250,7 +250,7 @@ private struct ReviewActionBackground: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "pin.fill")
+            Image(systemName: "book.fill")
                 .font(.system(size: 16, weight: .semibold))
             Text("복습 단어")
                 .font(.footnote)

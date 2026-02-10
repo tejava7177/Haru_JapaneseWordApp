@@ -1,15 +1,13 @@
 import SwiftUI
 
 struct WordListView: View {
-    @StateObject private var viewModel: WordListViewModel
+    @ObservedObject private var viewModel: WordListViewModel
     private let repository: DictionaryRepository
     @State private var isRangeSheetPresented: Bool = false
-    @State private var reviewWordIds: Set<Int> = []
-    private let reviewStore = ReviewWordStore()
 
-    init(repository: DictionaryRepository) {
+    init(repository: DictionaryRepository, viewModel: WordListViewModel) {
         self.repository = repository
-        _viewModel = StateObject(wrappedValue: WordListViewModel(repository: repository))
+        _viewModel = ObservedObject(wrappedValue: viewModel)
     }
 
     var body: some View {
@@ -37,31 +35,26 @@ struct WordListView: View {
                         .foregroundStyle(.secondary)
                         .padding()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if viewModel.selectedLevels.isEmpty {
-                    Text("선택된 레벨이 없어요.")
-                        .foregroundStyle(.secondary)
-                        .padding()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     List(viewModel.displayedWords) { word in
                         NavigationLink {
                             WordDetailView(wordId: word.id, repository: repository)
                         } label: {
-                            WordRow(word: word, isReviewWord: isReviewWord(word.id))
+                            WordRow(word: word, isReviewWord: viewModel.isReviewWord(word.id))
                         }
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            if isReviewWord(word.id) {
+                            if viewModel.isReviewWord(word.id) {
                                 Button {
-                                    removeFromReview(word.id)
+                                    viewModel.toggleReview(word.id)
                                 } label: {
-                                    Label("해제", systemImage: "pin.slash")
+                                    Label("해제", systemImage: "book.fill")
                                 }
                                 .tint(.secondary)
                             } else {
                                 Button {
-                                    addToReview(word.id)
+                                    viewModel.toggleReview(word.id)
                                 } label: {
-                                    Label("복습", systemImage: "pin.fill")
+                                    Label("복습", systemImage: "book.fill")
                                 }
                                 .tint(.orange)
                             }
@@ -81,14 +74,13 @@ struct WordListView: View {
         }
         .task {
             viewModel.load()
-            reviewWordIds = reviewStore.loadReviewSet()
         }
         .sheet(isPresented: $isRangeSheetPresented) {
             LevelFilterSheetContent(
                 availableLevels: viewModel.availableLevels,
-                isAllOn: viewModel.isAllOn,
                 isLevelSelected: { viewModel.selectedLevels.contains($0) },
-                onToggleAll: { viewModel.setAllLevels($0) },
+                isReviewOnly: viewModel.reviewOnly,
+                onToggleReviewOnly: { viewModel.toggleReviewOnly() },
                 onToggleLevel: { viewModel.toggleLevel($0) },
                 onClose: { isRangeSheetPresented = false }
             )
@@ -102,37 +94,23 @@ struct WordListView: View {
         }
     }
 
-    private func isReviewWord(_ wordId: Int) -> Bool {
-        reviewWordIds.contains(wordId)
-    }
-
-    private func addToReview(_ wordId: Int) {
-        reviewWordIds.insert(wordId)
-        reviewStore.saveReviewSet(reviewWordIds)
-        let feedback = UINotificationFeedbackGenerator()
-        feedback.notificationOccurred(.success)
-    }
-
-    private func removeFromReview(_ wordId: Int) {
-        reviewWordIds.remove(wordId)
-        reviewStore.saveReviewSet(reviewWordIds)
-        let feedback = UINotificationFeedbackGenerator()
-        feedback.notificationOccurred(.success)
-    }
 }
 
 private struct LevelToggleButton: View {
     let title: String
     let isOn: Bool
     let action: () -> Void
+    private let chipHeight: CGFloat = 34
+    private let chipMinWidth: CGFloat = 46
 
     var body: some View {
         Button(action: action) {
             Text(title)
                 .font(.callout)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
                 .foregroundStyle(isOn ? .white : Color(uiColor: .darkGray))
+                .frame(minWidth: chipMinWidth, minHeight: chipHeight)
                 .background(isOn ? Color.accentColor : Color(uiColor: .systemGray5))
                 .overlay(
                     Capsule()
@@ -141,6 +119,32 @@ private struct LevelToggleButton: View {
                 .clipShape(Capsule())
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct BookChip: View {
+    let isOn: Bool
+    let onTap: () -> Void
+    private let chipHeight: CGFloat = 34
+    private let chipMinWidth: CGFloat = 46
+
+    var body: some View {
+        Button(action: onTap) {
+            Image(systemName: "book.fill")
+                .font(.callout)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .foregroundStyle(isOn ? .white : Color(uiColor: .darkGray))
+                .frame(minWidth: chipMinWidth, minHeight: chipHeight)
+                .background(isOn ? Color.accentColor : Color(uiColor: .systemGray5))
+                .overlay(
+                    Capsule()
+                        .stroke(isOn ? Color.accentColor : Color(uiColor: .systemGray3), lineWidth: 1)
+                )
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("복습")
     }
 }
 
@@ -169,12 +173,15 @@ private struct ShuffleHUD: View {
 }
 
 #Preview {
-    WordListView(repository: StubDictionaryRepository())
+    WordListView(
+        repository: StubDictionaryRepository(),
+        viewModel: WordListViewModel(repository: StubDictionaryRepository())
+    )
 }
 
 #Preview("필터-초기") {
     LevelFilterSheetPreview(
-        initialLevels: Set(JLPTLevel.allCases),
+        initialLevels: [],
         availableLevels: [.n1, .n2, .n3, .n4, .n5]
     )
 }
@@ -188,27 +195,15 @@ private struct ShuffleHUD: View {
 
 private struct LevelFilterSheetContent: View {
     let availableLevels: [JLPTLevel]
-    let isAllOn: Bool
     let isLevelSelected: (JLPTLevel) -> Bool
-    let onToggleAll: (Bool) -> Void
+    let isReviewOnly: Bool
+    let onToggleReviewOnly: () -> Void
     let onToggleLevel: (JLPTLevel) -> Void
     let onClose: () -> Void
 
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    HStack {
-                        Text("전체")
-                        Spacer()
-                        Toggle("", isOn: Binding(
-                            get: { isAllOn },
-                            set: { onToggleAll($0) }
-                        ))
-                        .labelsHidden()
-                    }
-                }
-
                 Section("범위 선택") {
                     VStack(alignment: .leading, spacing: 12) {
                         if availableLevels.isEmpty {
@@ -225,7 +220,17 @@ private struct LevelFilterSheetContent: View {
                                         onToggleLevel(level)
                                     }
                                 }
+                                BookChip(isOn: isReviewOnly) {
+                                    onToggleReviewOnly()
+                                }
                             }
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .background(
+                                Capsule()
+                                    .fill(Color.white)
+                            )
                         }
                     }
                 }
@@ -244,29 +249,17 @@ private struct LevelFilterSheetContent: View {
 
 private struct LevelFilterSheetPreview: View {
     @State private var selectedLevels: Set<JLPTLevel>
+    @State private var reviewOnly: Bool
     private let availableLevels: [JLPTLevel]
 
     init(initialLevels: Set<JLPTLevel>, availableLevels: [JLPTLevel]) {
         _selectedLevels = State(initialValue: initialLevels)
+        _reviewOnly = State(initialValue: false)
         self.availableLevels = availableLevels
-    }
-
-    private var isAllOn: Bool {
-        let availableSet = Set(availableLevels)
-        return availableSet.isEmpty == false && selectedLevels == availableSet
-    }
-
-    private func setAll(_ isOn: Bool) {
-        if isOn {
-            selectedLevels = Set(availableLevels)
-        } else if let fallback = availableLevels.last {
-            selectedLevels = [fallback]
-        }
     }
 
     private func toggleLevel(_ level: JLPTLevel) {
         if selectedLevels.contains(level) {
-            if selectedLevels.count == 1 { return }
             selectedLevels.remove(level)
         } else {
             selectedLevels.insert(level)
@@ -276,9 +269,9 @@ private struct LevelFilterSheetPreview: View {
     var body: some View {
         LevelFilterSheetContent(
             availableLevels: availableLevels,
-            isAllOn: isAllOn,
             isLevelSelected: { selectedLevels.contains($0) },
-            onToggleAll: { setAll($0) },
+            isReviewOnly: reviewOnly,
+            onToggleReviewOnly: { reviewOnly.toggle() },
             onToggleLevel: { toggleLevel($0) },
             onClose: {}
         )

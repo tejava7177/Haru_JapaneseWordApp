@@ -1,9 +1,15 @@
 import SwiftUI
 
 struct RootView: View {
-    @Environment(\.dictionaryRepository) private var repository
+    private let repository: DictionaryRepository
     @StateObject private var settingsStore = AppSettingsStore()
+    @StateObject private var wordListViewModel: WordListViewModel
     @State private var isShowingOnboarding: Bool = false
+
+    init(repository: DictionaryRepository) {
+        self.repository = repository
+        _wordListViewModel = StateObject(wrappedValue: WordListViewModel(repository: repository))
+    }
 
     var body: some View {
         TabView {
@@ -12,7 +18,7 @@ struct RootView: View {
                     Label("Home", systemImage: "house")
                 }
 
-            WordListView(repository: repository)
+            WordListView(repository: repository, viewModel: wordListViewModel)
                 .tabItem {
                     Label("Words", systemImage: "book")
                 }
@@ -42,6 +48,5 @@ struct RootView: View {
 }
 
 #Preview {
-    RootView()
-        .environment(\.dictionaryRepository, StubDictionaryRepository())
+    RootView(repository: StubDictionaryRepository())
 }

@@ -22,7 +22,7 @@ struct WordRow: View {
                     .clipShape(Capsule())
 
                 if isReviewWord {
-                    Image(systemName: "pin.fill")
+                    Image(systemName: "book.fill")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }

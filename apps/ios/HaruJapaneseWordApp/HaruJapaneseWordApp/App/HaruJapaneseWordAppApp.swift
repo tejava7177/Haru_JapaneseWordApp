@@ -26,8 +26,7 @@ struct HaruJapaneseWordAppApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environment(\.dictionaryRepository, repository)
+            RootView(repository: repository)
         }
     }
 }
