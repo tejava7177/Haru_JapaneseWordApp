@@ -42,11 +42,10 @@ final class HomeViewModel: ObservableObject {
         errorMessage = nil
         let today = Date()
         let settings = settingsStore.settings
-        let excluded = learnedStore.loadExcludedSet(today: today, excludeDays: settings.excludeDays)
         let ids = homeDeckStore.getOrCreateDeck(
             date: today,
             repository: repository,
-            excluding: excluded,
+            excluding: [],
             level: settings.homeDeckLevel
         )
         deckWordIds = ids
@@ -80,11 +79,10 @@ final class HomeViewModel: ObservableObject {
         }
 
         let settings = settingsStore.settings
-        let excluded = learnedStore.loadExcludedSet(today: today, excludeDays: settings.excludeDays)
         let ids = homeDeckStore.rerollDeck(
             date: today,
             repository: repository,
-            excluding: excluded,
+            excluding: [],
             level: settings.homeDeckLevel
         )
         deckWordIds = ids

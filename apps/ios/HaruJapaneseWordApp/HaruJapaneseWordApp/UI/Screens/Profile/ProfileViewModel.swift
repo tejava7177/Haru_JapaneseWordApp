@@ -58,11 +58,6 @@ final class ProfileViewModel: ObservableObject {
         settingsStore.updateHomeDeckLevel(level)
     }
 
-    func updateExcludeDays(_ days: Int) {
-        settings.excludeDays = days
-        settingsStore.updateExcludeDays(days)
-    }
-
     func loadAvatar(from item: PhotosPickerItem?) async {
         guard let item else { return }
         if let data = try? await item.loadTransferable(type: Data.self) {

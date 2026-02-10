@@ -20,7 +20,7 @@ struct OnboardingView: View {
                     title: "학습 체크 ✓",
                     description: [
                         "✓를 누르면 학습한 단어로 표시돼요.",
-                        "학습한 단어는 7일 동안 추천에서 제외돼요."
+                        "학습한 단어는 추천에서 잠시 쉬어요."
                     ],
                     showsButton: true
                 )
