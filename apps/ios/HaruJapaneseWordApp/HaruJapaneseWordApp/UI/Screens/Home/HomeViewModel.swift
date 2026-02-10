@@ -7,33 +7,28 @@ final class HomeViewModel: ObservableObject {
     @Published var deckWordIds: [Int] = []
     @Published var cards: [WordSummary] = []
     @Published var selectedIndex: Int = 0
-    @Published var learnedWordIds: Set<Int> = []
-    @Published var remainingRerolls: Int = 0
     @Published var errorMessage: String?
     @Published var isShowingAlert: Bool = false
     @Published var alertMessage: String = ""
 
     private let repository: DictionaryRepository
     private let homeDeckStore: HomeDeckStore
-    private let learnedStore: LearnedWordStore
     private let settingsStore: AppSettingsStore
     private var cancellables: Set<AnyCancellable> = []
 
     init(
         repository: DictionaryRepository,
         homeDeckStore: HomeDeckStore = HomeDeckStore(),
-        learnedStore: LearnedWordStore = LearnedWordStore(),
         settingsStore: AppSettingsStore
     ) {
         self.repository = repository
         self.homeDeckStore = homeDeckStore
-        self.learnedStore = learnedStore
         self.settingsStore = settingsStore
 
         settingsStore.$settings
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
-                self?.remainingRerolls = self?.homeDeckStore.remainingRerolls(date: Date()) ?? 0
+                self?.loadDeck()
             }
             .store(in: &cancellables)
     }
@@ -50,48 +45,10 @@ final class HomeViewModel: ObservableObject {
         )
         deckWordIds = ids
         selectedIndex = 0
-        remainingRerolls = homeDeckStore.remainingRerolls(date: today)
-        learnedWordIds = learnedStore.loadLearnedSet(today: today)
         cards = loadCards(from: ids)
 
         if cards.isEmpty {
             errorMessage = "오늘의 추천을 불러오지 못했습니다."
-        }
-    }
-
-    func toggleLearned(wordId: Int) {
-        let today = Date()
-        if learnedStore.isLearned(wordId: wordId, today: today) {
-            learnedStore.unmarkLearned(wordId: wordId)
-            learnedWordIds.remove(wordId)
-        } else {
-            learnedStore.markLearned(wordId: wordId, date: today)
-            learnedWordIds.insert(wordId)
-        }
-    }
-
-    func rerollDeck() {
-        let today = Date()
-        let remaining = homeDeckStore.remainingRerolls(date: today)
-        if remaining <= 0 {
-            remainingRerolls = 0
-            return
-        }
-
-        let settings = settingsStore.settings
-        let ids = homeDeckStore.rerollDeck(
-            date: today,
-            repository: repository,
-            excluding: [],
-            level: settings.homeDeckLevel
-        )
-        deckWordIds = ids
-        selectedIndex = 0
-        remainingRerolls = homeDeckStore.remainingRerolls(date: today)
-        cards = loadCards(from: ids)
-
-        if cards.isEmpty {
-            errorMessage = "덱을 새로고침하지 못했습니다."
         }
     }
 

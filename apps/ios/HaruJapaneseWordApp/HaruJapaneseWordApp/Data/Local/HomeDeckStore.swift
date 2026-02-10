@@ -9,7 +9,7 @@ struct HomeDeckStore {
     private static let rerollCountKey = "home_deck_reroll_count"
 
     private let maxRerollsPerDay: Int = 2
-    private let deckSize: Int = 3
+    private let deckSize: Int = 10
 
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
