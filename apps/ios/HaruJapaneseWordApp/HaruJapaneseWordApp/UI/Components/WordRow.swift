@@ -27,10 +27,6 @@ struct WordRow: View {
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
-
-                    Image(systemName: "chevron.right")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
                 }
             }
 

@@ -3,7 +3,6 @@ import SwiftUI
 struct ReviewSwipeRow<Content: View>: View {
     let isReviewWord: Bool
     let onToggleReview: () -> Void
-    let onTap: () -> Void
     private let content: Content
 
     @State private var dragOffset: CGFloat = 0
@@ -11,10 +10,9 @@ struct ReviewSwipeRow<Content: View>: View {
     @State private var progress: CGFloat = 0
     private let actionWidth: CGFloat = 92
 
-    init(isReviewWord: Bool, onToggleReview: @escaping () -> Void, onTap: @escaping () -> Void, @ViewBuilder content: () -> Content) {
+    init(isReviewWord: Bool, onToggleReview: @escaping () -> Void, @ViewBuilder content: () -> Content) {
         self.isReviewWord = isReviewWord
         self.onToggleReview = onToggleReview
-        self.onTap = onTap
         self.content = content()
     }
 
@@ -40,15 +38,6 @@ struct ReviewSwipeRow<Content: View>: View {
                 .offset(x: dragOffset)
         }
         .contentShape(Rectangle())
-        .simultaneousGesture(
-            TapGesture()
-                .onEnded {
-                    if didDragHorizontally {
-                        return
-                    }
-                    onTap()
-                }
-        )
         .simultaneousGesture(
             DragGesture(minimumDistance: 12, coordinateSpace: .local)
                 .onChanged { value in
@@ -90,6 +79,7 @@ struct ReviewSwipeRow<Content: View>: View {
             dragOffset = 0
             progress = 0
         }
+        didDragHorizontally = false
     }
 
     private func scheduleDragReset() {

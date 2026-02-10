@@ -48,8 +48,7 @@ struct WordListView: View {
                         NavigationLink(value: word.id) {
                             ReviewSwipeRow(
                                 isReviewWord: isReviewWord(word.id),
-                                onToggleReview: { toggleReview(word.id) },
-                                onTap: {}
+                                onToggleReview: { toggleReview(word.id) }
                             ) {
                                 WordRow(word: word, isReviewWord: isReviewWord(word.id))
                             }
