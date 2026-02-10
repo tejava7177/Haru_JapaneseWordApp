@@ -19,6 +19,11 @@ final class WordListViewModel: ObservableObject {
         var shuffleLocked: Bool = false
     }
 
+    enum RefreshAction {
+        case shuffled
+        case sortedAlphabetically
+    }
+
     @Published var searchText: String = ""
     @Published var selectedLevels: Set<JLPTLevel> = []
     @Published var reviewOnly: Bool = false
@@ -52,15 +57,15 @@ final class WordListViewModel: ObservableObject {
         fetchWords()
     }
 
-    func shuffleByPull() async {
+    func pullToRefresh() async -> RefreshAction {
         if isShuffling {
-            return
+            return preferences.sortMode == .shuffled ? .shuffled : .sortedAlphabetically
         }
+        let action = handlePullToRefresh()
         isShuffling = true
-        try? await Task.sleep(nanoseconds: 200_000_000)
-        handlePullToRefresh()
         try? await Task.sleep(nanoseconds: 500_000_000)
         isShuffling = false
+        return action
     }
 
     func toggleReviewOnly() {
@@ -212,21 +217,27 @@ final class WordListViewModel: ObservableObject {
         displayedWords = applyShuffleIfNeeded(to: filtered)
     }
 
-    private func handlePullToRefresh() {
+    @discardableResult
+    private func handlePullToRefresh() -> RefreshAction {
         if preferences.shuffleLocked {
             preferences.sortMode = .shuffled
             shuffleCurrentWords()
+            persistPreferences()
+            return .shuffled
         } else {
             switch preferences.sortMode {
             case .alphabetical:
                 preferences.sortMode = .shuffled
                 shuffleCurrentWords()
+                persistPreferences()
+                return .shuffled
             case .shuffled:
                 preferences.sortMode = .alphabetical
                 applyFiltersAndOrder()
+                persistPreferences()
+                return .sortedAlphabetically
             }
         }
-        persistPreferences()
     }
 
     private func persistSelectedLevels() {

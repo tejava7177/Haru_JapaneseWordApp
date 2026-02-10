@@ -4,6 +4,7 @@ struct WordListView: View {
     @ObservedObject private var viewModel: WordListViewModel
     private let repository: DictionaryRepository
     @State private var isRangeSheetPresented: Bool = false
+    @State private var lastRefreshAction: WordListViewModel.RefreshAction = .shuffled
 
     init(repository: DictionaryRepository, viewModel: WordListViewModel) {
         self.repository = repository
@@ -62,7 +63,8 @@ struct WordListView: View {
                     }
                     .listStyle(.plain)
                     .refreshable {
-                        await viewModel.shuffleByPull()
+                        let action = await viewModel.pullToRefresh()
+                        lastRefreshAction = action
                     }
                 }
             }
@@ -89,7 +91,7 @@ struct WordListView: View {
         }
         .overlay(alignment: .top) {
             if viewModel.isShuffling {
-                ShuffleHUD()
+                ShuffleHUD(action: lastRefreshAction)
                     .padding(.top, 12)
                     .transition(.opacity)
             }
@@ -131,6 +133,7 @@ private struct BookChip: View {
     private let chipMinWidth: CGFloat = 46
 
     var body: some View {
+        let activeColor: Color = .orange
         Button(action: onTap) {
             Image(systemName: "book.fill")
                 .font(.callout)
@@ -138,10 +141,10 @@ private struct BookChip: View {
                 .padding(.vertical, 6)
                 .foregroundStyle(isOn ? .white : Color(uiColor: .darkGray))
                 .frame(minWidth: chipMinWidth, minHeight: chipHeight)
-                .background(isOn ? Color.accentColor : Color(uiColor: .systemGray5))
+                .background(isOn ? activeColor : Color(uiColor: .systemGray5))
                 .overlay(
                     Capsule()
-                        .stroke(isOn ? Color.accentColor : Color(uiColor: .systemGray3), lineWidth: 1)
+                        .stroke(isOn ? activeColor : Color(uiColor: .systemGray3), lineWidth: 1)
                 )
                 .clipShape(Capsule())
         }
@@ -151,14 +154,33 @@ private struct BookChip: View {
 }
 
 private struct ShuffleHUD: View {
+    let action: WordListViewModel.RefreshAction
     @State private var isAnimating: Bool = false
+
+    private var iconName: String {
+        switch action {
+        case .shuffled:
+            return "shuffle"
+        case .sortedAlphabetically:
+            return "textformat.abc"
+        }
+    }
+
+    private var message: String {
+        switch action {
+        case .shuffled:
+            return "단어를 셔플합니다."
+        case .sortedAlphabetically:
+            return "단어를 사전순으로 정렬합니다."
+        }
+    }
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "shuffle")
-                .rotationEffect(isAnimating ? .degrees(360) : .degrees(0))
-                .animation(.linear(duration: 0.8).repeatForever(autoreverses: false), value: isAnimating)
-            Text("단어를 셔플합니다.")
+            Image(systemName: iconName)
+                .rotationEffect(action == .shuffled ? (isAnimating ? .degrees(360) : .degrees(0)) : .degrees(0))
+                .animation(action == .shuffled ? .linear(duration: 0.8).repeatForever(autoreverses: false) : .default, value: isAnimating)
+            Text(message)
                 .font(.footnote)
         }
         .padding(.horizontal, 14)
