@@ -81,6 +81,8 @@ struct WordListView: View {
                 isLevelSelected: { viewModel.selectedLevels.contains($0) },
                 isReviewOnly: viewModel.reviewOnly,
                 onToggleReviewOnly: { viewModel.toggleReviewOnly() },
+                isShuffleLocked: viewModel.preferences.shuffleLocked,
+                onToggleShuffleLocked: { viewModel.setShuffleLocked($0) },
                 onToggleLevel: { viewModel.toggleLevel($0) },
                 onClose: { isRangeSheetPresented = false }
             )
@@ -198,6 +200,8 @@ private struct LevelFilterSheetContent: View {
     let isLevelSelected: (JLPTLevel) -> Bool
     let isReviewOnly: Bool
     let onToggleReviewOnly: () -> Void
+    let isShuffleLocked: Bool
+    let onToggleShuffleLocked: (Bool) -> Void
     let onToggleLevel: (JLPTLevel) -> Void
     let onClose: () -> Void
 
@@ -234,6 +238,18 @@ private struct LevelFilterSheetContent: View {
                         }
                     }
                 }
+
+                Section {
+                    Toggle("셔플 고정", isOn: Binding(
+                        get: { isShuffleLocked },
+                        set: { onToggleShuffleLocked($0) }
+                    ))
+                    Text(isShuffleLocked
+                         ? "새로고침을 하면 셔플만 돼요"
+                         : "새로고침을 하면 사전순 ↔ 셔플이 바뀌어요")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             .navigationTitle("필터")
             .toolbar {
@@ -250,11 +266,13 @@ private struct LevelFilterSheetContent: View {
 private struct LevelFilterSheetPreview: View {
     @State private var selectedLevels: Set<JLPTLevel>
     @State private var reviewOnly: Bool
+    @State private var shuffleLocked: Bool
     private let availableLevels: [JLPTLevel]
 
     init(initialLevels: Set<JLPTLevel>, availableLevels: [JLPTLevel]) {
         _selectedLevels = State(initialValue: initialLevels)
         _reviewOnly = State(initialValue: false)
+        _shuffleLocked = State(initialValue: false)
         self.availableLevels = availableLevels
     }
 
@@ -272,6 +290,8 @@ private struct LevelFilterSheetPreview: View {
             isLevelSelected: { selectedLevels.contains($0) },
             isReviewOnly: reviewOnly,
             onToggleReviewOnly: { reviewOnly.toggle() },
+            isShuffleLocked: shuffleLocked,
+            onToggleShuffleLocked: { shuffleLocked = $0 },
             onToggleLevel: { toggleLevel($0) },
             onClose: {}
         )

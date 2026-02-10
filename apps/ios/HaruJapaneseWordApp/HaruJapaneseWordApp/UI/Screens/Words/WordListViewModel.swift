@@ -7,10 +7,22 @@ final class WordListViewModel: ObservableObject {
     private static let selectedLevelsKey = "WordFilter.selectedLevels"
     private static let reviewOnlyKey = "WordFilter.reviewOnly"
     private static let shuffledWordIdsKey = "WordList.shuffledWordIds"
+    private static let preferencesKey = "wordListPreferences"
+
+    enum WordSortMode: String, Codable {
+        case alphabetical
+        case shuffled
+    }
+
+    struct WordListPreferences: Codable {
+        var sortMode: WordSortMode = .alphabetical
+        var shuffleLocked: Bool = false
+    }
 
     @Published var searchText: String = ""
     @Published var selectedLevels: Set<JLPTLevel> = []
     @Published var reviewOnly: Bool = false
+    @Published var preferences: WordListPreferences = WordListPreferences()
     @Published private(set) var displayedWords: [WordSummary] = []
     @Published private(set) var availableLevels: [JLPTLevel] = []
     @Published private(set) var reviewWordIds: Set<Int> = []
@@ -28,6 +40,7 @@ final class WordListViewModel: ObservableObject {
         self.selectedLevels = Self.loadSelectedLevels()
         self.reviewOnly = Self.loadReviewOnly()
         self.shuffledWordIds = Self.loadShuffledWordIds()
+        self.preferences = Self.loadPreferences()
         self.reviewWordIds = reviewStore.loadReviewSet()
     }
 
@@ -45,7 +58,7 @@ final class WordListViewModel: ObservableObject {
         }
         isShuffling = true
         try? await Task.sleep(nanoseconds: 200_000_000)
-        shuffleCurrentWords()
+        handlePullToRefresh()
         try? await Task.sleep(nanoseconds: 500_000_000)
         isShuffling = false
     }
@@ -54,6 +67,11 @@ final class WordListViewModel: ObservableObject {
         reviewOnly.toggle()
         persistReviewOnly()
         applyFiltersAndOrder()
+    }
+
+    func setShuffleLocked(_ isLocked: Bool) {
+        preferences.shuffleLocked = isLocked
+        persistPreferences()
     }
 
     func toggleLevel(_ level: JLPTLevel) {
@@ -138,13 +156,25 @@ final class WordListViewModel: ObservableObject {
         if reviewOnly {
             filtered = filtered.filter { reviewWordIds.contains($0.id) }
         }
-        displayedWords = applyShuffleIfNeeded(to: filtered)
+        displayedWords = applySort(to: filtered)
+    }
+
+    private func applySort(to words: [WordSummary]) -> [WordSummary] {
+        switch preferences.sortMode {
+        case .alphabetical:
+            return words
+        case .shuffled:
+            return applyShuffleIfNeeded(to: words)
+        }
     }
 
     private func applyShuffleIfNeeded(to words: [WordSummary]) -> [WordSummary] {
-        guard shuffledWordIds.isEmpty == false else {
-            return words
+        if shuffledWordIds.isEmpty {
+            shuffledWordIds = words.map { $0.id }
+            shuffledWordIds.shuffle()
+            persistShuffledWordIds()
         }
+
         let wordById = Dictionary(uniqueKeysWithValues: words.map { ($0.id, $0) })
         var ordered: [WordSummary] = []
         ordered.reserveCapacity(words.count)
@@ -182,6 +212,23 @@ final class WordListViewModel: ObservableObject {
         displayedWords = applyShuffleIfNeeded(to: filtered)
     }
 
+    private func handlePullToRefresh() {
+        if preferences.shuffleLocked {
+            preferences.sortMode = .shuffled
+            shuffleCurrentWords()
+        } else {
+            switch preferences.sortMode {
+            case .alphabetical:
+                preferences.sortMode = .shuffled
+                shuffleCurrentWords()
+            case .shuffled:
+                preferences.sortMode = .alphabetical
+                applyFiltersAndOrder()
+            }
+        }
+        persistPreferences()
+    }
+
     private func persistSelectedLevels() {
         let raw = selectedLevels.map { $0.rawValue }
         UserDefaults.standard.set(raw, forKey: Self.selectedLevelsKey)
@@ -195,6 +242,12 @@ final class WordListViewModel: ObservableObject {
         UserDefaults.standard.set(shuffledWordIds, forKey: Self.shuffledWordIdsKey)
     }
 
+    private func persistPreferences() {
+        if let data = try? JSONEncoder().encode(preferences) {
+            UserDefaults.standard.set(data, forKey: Self.preferencesKey)
+        }
+    }
+
     private static func loadSelectedLevels() -> Set<JLPTLevel> {
         let raw = UserDefaults.standard.stringArray(forKey: selectedLevelsKey) ?? []
         return Set(raw.compactMap { JLPTLevel(rawValue: $0) })
@@ -206,5 +259,15 @@ final class WordListViewModel: ObservableObject {
 
     private static func loadShuffledWordIds() -> [Int] {
         UserDefaults.standard.array(forKey: shuffledWordIdsKey) as? [Int] ?? []
+    }
+
+    private static func loadPreferences() -> WordListPreferences {
+        guard
+            let data = UserDefaults.standard.data(forKey: preferencesKey),
+            let prefs = try? JSONDecoder().decode(WordListPreferences.self, from: data)
+        else {
+            return WordListPreferences()
+        }
+        return prefs
     }
 }
