@@ -304,6 +304,7 @@ private struct MeaningCard: View {
     }
 }
 
+#if DEBUG
 private struct PreviewDictionaryRepository: DictionaryRepository {
     let detail: WordDetail
 
@@ -330,4 +331,13 @@ private struct PreviewDictionaryRepository: DictionaryRepository {
     func randomWordIds(level: JLPTLevel, count: Int, excluding ids: Set<Int>) throws -> [Int] {
         []
     }
+
+    func findByExpression(_ expression: String) throws -> WordSummary? {
+        nil
+    }
+
+    func getRandomWords(limit: Int, excludingExpression: String?) throws -> [WordSummary] {
+        []
+    }
 }
+#endif

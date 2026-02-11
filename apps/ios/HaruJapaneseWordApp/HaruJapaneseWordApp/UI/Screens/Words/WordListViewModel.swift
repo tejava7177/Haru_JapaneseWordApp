@@ -32,7 +32,8 @@ final class WordListViewModel: ObservableObject {
     @Published private(set) var availableLevels: [JLPTLevel] = []
     @Published private(set) var reviewWordIds: Set<Int> = []
     @Published var isLoading: Bool = false
-    @Published var errorMessage: String?
+    @Published var hasError: Bool = false
+    @Published var debugError: String?
     @Published var isShuffling: Bool = false
 
     private let repository: DictionaryRepository
@@ -125,7 +126,8 @@ final class WordListViewModel: ObservableObject {
 
     private func fetchWords() {
         isLoading = true
-        errorMessage = nil
+        hasError = false
+        debugError = nil
 
         do {
             let trimmedQuery = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -137,7 +139,8 @@ final class WordListViewModel: ObservableObject {
             updateAvailableLevels(from: baseWords)
             applyFiltersAndOrder()
         } catch {
-            errorMessage = "단어를 불러오지 못했습니다.\n\(String(describing: error))"
+            hasError = true
+            debugError = String(describing: error)
             baseWords = []
             displayedWords = []
         }

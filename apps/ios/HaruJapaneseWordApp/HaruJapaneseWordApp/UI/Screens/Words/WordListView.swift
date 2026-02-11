@@ -31,11 +31,8 @@ struct WordListView: View {
                 if viewModel.isLoading {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let errorMessage = viewModel.errorMessage {
-                    Text(errorMessage)
-                        .foregroundStyle(.secondary)
-                        .padding()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if viewModel.hasError {
+                    emptyStateView()
                 } else {
                     List(viewModel.displayedWords) { word in
                         NavigationLink {
@@ -98,6 +95,35 @@ struct WordListView: View {
         }
     }
 
+}
+
+private extension WordListView {
+    @ViewBuilder
+    func emptyStateView() -> some View {
+        VStack(spacing: 12) {
+            Text("단어를 불러오지 못했어요")
+                .font(.headline)
+            Text("잠시 후 다시 시도해 주세요")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Button("다시 시도") {
+                viewModel.load()
+            }
+            .buttonStyle(.borderedProminent)
+
+            #if DEBUG
+            if let debugError = viewModel.debugError {
+                Text(debugError)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 4)
+            }
+            #endif
+        }
+        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
 }
 
 private struct LevelToggleButton: View {

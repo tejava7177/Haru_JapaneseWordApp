@@ -7,6 +7,8 @@ protocol DictionaryRepository {
     func fetchWordSummary(wordId: Int) throws -> WordSummary?
     func randomWord(level: JLPTLevel) throws -> WordSummary?
     func randomWordIds(level: JLPTLevel, count: Int, excluding ids: Set<Int>) throws -> [Int]
+    func findByExpression(_ expression: String) throws -> WordSummary?
+    func getRandomWords(limit: Int, excludingExpression: String?) throws -> [WordSummary]
 }
 
 struct StubDictionaryRepository: DictionaryRepository {
@@ -31,6 +33,14 @@ struct StubDictionaryRepository: DictionaryRepository {
     }
 
     func randomWordIds(level: JLPTLevel, count: Int, excluding ids: Set<Int>) throws -> [Int] {
+        []
+    }
+
+    func findByExpression(_ expression: String) throws -> WordSummary? {
+        nil
+    }
+
+    func getRandomWords(limit: Int, excludingExpression: String?) throws -> [WordSummary] {
         []
     }
 }
@@ -59,6 +69,14 @@ struct ErrorDictionaryRepository: DictionaryRepository {
     }
 
     func randomWordIds(level: JLPTLevel, count: Int, excluding ids: Set<Int>) throws -> [Int] {
+        throw error
+    }
+
+    func findByExpression(_ expression: String) throws -> WordSummary? {
+        throw error
+    }
+
+    func getRandomWords(limit: Int, excludingExpression: String?) throws -> [WordSummary] {
         throw error
     }
 }
