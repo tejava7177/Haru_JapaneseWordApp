@@ -9,6 +9,9 @@ protocol DictionaryRepository {
     func randomWordIds(level: JLPTLevel, count: Int, excluding ids: Set<Int>) throws -> [Int]
     func findByExpression(_ expression: String) throws -> WordSummary?
     func getRandomWords(limit: Int, excludingExpression: String?) throws -> [WordSummary]
+    func fetchRecommendedWords(level: JLPTLevel, limit: Int) throws -> [WordSummary]
+    func fetchCheckedStates(wordIds: [Int]) throws -> Set<Int>
+    func setChecked(wordId: Int, checked: Bool) throws
 }
 
 struct StubDictionaryRepository: DictionaryRepository {
@@ -42,6 +45,17 @@ struct StubDictionaryRepository: DictionaryRepository {
 
     func getRandomWords(limit: Int, excludingExpression: String?) throws -> [WordSummary] {
         []
+    }
+
+    func fetchRecommendedWords(level: JLPTLevel, limit: Int) throws -> [WordSummary] {
+        []
+    }
+
+    func fetchCheckedStates(wordIds: [Int]) throws -> Set<Int> {
+        []
+    }
+
+    func setChecked(wordId: Int, checked: Bool) throws {
     }
 }
 
@@ -77,6 +91,18 @@ struct ErrorDictionaryRepository: DictionaryRepository {
     }
 
     func getRandomWords(limit: Int, excludingExpression: String?) throws -> [WordSummary] {
+        throw error
+    }
+
+    func fetchRecommendedWords(level: JLPTLevel, limit: Int) throws -> [WordSummary] {
+        throw error
+    }
+
+    func fetchCheckedStates(wordIds: [Int]) throws -> Set<Int> {
+        throw error
+    }
+
+    func setChecked(wordId: Int, checked: Bool) throws {
         throw error
     }
 }

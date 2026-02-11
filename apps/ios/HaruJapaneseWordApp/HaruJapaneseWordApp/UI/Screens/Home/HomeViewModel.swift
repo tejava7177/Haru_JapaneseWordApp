@@ -7,7 +7,7 @@ final class HomeViewModel: ObservableObject {
     @Published var deckWordIds: [Int] = []
     @Published var cards: [WordSummary] = []
     @Published var selectedIndex: Int = 0
-    @Published private var excludedWordIds: Set<Int> = []
+    @Published private var checkedWordIds: Set<Int> = []
     @Published var todayLyric: LyricEntry?
     @Published var lyricWordId: Int?
     @Published var hasError: Bool = false
@@ -17,7 +17,6 @@ final class HomeViewModel: ObservableObject {
 
     private let repository: DictionaryRepository
     private let settingsStore: AppSettingsStore
-    private let learnedStore: LearnedWordStore
     private let lyricRepository: LyricRepository
     private var cancellables: Set<AnyCancellable> = []
 
@@ -27,7 +26,6 @@ final class HomeViewModel: ObservableObject {
     ) {
         self.repository = repository
         self.settingsStore = settingsStore
-        self.learnedStore = LearnedWordStore()
         self.lyricRepository = LyricRepository()
 
         settingsStore.$settings
@@ -43,8 +41,6 @@ final class HomeViewModel: ObservableObject {
         debugError = nil
 
         do {
-            let today = Date()
-            refreshExcludedSet(now: today)
             todayLyric = try lyricRepository.getTodayLyric()
 
             var lyricWord: WordSummary?
@@ -52,27 +48,35 @@ final class HomeViewModel: ObservableObject {
                 lyricWord = try repository.findByExpression(lyric.targetExpression)
             }
 
-            let lyricWordIsExcluded = lyricWord.map { excludedWordIds.contains($0.id) } ?? false
-            let shouldUseLyricWord = lyricWord != nil && lyricWordIsExcluded == false
+            let lyricWordIsChecked: Bool
+            if let lyricWord {
+                let checked = try repository.fetchCheckedStates(wordIds: [lyricWord.id])
+                lyricWordIsChecked = checked.contains(lyricWord.id)
+            } else {
+                lyricWordIsChecked = false
+            }
+            let shouldUseLyricWord = lyricWord != nil && lyricWordIsChecked == false
             lyricWordId = shouldUseLyricWord ? lyricWord?.id : nil
 
-            let excludingExpression = shouldUseLyricWord ? lyricWord?.expression : nil
+            let currentLevel = settingsStore.settings.homeDeckLevel
             let needed = shouldUseLyricWord ? 9 : 10
-            let randomWords = try collectRandomWords(
-                needed: needed,
-                excludingExpression: excludingExpression,
-                excludedIds: excludedWordIds
-            )
+            let fetchLimit = shouldUseLyricWord ? 10 : 9
+            var recommended = try repository.fetchRecommendedWords(level: currentLevel, limit: fetchLimit)
+            if let lyricWord {
+                recommended.removeAll { $0.id == lyricWord.id }
+            }
+            let recommendedWords = Array(recommended.prefix(needed))
 
             var finalCards: [WordSummary] = []
             if let lyricWord, shouldUseLyricWord {
                 finalCards.append(lyricWord)
             }
-            finalCards.append(contentsOf: randomWords)
+            finalCards.append(contentsOf: recommendedWords)
 
             cards = finalCards
             deckWordIds = finalCards.map { $0.id }
             selectedIndex = 0
+            checkedWordIds = try repository.fetchCheckedStates(wordIds: deckWordIds)
 
             if cards.isEmpty {
                 hasError = true
@@ -87,17 +91,21 @@ final class HomeViewModel: ObservableObject {
     }
 
     func isExcluded(_ wordId: Int) -> Bool {
-        excludedWordIds.contains(wordId)
+        checkedWordIds.contains(wordId)
     }
 
     func toggleExcluded(wordId: Int) {
-        let now = Date()
-        if isExcluded(wordId) {
-            learnedStore.unmarkLearned(wordId: wordId)
-        } else {
-            learnedStore.markLearned(wordId: wordId, date: now)
+        let checked = isExcluded(wordId) == false
+        do {
+            try repository.setChecked(wordId: wordId, checked: checked)
+            if checked {
+                checkedWordIds.insert(wordId)
+            } else {
+                checkedWordIds.remove(wordId)
+            }
+        } catch {
+            debugError = String(describing: error)
         }
-        refreshExcludedSet(now: now)
     }
 
     func sendPokePlaceholder(wordId: Int) {
@@ -105,31 +113,4 @@ final class HomeViewModel: ObservableObject {
         isShowingAlert = true
     }
 
-    private func refreshExcludedSet(now: Date) {
-        excludedWordIds = learnedStore.loadExcludedSet(today: now, excludeDays: 30)
-    }
-
-    private func collectRandomWords(
-        needed: Int,
-        excludingExpression: String?,
-        excludedIds: Set<Int>
-    ) throws -> [WordSummary] {
-        guard needed > 0 else { return [] }
-
-        var results: [WordSummary] = []
-        var seenIds: Set<Int> = []
-
-        for _ in 0..<3 {
-            if results.count >= needed { break }
-            let pool = try repository.getRandomWords(limit: 30, excludingExpression: excludingExpression)
-            for word in pool where results.count < needed {
-                guard excludedIds.contains(word.id) == false else { continue }
-                guard seenIds.contains(word.id) == false else { continue }
-                results.append(word)
-                seenIds.insert(word.id)
-            }
-        }
-
-        return results
-    }
 }

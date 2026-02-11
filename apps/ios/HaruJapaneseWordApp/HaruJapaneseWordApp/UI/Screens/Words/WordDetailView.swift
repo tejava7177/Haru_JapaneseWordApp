@@ -339,5 +339,16 @@ private struct PreviewDictionaryRepository: DictionaryRepository {
     func getRandomWords(limit: Int, excludingExpression: String?) throws -> [WordSummary] {
         []
     }
+
+    func fetchRecommendedWords(level: JLPTLevel, limit: Int) throws -> [WordSummary] {
+        []
+    }
+
+    func fetchCheckedStates(wordIds: [Int]) throws -> Set<Int> {
+        []
+    }
+
+    func setChecked(wordId: Int, checked: Bool) throws {
+    }
 }
 #endif

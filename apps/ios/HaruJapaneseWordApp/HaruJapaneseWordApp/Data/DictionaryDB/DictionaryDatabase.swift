@@ -52,6 +52,9 @@ final class DictionaryDatabase {
             try applyPragma("PRAGMA synchronous=NORMAL;")
             try applyPragma("PRAGMA foreign_keys=ON;")
 
+            try setupUserWordState()
+            try expireCheckedWords()
+
             #if DEBUG
             try logDebugInfo()
             #endif
@@ -68,6 +71,45 @@ final class DictionaryDatabase {
         let statement = try db.prepare(sql)
         defer { db.finalize(statement) }
         _ = try db.step(statement)
+    }
+
+    private func execute(sql: String) throws {
+        let statement = try db.prepare(sql)
+        defer { db.finalize(statement) }
+        _ = try db.step(statement)
+    }
+
+    private func setupUserWordState() throws {
+        let createTable = """
+        CREATE TABLE IF NOT EXISTS user_word_state (
+            word_id INTEGER PRIMARY KEY,
+            is_checked INTEGER NOT NULL DEFAULT 0,
+            checked_at TEXT NULL,
+            updated_at TEXT NOT NULL DEFAULT (DATETIME('now'))
+        );
+        """
+        let indexChecked = "CREATE INDEX IF NOT EXISTS idx_user_word_state_checked ON user_word_state(is_checked);"
+        let indexCheckedAt = "CREATE INDEX IF NOT EXISTS idx_user_word_state_checked_at ON user_word_state(checked_at);"
+        try execute(sql: createTable)
+        try execute(sql: indexChecked)
+        try execute(sql: indexCheckedAt)
+    }
+
+    private func expireCheckedWords() throws {
+        let sql = """
+        UPDATE user_word_state
+        SET is_checked = 0,
+            checked_at = NULL,
+            updated_at = DATETIME('now')
+        WHERE is_checked = 1
+          AND checked_at IS NOT NULL
+          AND checked_at <= DATETIME('now', '-30 days');
+        """
+        do {
+            try execute(sql: sql)
+        } catch {
+            print("[DB] expire checked failed: \(error)")
+        }
     }
 
     #if DEBUG

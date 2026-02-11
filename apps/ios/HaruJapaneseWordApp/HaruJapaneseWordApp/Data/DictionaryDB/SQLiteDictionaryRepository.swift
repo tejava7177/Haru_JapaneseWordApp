@@ -338,6 +338,103 @@ final class SQLiteDictionaryRepository: DictionaryRepository {
         }
     }
 
+    func fetchRecommendedWords(level: JLPTLevel, limit: Int) throws -> [WordSummary] {
+        return try database.read { db in
+            let sql = """
+            SELECT w.id, w.level, w.expression, w.reading,
+                   GROUP_CONCAT(m.text, ' / ') AS meanings
+            FROM word w
+            LEFT JOIN meaning m ON m.word_id = w.id
+            LEFT JOIN user_word_state s ON s.word_id = w.id
+            WHERE w.level = ?
+              AND NOT (
+                s.is_checked = 1
+                AND s.checked_at IS NOT NULL
+                AND s.checked_at > DATETIME('now', '-30 days')
+              )
+            GROUP BY w.id
+            ORDER BY RANDOM()
+            LIMIT ?;
+            """
+
+            let statement = try db.prepare(sql)
+            defer { db.finalize(statement) }
+
+            try db.bind(level.rawValue, to: 1, in: statement)
+            try db.bind(limit, to: 2, in: statement)
+
+            var results: [WordSummary] = []
+            while try db.step(statement) {
+                let id = SQLiteDB.columnInt(statement, 0)
+                let levelRaw = SQLiteDB.columnText(statement, 1) ?? JLPTLevel.n5.rawValue
+                let levelValue = JLPTLevel(rawValue: levelRaw) ?? .n5
+                let expression = SQLiteDB.columnText(statement, 2) ?? ""
+                let reading = SQLiteDB.columnText(statement, 3) ?? ""
+                let meanings = SQLiteDB.columnText(statement, 4) ?? ""
+                results.append(
+                    WordSummary(id: id, level: levelValue, expression: expression, reading: reading, meanings: meanings)
+                )
+            }
+            return results
+        }
+    }
+
+    func fetchCheckedStates(wordIds: [Int]) throws -> Set<Int> {
+        guard wordIds.isEmpty == false else { return [] }
+        return try database.read { db in
+            let placeholders = Array(repeating: "?", count: wordIds.count).joined(separator: ", ")
+            let sql = """
+            SELECT word_id
+            FROM user_word_state
+            WHERE word_id IN (\(placeholders))
+              AND is_checked = 1;
+            """
+
+            let statement = try db.prepare(sql)
+            defer { db.finalize(statement) }
+
+            for (index, id) in wordIds.enumerated() {
+                try db.bind(id, to: Int32(index + 1), in: statement)
+            }
+
+            var result: Set<Int> = []
+            while try db.step(statement) {
+                result.insert(SQLiteDB.columnInt(statement, 0))
+            }
+            return result
+        }
+    }
+
+    func setChecked(wordId: Int, checked: Bool) throws {
+        let sql: String
+        if checked {
+            sql = """
+            INSERT INTO user_word_state(word_id, is_checked, checked_at, updated_at)
+            VALUES(?, 1, DATETIME('now'), DATETIME('now'))
+            ON CONFLICT(word_id) DO UPDATE SET
+              is_checked = 1,
+              checked_at = DATETIME('now'),
+              updated_at = DATETIME('now');
+            """
+        } else {
+            sql = """
+            INSERT INTO user_word_state(word_id, is_checked, checked_at, updated_at)
+            VALUES(?, 0, NULL, DATETIME('now'))
+            ON CONFLICT(word_id) DO UPDATE SET
+              is_checked = 0,
+              checked_at = NULL,
+              updated_at = DATETIME('now');
+            """
+        }
+
+        try database.read { db in
+            let statement = try db.prepare(sql)
+            defer { db.finalize(statement) }
+            try db.bind(wordId, to: 1, in: statement)
+            _ = try db.step(statement)
+        }
+    }
+
     private func randomWordId(level: JLPTLevel, excluding ids: Set<Int>) throws -> Int? {
         return try database.read { db in
             var sql = """
