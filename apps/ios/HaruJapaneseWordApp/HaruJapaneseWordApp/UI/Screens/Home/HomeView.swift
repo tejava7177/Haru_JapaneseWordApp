@@ -28,8 +28,13 @@ struct HomeView: View {
                             }
                         }
                         .frame(height: 290)
-                        .tabViewStyle(.page(indexDisplayMode: .automatic))
-                        .indexViewStyle(.page(backgroundDisplayMode: .always))
+                        .tabViewStyle(.page(indexDisplayMode: .never))
+
+                        if viewModel.cards.count > 1 {
+                            indicatorView(count: viewModel.cards.count)
+                                .padding(.top, 12)
+                                .frame(maxWidth: .infinity, alignment: .center)
+                        }
 
                     } else if let errorMessage = viewModel.errorMessage {
                         Text(errorMessage)
@@ -63,7 +68,11 @@ struct HomeView: View {
 
     @ViewBuilder
     private func cardView(for word: WordSummary) -> some View {
-        ZStack(alignment: .bottomTrailing) {
+        let cornerRadius: CGFloat = 18
+        let bottomSafeSpace: CGFloat = 40
+        let isExcluded = viewModel.isExcluded(word.id)
+
+        ZStack {
             NavigationLink(value: word.id) {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(word.expression)
@@ -82,21 +91,37 @@ struct HomeView: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
                     }
+
+                    Spacer(minLength: bottomSafeSpace)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.bottom, 36)
-                .contentShape(Rectangle())
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .contentShape(RoundedRectangle(cornerRadius: cornerRadius))
                 .padding(18)
                 .background(Color.white)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 18)
-                        .stroke(Color.black.opacity(0.08), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: cornerRadius)
+                        .stroke(isExcluded ? Color.black.opacity(0.16) : Color.black.opacity(0.08), lineWidth: 1)
                 )
-                .clipShape(RoundedRectangle(cornerRadius: 18))
+                .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
                 .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 2)
             }
             .buttonStyle(.plain)
-
+        }
+        .overlay(alignment: .topTrailing) {
+            Button {
+                viewModel.toggleExcluded(wordId: word.id)
+            } label: {
+                Image(systemName: isExcluded ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(isExcluded ? .primary : .secondary)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 12)
+            .padding(.trailing, 12)
+        }
+        .overlay(alignment: .bottomTrailing) {
             Button {
                 viewModel.sendPokePlaceholder(wordId: word.id)
             } label: {
@@ -105,8 +130,25 @@ struct HomeView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(.black)
-            .padding(18)
+            .padding(.bottom, 12)
+            .padding(.trailing, 12)
         }
+    }
+
+    private func indicatorView(count: Int) -> some View {
+        HStack(spacing: 8) {
+            ForEach(0..<count, id: \.self) { index in
+                Circle()
+                    .fill(index == viewModel.selectedIndex ? Color.black.opacity(0.6) : Color.black.opacity(0.2))
+                    .frame(width: 6, height: 6)
+            }
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 12)
+        .background(
+            Capsule()
+                .fill(Color.black.opacity(0.08))
+        )
     }
 }
 
