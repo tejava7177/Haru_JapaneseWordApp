@@ -75,7 +75,7 @@ struct HomeView: View {
         ZStack {
             NavigationLink(value: word.id) {
                 VStack(alignment: .leading, spacing: 0) {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 6) {
                         Text(word.expression)
                             .font(.largeTitle)
                             .fontWeight(.semibold)
@@ -129,18 +129,7 @@ struct HomeView: View {
             .padding(.trailing, 10)
         }
         .overlay(alignment: .topLeading) {
-            if isLyricWord {
-                Text("🎵")
-                    .font(.caption)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(
-                        Capsule()
-                            .fill(Color.black.opacity(0.08))
-                    )
-                    .padding(.top, 10)
-                    .padding(.leading, 10)
-            }
+            EmptyView()
         }
         .overlay(alignment: .bottomTrailing) {
             Button {
@@ -162,6 +151,7 @@ struct HomeView: View {
             .padding(.trailing, 10)
         }
     }
+
 
     @ViewBuilder
     private func todayLyricView() -> some View {
