@@ -27,7 +27,7 @@ struct HomeView: View {
                                     .padding(.horizontal, 4)
                             }
                         }
-                        .frame(height: 290)
+                        .frame(height: 270)
                         .tabViewStyle(.page(indexDisplayMode: .never))
 
                         if viewModel.cards.count > 1 {
@@ -46,7 +46,7 @@ struct HomeView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                .padding(.horizontal, 20)
+                .padding(.horizontal, 16)
                 .padding(.top, 24)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -69,41 +69,48 @@ struct HomeView: View {
     @ViewBuilder
     private func cardView(for word: WordSummary) -> some View {
         let cornerRadius: CGFloat = 18
-        let bottomSafeSpace: CGFloat = 40
+        let bottomSafeSpace: CGFloat = 32
         let isExcluded = viewModel.isExcluded(word.id)
 
         ZStack {
             NavigationLink(value: word.id) {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(word.expression)
-                        .font(.largeTitle)
-                        .fontWeight(.semibold)
+                VStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(word.expression)
+                            .font(.largeTitle)
+                            .fontWeight(.semibold)
 
-                    if word.reading.isEmpty == false {
-                        Text(word.reading)
-                            .font(.title3)
-                            .foregroundStyle(.secondary)
+                        if word.reading.isEmpty == false {
+                            Text(word.reading)
+                                .font(.title3)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        if word.meanings.isEmpty == false {
+                            Text(word.meanings)
+                                .font(.body)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
                     }
+                    .padding(.top, 18)
+                    .padding(.leading, 18)
+                    .padding(.trailing, 16)
+                    .padding(.bottom, 2)
 
-                    if word.meanings.isEmpty == false {
-                        Text(word.meanings)
-                            .font(.body)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                    }
-
+                    Spacer(minLength: 10)
                     Spacer(minLength: bottomSafeSpace)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .contentShape(RoundedRectangle(cornerRadius: cornerRadius))
-                .padding(18)
+                .padding(12)
                 .background(Color.white)
                 .overlay(
                     RoundedRectangle(cornerRadius: cornerRadius)
                         .stroke(isExcluded ? Color.black.opacity(0.16) : Color.black.opacity(0.08), lineWidth: 1)
                 )
                 .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
-                .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 2)
+                .shadow(color: Color.black.opacity(0.04), radius: 5, x: 0, y: 2)
             }
             .buttonStyle(.plain)
         }
@@ -118,20 +125,27 @@ struct HomeView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .padding(.top, 12)
-            .padding(.trailing, 12)
+            .padding(.top, 10)
+            .padding(.trailing, 10)
         }
         .overlay(alignment: .bottomTrailing) {
             Button {
                 viewModel.sendPokePlaceholder(wordId: word.id)
             } label: {
-                Label("콕 전송하기", systemImage: "paperplane.fill")
-                    .font(.callout)
+                HStack(spacing: 6) {
+                    Image(systemName: "paperplane.fill")
+                    Text("콕 전송하기")
+                }
+                .font(.callout)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
             }
             .buttonStyle(.borderedProminent)
             .tint(.black)
-            .padding(.bottom, 12)
-            .padding(.trailing, 12)
+            .controlSize(.small)
+            .frame(minWidth: 44, minHeight: 44, alignment: .center)
+            .padding(.bottom, 10)
+            .padding(.trailing, 10)
         }
     }
 
