@@ -387,12 +387,6 @@ private struct RecommendationCard: View {
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.primary)
 
-                if word.reading.isEmpty == false {
-                    Text(word.reading)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-
                 if word.meanings.isEmpty == false {
                     Text(word.meanings)
                         .font(.footnote)
