@@ -3,10 +3,13 @@ import SwiftUI
 struct WordDetailView: View {
     @StateObject private var viewModel: WordDetailViewModel
     @State private var isReadingExpanded: Bool = false
-    @State private var isReviewWord: Bool = false
+    private let wordId: Int
+    private let repository: DictionaryRepository
 
     init(wordId: Int, repository: DictionaryRepository) {
-        _viewModel = StateObject(wrappedValue: WordDetailViewModel(wordId: wordId, repository: repository))
+        self.wordId = wordId
+        self.repository = repository
+        _viewModel = StateObject(wrappedValue: WordDetailViewModel(repository: repository))
     }
 
     var body: some View {
@@ -21,18 +24,29 @@ struct WordDetailView: View {
                     .padding(.top, 32)
             } else if let detail = viewModel.detail {
                 VStack(alignment: .leading, spacing: 20) {
-                    ReviewSwipeCard(isReviewWord: $isReviewWord) {
+                    ReviewSwipeCard(isReviewWord: $viewModel.isReview, onToggle: {
+                        viewModel.toggleReview()
+                    }) {
                         WordHeaderCard(
                             expression: displayExpression(for: detail),
                             rawExpression: detail.expression,
                             reading: detail.reading,
                             level: detail.level.title,
                             meanings: detail.meanings,
-                            isExpanded: $isReadingExpanded
+                            isExpanded: $isReadingExpanded,
+                            isReviewWord: viewModel.isReview,
+                            onToggleReview: { viewModel.toggleReview() }
                         )
                     }
 
                     MeaningCard(meanings: detail.meanings)
+
+                    if viewModel.recommendations.isEmpty == false {
+                        RecommendationSection(
+                            recommendations: viewModel.recommendations,
+                            repository: repository
+                        )
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, 32)
@@ -41,8 +55,8 @@ struct WordDetailView: View {
         }
         .navigationTitle("단어 상세")
         .navigationBarTitleDisplayMode(.inline)
-        .task {
-            viewModel.load()
+        .task(id: wordId) {
+            viewModel.load(wordId: wordId)
         }
     }
 
@@ -74,6 +88,8 @@ private struct WordHeaderCard: View {
     let level: String
     let meanings: [Meaning]
     @Binding var isExpanded: Bool
+    let isReviewWord: Bool
+    let onToggleReview: () -> Void
     @State private var didCopy: Bool = false
 
     var body: some View {
@@ -93,6 +109,17 @@ private struct WordHeaderCard: View {
                         .padding(.vertical, 6)
                         .background(Capsule().fill(Color(uiColor: .systemGray5)))
                         .foregroundStyle(.secondary)
+
+                    Button {
+                        onToggleReview()
+                    } label: {
+                        Image(systemName: isReviewWord ? "book.fill" : "book")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(isReviewWord ? Color.orange : .secondary)
+                            .frame(width: 36, height: 36)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("복습 단어")
 
                     copyButton
                 }
@@ -191,13 +218,15 @@ private struct WordHeaderCard: View {
 
 private struct ReviewSwipeCard<Content: View>: View {
     @Binding var isReviewWord: Bool
+    let onToggle: () -> Void
     @State private var dragOffset: CGFloat = 0
     @State private var cardWidth: CGFloat = 0
     private let content: Content
     private let cornerRadius: CGFloat = 18
 
-    init(isReviewWord: Binding<Bool>, @ViewBuilder content: () -> Content) {
+    init(isReviewWord: Binding<Bool>, onToggle: @escaping () -> Void, @ViewBuilder content: () -> Content) {
         _isReviewWord = isReviewWord
+        self.onToggle = onToggle
         self.content = content()
     }
 
@@ -239,7 +268,7 @@ private struct ReviewSwipeCard<Content: View>: View {
     }
 
     private func toggleReview() {
-        isReviewWord.toggle()
+        onToggle()
         let feedback = UINotificationFeedbackGenerator()
         feedback.notificationOccurred(.success)
     }
@@ -304,6 +333,93 @@ private struct MeaningCard: View {
     }
 }
 
+private struct RecommendationSection: View {
+    let recommendations: [(kanji: String, words: [WordSummary])]
+    let repository: DictionaryRepository
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("이 한자가 들어간 단어")
+                .font(.headline)
+                .foregroundStyle(.primary)
+
+            ForEach(recommendations, id: \.kanji) { group in
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(group.kanji)
+                        .font(.footnote)
+                        .fontWeight(.semibold)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Capsule().fill(Color(uiColor: .systemGray6)))
+                        .foregroundStyle(.secondary)
+
+                    ForEach(group.words) { word in
+                        NavigationLink {
+                            WordDetailView(wordId: word.id, repository: repository)
+                        } label: {
+                            RecommendationCard(word: word)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color(uiColor: .tertiarySystemBackground))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color(uiColor: .systemGray5), lineWidth: 0.5)
+        )
+    }
+}
+
+private struct RecommendationCard: View {
+    let word: WordSummary
+
+    var body: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(word.expression.isEmpty ? word.reading : word.expression)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.primary)
+
+                if word.reading.isEmpty == false {
+                    Text(word.reading)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                if word.meanings.isEmpty == false {
+                    Text(word.meanings)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            Image(systemName: "chevron.right")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(uiColor: .systemBackground))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color(uiColor: .systemGray5), lineWidth: 0.5)
+        )
+    }
+}
+
 #if DEBUG
 private struct PreviewDictionaryRepository: DictionaryRepository {
     let detail: WordDetail
@@ -341,6 +457,15 @@ private struct PreviewDictionaryRepository: DictionaryRepository {
     }
 
     func fetchRecommendedWords(level: JLPTLevel, limit: Int) throws -> [WordSummary] {
+        []
+    }
+
+    func fetchRecommendedWords(
+        containing kanji: String,
+        currentLevel: JLPTLevel,
+        excluding wordId: Int,
+        limit: Int
+    ) throws -> [WordSummary] {
         []
     }
 

@@ -10,6 +10,12 @@ protocol DictionaryRepository {
     func findByExpression(_ expression: String) throws -> WordSummary?
     func getRandomWords(limit: Int, excludingExpression: String?) throws -> [WordSummary]
     func fetchRecommendedWords(level: JLPTLevel, limit: Int) throws -> [WordSummary]
+    func fetchRecommendedWords(
+        containing kanji: String,
+        currentLevel: JLPTLevel,
+        excluding wordId: Int,
+        limit: Int
+    ) throws -> [WordSummary]
     func fetchCheckedStates(wordIds: [Int]) throws -> Set<Int>
     func setChecked(wordId: Int, checked: Bool) throws
 }
@@ -48,6 +54,15 @@ struct StubDictionaryRepository: DictionaryRepository {
     }
 
     func fetchRecommendedWords(level: JLPTLevel, limit: Int) throws -> [WordSummary] {
+        []
+    }
+
+    func fetchRecommendedWords(
+        containing kanji: String,
+        currentLevel: JLPTLevel,
+        excluding wordId: Int,
+        limit: Int
+    ) throws -> [WordSummary] {
         []
     }
 
@@ -95,6 +110,15 @@ struct ErrorDictionaryRepository: DictionaryRepository {
     }
 
     func fetchRecommendedWords(level: JLPTLevel, limit: Int) throws -> [WordSummary] {
+        throw error
+    }
+
+    func fetchRecommendedWords(
+        containing kanji: String,
+        currentLevel: JLPTLevel,
+        excluding wordId: Int,
+        limit: Int
+    ) throws -> [WordSummary] {
         throw error
     }
 

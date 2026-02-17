@@ -104,6 +104,11 @@ final class WordListViewModel: ObservableObject {
         }
     }
 
+    func refreshReviewState() {
+        reviewWordIds = reviewStore.loadReviewSet()
+        applyFiltersAndOrder()
+    }
+
     private func addToReview(_ wordId: Int) {
         reviewWordIds.insert(wordId)
         reviewStore.saveReviewSet(reviewWordIds)

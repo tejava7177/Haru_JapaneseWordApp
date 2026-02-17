@@ -379,6 +379,59 @@ final class SQLiteDictionaryRepository: DictionaryRepository {
         }
     }
 
+    func fetchRecommendedWords(
+        containing kanji: String,
+        currentLevel: JLPTLevel,
+        excluding wordId: Int,
+        limit: Int
+    ) throws -> [WordSummary] {
+        return try database.read { db in
+            let sql = """
+            SELECT w.id, w.level, w.expression, w.reading,
+                   GROUP_CONCAT(m.text, ' / ') AS meanings
+            FROM word w
+            LEFT JOIN meaning m ON m.word_id = w.id
+            WHERE w.expression LIKE '%' || ? || '%'
+              AND w.id != ?
+            GROUP BY w.id
+            ORDER BY ABS(CASE w.level
+                WHEN 'N1' THEN 1
+                WHEN 'N2' THEN 2
+                WHEN 'N3' THEN 3
+                WHEN 'N4' THEN 4
+                WHEN 'N5' THEN 5
+                ELSE 5
+            END - ?) ASC,
+            LENGTH(w.expression) ASC,
+            w.id ASC
+            LIMIT ?;
+            """
+
+            let statement = try db.prepare(sql)
+            defer { db.finalize(statement) }
+
+            let levelRank = currentLevel.rank
+            try db.bind(kanji, to: 1, in: statement)
+            try db.bind(wordId, to: 2, in: statement)
+            try db.bind(levelRank, to: 3, in: statement)
+            try db.bind(limit, to: 4, in: statement)
+
+            var results: [WordSummary] = []
+            while try db.step(statement) {
+                let id = SQLiteDB.columnInt(statement, 0)
+                let levelRaw = SQLiteDB.columnText(statement, 1) ?? JLPTLevel.n5.rawValue
+                let levelValue = JLPTLevel(rawValue: levelRaw) ?? .n5
+                let expression = SQLiteDB.columnText(statement, 2) ?? ""
+                let reading = SQLiteDB.columnText(statement, 3) ?? ""
+                let meanings = SQLiteDB.columnText(statement, 4) ?? ""
+                results.append(
+                    WordSummary(id: id, level: levelValue, expression: expression, reading: reading, meanings: meanings)
+                )
+            }
+            return results
+        }
+    }
+
     func fetchCheckedStates(wordIds: [Int]) throws -> Set<Int> {
         guard wordIds.isEmpty == false else { return [] }
         return try database.read { db in

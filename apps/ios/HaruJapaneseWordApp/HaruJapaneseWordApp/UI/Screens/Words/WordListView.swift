@@ -71,6 +71,9 @@ struct WordListView: View {
         .onChange(of: viewModel.searchText) { _ in
             viewModel.search()
         }
+        .onAppear {
+            viewModel.refreshReviewState()
+        }
         .task {
             viewModel.load()
         }
