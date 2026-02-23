@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 
 private struct DictionaryRepositoryKey: EnvironmentKey {
     static let defaultValue: DictionaryRepository = StubDictionaryRepository()
@@ -14,6 +15,7 @@ extension EnvironmentValues {
 @main
 struct HaruJapaneseWordAppApp: App {
     private let repository: DictionaryRepository
+    @StateObject private var deepLinkRouter = DeepLinkRouter()
 
     init() {
         do {
@@ -26,7 +28,10 @@ struct HaruJapaneseWordAppApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView(repository: repository)
+            RootView(repository: repository, deepLinkRouter: deepLinkRouter)
+                .onAppear {
+                    UNUserNotificationCenter.current().delegate = deepLinkRouter
+                }
         }
     }
 }

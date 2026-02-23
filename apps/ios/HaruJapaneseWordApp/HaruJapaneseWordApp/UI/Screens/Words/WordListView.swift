@@ -3,11 +3,13 @@ import SwiftUI
 struct WordListView: View {
     @ObservedObject private var viewModel: WordListViewModel
     private let repository: DictionaryRepository
+    private let mateService: MateService?
     @State private var isRangeSheetPresented: Bool = false
     @State private var lastRefreshAction: WordListViewModel.RefreshAction = .shuffled
 
-    init(repository: DictionaryRepository, viewModel: WordListViewModel) {
+    init(repository: DictionaryRepository, viewModel: WordListViewModel, mateService: MateService? = nil) {
         self.repository = repository
+        self.mateService = mateService
         _viewModel = ObservedObject(wrappedValue: viewModel)
     }
 
@@ -36,7 +38,7 @@ struct WordListView: View {
                 } else {
                     List(viewModel.displayedWords) { word in
                         NavigationLink {
-                            WordDetailView(wordId: word.id, repository: repository)
+                            WordDetailView(wordId: word.id, repository: repository, mateService: mateService)
                         } label: {
                             WordRow(word: word, isReviewWord: viewModel.isReviewWord(word.id))
                         }

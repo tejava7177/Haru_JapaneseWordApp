@@ -37,12 +37,14 @@ final class WordListViewModel: ObservableObject {
     @Published var isShuffling: Bool = false
 
     private let repository: DictionaryRepository
+    private let mateService: MateService?
     private let reviewStore = ReviewWordStore()
     private var baseWords: [WordSummary] = []
     private var shuffledWordIds: [Int] = []
 
-    init(repository: DictionaryRepository) {
+    init(repository: DictionaryRepository, mateService: MateService? = nil) {
         self.repository = repository
+        self.mateService = mateService
         self.selectedLevels = Self.loadSelectedLevels()
         self.reviewOnly = Self.loadReviewOnly()
         self.shuffledWordIds = Self.loadShuffledWordIds()
@@ -112,6 +114,7 @@ final class WordListViewModel: ObservableObject {
     private func addToReview(_ wordId: Int) {
         reviewWordIds.insert(wordId)
         reviewStore.saveReviewSet(reviewWordIds)
+        mateService?.markLearnedToday()
         if reviewOnly {
             applyFiltersAndOrder()
         }

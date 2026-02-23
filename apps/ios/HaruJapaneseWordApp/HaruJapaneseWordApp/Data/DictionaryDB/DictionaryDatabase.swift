@@ -53,6 +53,7 @@ final class DictionaryDatabase {
             try applyPragma("PRAGMA foreign_keys=ON;")
 
             try setupUserWordState()
+            try setupMateTables()
             try expireCheckedWords()
 
             #if DEBUG
@@ -93,6 +94,49 @@ final class DictionaryDatabase {
         try execute(sql: createTable)
         try execute(sql: indexChecked)
         try execute(sql: indexCheckedAt)
+    }
+
+    private func setupMateTables() throws {
+        let roomTable = """
+        CREATE TABLE IF NOT EXISTS mate_room (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            mate_user_id TEXT NOT NULL,
+            mate_nickname TEXT NOT NULL,
+            start_date TEXT NOT NULL,
+            end_date TEXT NOT NULL,
+            status TEXT NOT NULL
+        );
+        """
+        let roomIndex = "CREATE INDEX IF NOT EXISTS idx_mate_room_user ON mate_room(user_id, status);"
+
+        let dailyTable = """
+        CREATE TABLE IF NOT EXISTS mate_daily_status (
+            user_id TEXT NOT NULL,
+            date TEXT NOT NULL,
+            learned INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (user_id, date)
+        );
+        """
+
+        let pokeTable = """
+        CREATE TABLE IF NOT EXISTS mate_poke (
+            id TEXT PRIMARY KEY,
+            sender_id TEXT NOT NULL,
+            receiver_id TEXT NOT NULL,
+            date TEXT NOT NULL,
+            word_id INTEGER NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(sender_id, receiver_id, date)
+        );
+        """
+        let pokeIndex = "CREATE INDEX IF NOT EXISTS idx_mate_poke_receiver ON mate_poke(receiver_id, date);"
+
+        try execute(sql: roomTable)
+        try execute(sql: roomIndex)
+        try execute(sql: dailyTable)
+        try execute(sql: pokeTable)
+        try execute(sql: pokeIndex)
     }
 
     private func expireCheckedWords() throws {

@@ -12,21 +12,22 @@ final class HomeViewModel: ObservableObject {
     @Published var lyricWordId: Int?
     @Published var hasError: Bool = false
     @Published var debugError: String?
-    @Published var isShowingAlert: Bool = false
-    @Published var alertMessage: String = ""
 
     private let repository: DictionaryRepository
     private let settingsStore: AppSettingsStore
     private let lyricRepository: LyricRepository
+    private let mateService: MateService?
     private var cancellables: Set<AnyCancellable> = []
 
     init(
         repository: DictionaryRepository,
-        settingsStore: AppSettingsStore
+        settingsStore: AppSettingsStore,
+        mateService: MateService? = nil
     ) {
         self.repository = repository
         self.settingsStore = settingsStore
         self.lyricRepository = LyricRepository()
+        self.mateService = mateService
 
         settingsStore.$settings
             .receive(on: RunLoop.main)
@@ -100,17 +101,13 @@ final class HomeViewModel: ObservableObject {
             try repository.setChecked(wordId: wordId, checked: checked)
             if checked {
                 checkedWordIds.insert(wordId)
+                mateService?.markLearnedToday()
             } else {
                 checkedWordIds.remove(wordId)
             }
         } catch {
             debugError = String(describing: error)
         }
-    }
-
-    func sendPokePlaceholder(wordId: Int) {
-        alertMessage = "준비 중입니다."
-        isShowingAlert = true
     }
 
 }

@@ -11,11 +11,13 @@ final class WordDetailViewModel: ObservableObject {
     @Published var isReview: Bool = false
 
     private let repository: DictionaryRepository
+    private let mateService: MateService?
     private let reviewStore = ReviewWordStore()
     private var currentWordId: Int?
 
-    init(repository: DictionaryRepository) {
+    init(repository: DictionaryRepository, mateService: MateService? = nil) {
         self.repository = repository
+        self.mateService = mateService
     }
 
     func load(wordId: Int) {
@@ -51,6 +53,7 @@ final class WordDetailViewModel: ObservableObject {
         } else {
             reviewIds.insert(wordId)
             isReview = true
+            mateService?.markLearnedToday()
         }
         reviewStore.saveReviewSet(reviewIds)
         let feedback = UINotificationFeedbackGenerator()

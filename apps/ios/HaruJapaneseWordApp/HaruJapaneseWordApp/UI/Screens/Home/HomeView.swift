@@ -2,19 +2,76 @@ import SwiftUI
 
 struct HomeView: View {
     @StateObject private var viewModel: HomeViewModel
+    @ObservedObject private var mateViewModel: MateViewModel
     private let repository: DictionaryRepository
     private let settingsStore: AppSettingsStore
+    private let onRequestMate: () -> Void
 
-    init(repository: DictionaryRepository, settingsStore: AppSettingsStore) {
+    init(
+        repository: DictionaryRepository,
+        settingsStore: AppSettingsStore,
+        mateViewModel: MateViewModel,
+        onRequestMate: @escaping () -> Void
+    ) {
         self.repository = repository
         self.settingsStore = settingsStore
-        _viewModel = StateObject(wrappedValue: HomeViewModel(repository: repository, settingsStore: settingsStore))
+        self.mateViewModel = mateViewModel
+        self.onRequestMate = onRequestMate
+        _viewModel = StateObject(wrappedValue: HomeViewModel(repository: repository, settingsStore: settingsStore, mateService: mateViewModel.mateService))
+    }
+
+    @ViewBuilder
+    private func mateCardSection() -> some View {
+        let state = mateViewModel.state
+
+        if mateViewModel.isMateEnabled == false {
+            MateCardView(
+                title: "🌿 Mate와 함께 걷기",
+                description: "원할 때만 켤 수 있어요.",
+                myStatus: nil,
+                mateStatus: nil,
+                canPoke: false,
+                isCTA: true,
+                ctaTitle: "Mate 켜기",
+                onTapCTA: {
+                    mateViewModel.enableMate()
+                    onRequestMate()
+                },
+                onPoke: {}
+            )
+        } else if let room = state.room, room.status == .active || room.status == .paused {
+            MateCardView(
+                title: "🌿 함께 걷는 중",
+                description: "오늘도 천천히 걸어봐요.",
+                myStatus: state.myLearnedToday ? "학습 완료" : "아직 시작 전",
+                mateStatus: state.mateLearnedToday ? "학습 완료" : "아직 시작 전",
+                canPoke: state.canPoke,
+                isCTA: false,
+                ctaTitle: "",
+                onTapCTA: {},
+                onPoke: { Task { await mateViewModel.poke() } }
+            )
+        } else {
+            MateCardView(
+                title: "🌿 Mate 시작",
+                description: "30일 동안 가볍게 함께 걸어요.",
+                myStatus: nil,
+                mateStatus: nil,
+                canPoke: false,
+                isCTA: true,
+                ctaTitle: "동행 시작하기",
+                onTapCTA: onRequestMate,
+                onPoke: {}
+            )
+        }
     }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    mateCardSection()
+
                     Text("오늘의 추천")
                         .font(.title3)
                         .fontWeight(.semibold)
@@ -53,16 +110,12 @@ struct HomeView: View {
             .background(Color.white)
             .navigationTitle("하루")
             .navigationDestination(for: Int.self) { wordId in
-                WordDetailView(wordId: wordId, repository: repository)
+                WordDetailView(wordId: wordId, repository: repository, mateService: mateViewModel.mateService)
             }
         }
         .task {
             viewModel.loadDeck()
-        }
-        .alert("준비 중", isPresented: $viewModel.isShowingAlert) {
-            Button("확인", role: .cancel) { }
-        } message: {
-            Text(viewModel.alertMessage)
+            mateViewModel.load()
         }
     }
 
@@ -132,23 +185,7 @@ struct HomeView: View {
             EmptyView()
         }
         .overlay(alignment: .bottomTrailing) {
-            Button {
-                viewModel.sendPokePlaceholder(wordId: word.id)
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "paperplane.fill")
-                    Text("콕 전송하기")
-                }
-                .font(.callout)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.black)
-            .controlSize(.small)
-            .frame(minWidth: 44, minHeight: 44, alignment: .center)
-            .padding(.bottom, 10)
-            .padding(.trailing, 10)
+            EmptyView()
         }
     }
 
@@ -235,5 +272,17 @@ struct HomeView: View {
 }
 
 #Preview {
-    HomeView(repository: StubDictionaryRepository(), settingsStore: AppSettingsStore())
+    let repository = StubDictionaryRepository()
+    let service = MateService(
+        repository: StubMateRepository(),
+        dictionaryRepository: repository,
+        notifier: LocalNotificationPokeNotifier()
+    )
+    let mateViewModel = MateViewModel(mateService: service, settingsStore: AppSettingsStore())
+    HomeView(
+        repository: repository,
+        settingsStore: AppSettingsStore(),
+        mateViewModel: mateViewModel,
+        onRequestMate: {}
+    )
 }

@@ -6,10 +6,10 @@ struct WordDetailView: View {
     private let wordId: Int
     private let repository: DictionaryRepository
 
-    init(wordId: Int, repository: DictionaryRepository) {
+    init(wordId: Int, repository: DictionaryRepository, mateService: MateService? = nil) {
         self.wordId = wordId
         self.repository = repository
-        _viewModel = StateObject(wrappedValue: WordDetailViewModel(repository: repository))
+        _viewModel = StateObject(wrappedValue: WordDetailViewModel(repository: repository, mateService: mateService))
     }
 
     var body: some View {
