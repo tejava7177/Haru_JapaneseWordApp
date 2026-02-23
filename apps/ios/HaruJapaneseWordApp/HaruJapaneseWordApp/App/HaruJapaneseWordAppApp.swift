@@ -15,9 +15,13 @@ extension EnvironmentValues {
 @main
 struct HaruJapaneseWordAppApp: App {
     private let repository: DictionaryRepository
-    @StateObject private var deepLinkRouter = DeepLinkRouter()
+    @StateObject private var deepLinkRouter: DeepLinkRouter
 
     init() {
+        let router = DeepLinkRouter()
+        _deepLinkRouter = StateObject(wrappedValue: router)
+        UNUserNotificationCenter.current().delegate = router
+
         do {
             repository = try SQLiteDictionaryRepository()
         } catch {
@@ -29,9 +33,6 @@ struct HaruJapaneseWordAppApp: App {
     var body: some Scene {
         WindowGroup {
             RootView(repository: repository, deepLinkRouter: deepLinkRouter)
-                .onAppear {
-                    UNUserNotificationCenter.current().delegate = deepLinkRouter
-                }
         }
     }
 }

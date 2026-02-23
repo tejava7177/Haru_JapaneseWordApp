@@ -21,6 +21,7 @@ final class MateService {
     private let notifier: PokeNotifierProtocol
     private let profileStore: UserProfileStore
     private var identityStore: MateIdentityStore
+    private let appUserIdProvider: () -> String
     private let userDefaults: UserDefaults
 
     private let inactivityPromptKey = "mate_inactivity_prompt_date"
@@ -31,6 +32,10 @@ final class MateService {
         notifier: PokeNotifierProtocol,
         profileStore: UserProfileStore = UserProfileStore(),
         identityStore: MateIdentityStore = MateIdentityStore(),
+        appUserIdProvider: @escaping () -> String = {
+            var store = MateIdentityStore()
+            return store.userId()
+        },
         userDefaults: UserDefaults = .standard
     ) {
         self.repository = repository
@@ -38,12 +43,12 @@ final class MateService {
         self.notifier = notifier
         self.profileStore = profileStore
         self.identityStore = identityStore
+        self.appUserIdProvider = appUserIdProvider
         self.userDefaults = userDefaults
     }
 
     func currentUserId() -> String {
-        var store = identityStore
-        return store.userId()
+        appUserIdProvider()
     }
 
     func currentInviteCode() -> String {

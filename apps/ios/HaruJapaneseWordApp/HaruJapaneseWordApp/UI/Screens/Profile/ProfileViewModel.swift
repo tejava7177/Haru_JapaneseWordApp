@@ -41,6 +41,7 @@ final class ProfileViewModel: ObservableObject {
     func updateNickname(_ nickname: String) {
         profile.nickname = nickname
         profileStore.updateNickname(nickname)
+        settingsStore.updateNickname(nickname)
     }
 
     func updateBio(_ bio: String) {

@@ -7,6 +7,7 @@ struct RootView: View {
     @StateObject private var mateViewModel: MateViewModel
     @StateObject private var wordListViewModel: WordListViewModel
     @State private var isShowingOnboarding: Bool = false
+    @State private var isShowingSignIn: Bool = false
     @State private var selectedTab: RootTab = .home
     @State private var deepLinkWordId: WordLink?
 
@@ -19,7 +20,7 @@ struct RootView: View {
 
     init(repository: DictionaryRepository, deepLinkRouter: DeepLinkRouter) {
         self.repository = repository
-        self.deepLinkRouter = deepLinkRouter
+        _deepLinkRouter = ObservedObject(wrappedValue: deepLinkRouter)
         let settingsStore = AppSettingsStore()
         _settingsStore = StateObject(wrappedValue: settingsStore)
 
@@ -32,42 +33,67 @@ struct RootView: View {
         let mateService = MateService(
             repository: mateRepository,
             dictionaryRepository: repository,
-            notifier: LocalNotificationPokeNotifier()
+            notifier: LocalNotificationPokeNotifier(),
+            appUserIdProvider: { settingsStore.appUserId }
         )
         _mateViewModel = StateObject(wrappedValue: MateViewModel(mateService: mateService, settingsStore: settingsStore))
         _wordListViewModel = StateObject(wrappedValue: WordListViewModel(repository: repository, mateService: mateService))
     }
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            HomeView(
-                repository: repository,
-                settingsStore: settingsStore,
-                mateViewModel: mateViewModel,
-                onRequestMate: { selectedTab = .mate }
-            )
-            .tabItem {
-                Label("Home", systemImage: "house")
+        ZStack {
+            if settingsStore.hasSeenOnboarding == false {
+                Color.clear
+            } else if settingsStore.isSignedIn == false {
+                SignInRequiredView(settingsStore: settingsStore)
+            } else {
+                ZStack {
+                    TabView(selection: $selectedTab) {
+                        HomeView(
+                            repository: repository,
+                            settingsStore: settingsStore,
+                            mateViewModel: mateViewModel,
+                            onRequestMate: { selectedTab = .mate }
+                        )
+                        .tabItem {
+                            Label("Home", systemImage: "house")
+                        }
+                        .tag(RootTab.home)
+
+                        WordListView(repository: repository, viewModel: wordListViewModel, mateService: mateViewModel.mateService)
+                            .tabItem {
+                                Label("Words", systemImage: "book")
+                            }
+                            .tag(RootTab.words)
+
+                        MateView(viewModel: mateViewModel)
+                            .tabItem {
+                                Label("Mate", systemImage: "person.2")
+                            }
+                            .tag(RootTab.mate)
+
+                        ProfileView(settingsStore: settingsStore)
+                            .tabItem {
+                                Label("프로필", systemImage: "person.circle")
+                            }
+                            .tag(RootTab.profile)
+                    }
+
+                    if repository is ErrorDictionaryRepository {
+                        VStack(spacing: 12) {
+                            Text("데이터 초기화에 실패했어요")
+                                .font(.headline)
+                            Text("앱을 다시 실행해도 동일하면, 시뮬레이터 앱 삭제 후 재설치로 DB를 초기화해보세요.")
+                                .font(.subheadline)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 24)
+                        }
+                        .padding(24)
+                        .background(.ultraThinMaterial)
+                        .cornerRadius(16)
+                    }
+                }
             }
-            .tag(RootTab.home)
-
-            WordListView(repository: repository, viewModel: wordListViewModel, mateService: mateViewModel.mateService)
-                .tabItem {
-                    Label("Words", systemImage: "book")
-                }
-                .tag(RootTab.words)
-
-            MateView(viewModel: mateViewModel)
-                .tabItem {
-                    Label("Mate", systemImage: "person.2")
-                }
-                .tag(RootTab.mate)
-
-            ProfileView(settingsStore: settingsStore)
-                .tabItem {
-                    Label("프로필", systemImage: "person.circle")
-                }
-                .tag(RootTab.profile)
         }
         .onAppear {
             if settingsStore.hasSeenOnboarding == false {
@@ -83,8 +109,7 @@ struct RootView: View {
             WordDetailView(wordId: link.id, repository: repository, mateService: mateViewModel.mateService)
         }
         .fullScreenCover(isPresented: $isShowingOnboarding) {
-            OnboardingView {
-                settingsStore.markOnboardingSeen()
+            OnboardingView(settingsStore: settingsStore) {
                 isShowingOnboarding = false
             }
         }

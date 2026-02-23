@@ -2,6 +2,11 @@ import SwiftUI
 
 struct OnboardingView: View {
     @State private var selectedIndex: Int = 0
+    @State private var isShowingProfileSheet: Bool = false
+    @State private var nickname: String = ""
+    @State private var jlptLevel: String = JLPTLevel.n5.rawValue
+    @State private var errorMessage: String?
+    let settingsStore: AppSettingsStore
     let onFinish: () -> Void
 
     var body: some View {
@@ -29,6 +34,23 @@ struct OnboardingView: View {
             .tabViewStyle(.page(indexDisplayMode: .always))
         }
         .background(Color.white)
+        .sheet(isPresented: $isShowingProfileSheet) {
+            ProfileSetupSheet(nickname: $nickname, jlptLevel: $jlptLevel) { nickname, level in
+                settingsStore.completeProfile(nickname: nickname, jlptLevel: level)
+                settingsStore.markOnboardingSeen()
+                isShowingProfileSheet = false
+                onFinish()
+            }
+        }
+        .alert("로그인 실패", isPresented: Binding(get: {
+            errorMessage != nil
+        }, set: { _ in
+            errorMessage = nil
+        })) {
+            Button("확인", role: .cancel) { }
+        } message: {
+            Text(errorMessage ?? "")
+        }
     }
 
     private func onboardingPage(title: String, description: [String], showsButton: Bool = false) -> some View {
@@ -59,16 +81,17 @@ struct OnboardingView: View {
             .padding(.horizontal, 28)
 
             if showsButton {
-                Button {
-                    onFinish()
-                } label: {
-                    Text("시작하기")
-                        .font(.callout)
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 10)
+                VStack(spacing: 12) {
+                    AppleSignInButton { userId in
+                        settingsStore.signIn(appleUserId: userId)
+                        nickname = ""
+                        jlptLevel = settingsStore.jlptLevel
+                        isShowingProfileSheet = true
+                    } onFailure: { error in
+                        errorMessage = "Apple 로그인에 실패했어요. 다시 시도해 주세요.\\n\\(error.localizedDescription)"
+                    }
+                    .frame(maxWidth: 280)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.black)
                 .padding(.top, 8)
             }
 
@@ -80,5 +103,5 @@ struct OnboardingView: View {
 }
 
 #Preview {
-    OnboardingView(onFinish: {})
+    OnboardingView(settingsStore: AppSettingsStore(), onFinish: {})
 }
