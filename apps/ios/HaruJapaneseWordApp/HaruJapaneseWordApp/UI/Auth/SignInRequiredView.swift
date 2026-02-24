@@ -8,32 +8,39 @@ struct SignInRequiredView: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        VStack(spacing: 20) {
-            Spacer()
+        ZStack {
+            Color.yellow.opacity(0.15).ignoresSafeArea()
 
-            VStack(spacing: 12) {
-                Text("Haru")
-                    .font(.largeTitle.weight(.semibold))
-                Text("Apple ID로 바로 시작할 수 있어요.")
-                    .font(.footnote)
+            VStack(spacing: 16) {
+                Text("로그인이 필요해요")
+                    .font(.title3).bold()
+
+                Text("Apple로 시작하기")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                Text("Apple 버튼 아래에 보이면 레이아웃은 정상")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+
+                AppleSignInButton { userId in
+                    settingsStore.signIn(appleUserId: userId)
+                    if settingsStore.nickname.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        nickname = ""
+                        jlptLevel = settingsStore.jlptLevel
+                        isShowingProfileSheet = true
+                    }
+                } onFailure: { error in
+                    errorMessage = "Apple 로그인에 실패했어요. 다시 시도해 주세요.\n\(error.localizedDescription)"
+                }
+                .frame(height: 52)
+
+                Text("버튼이 안 보이면 AppleSignInButton 구현/Representable 문제 가능성")
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
             }
-
-            AppleSignInButton { userId in
-                settingsStore.signIn(appleUserId: userId)
-                if settingsStore.nickname.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    nickname = ""
-                    jlptLevel = settingsStore.jlptLevel
-                    isShowingProfileSheet = true
-                }
-            } onFailure: { error in
-                errorMessage = "Apple 로그인에 실패했어요. 다시 시도해 주세요.\n\(error.localizedDescription)"
-            }
-            .frame(maxWidth: 280)
-
-            Spacer()
+            .padding(24)
         }
-        .padding(24)
         .sheet(isPresented: $isShowingProfileSheet) {
             ProfileSetupSheet(nickname: $nickname, jlptLevel: $jlptLevel) { nickname, level in
                 settingsStore.completeProfile(nickname: nickname, jlptLevel: level)

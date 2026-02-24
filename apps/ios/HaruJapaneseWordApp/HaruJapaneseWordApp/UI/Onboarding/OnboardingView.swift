@@ -34,6 +34,7 @@ struct OnboardingView: View {
             .tabViewStyle(.page(indexDisplayMode: .always))
         }
         .background(Color.white)
+        .background(Color(.systemBackground).ignoresSafeArea())
         .sheet(isPresented: $isShowingProfileSheet) {
             ProfileSetupSheet(nickname: $nickname, jlptLevel: $jlptLevel) { nickname, level in
                 settingsStore.completeProfile(nickname: nickname, jlptLevel: level)
