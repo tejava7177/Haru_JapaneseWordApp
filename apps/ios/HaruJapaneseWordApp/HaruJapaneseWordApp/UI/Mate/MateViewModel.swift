@@ -6,6 +6,7 @@ import Combine
 final class MateViewModel: ObservableObject {
     @Published private(set) var state = MateHomeState(room: nil, myLearnedToday: false, mateLearnedToday: false, canPoke: false, shouldShowInactivityPrompt: false, inactivityDays: 0)
     @Published private(set) var isMateEnabled: Bool = false
+    @Published private(set) var isSignedIn: Bool = false
     @Published var inputInviteCode: String = ""
     @Published var inputMateNickname: String = ""
     @Published var toastMessage: String = ""
@@ -21,11 +22,13 @@ final class MateViewModel: ObservableObject {
         self.mateService = mateService
         self.settingsStore = settingsStore
         self.isMateEnabled = settingsStore.settings.isMateEnabled
+        self.isSignedIn = settingsStore.settings.isSignedIn
 
         settingsStore.$settings
             .receive(on: RunLoop.main)
             .sink { [weak self] settings in
                 self?.isMateEnabled = settings.isMateEnabled
+                self?.isSignedIn = settings.isSignedIn
             }
             .store(in: &cancellables)
     }

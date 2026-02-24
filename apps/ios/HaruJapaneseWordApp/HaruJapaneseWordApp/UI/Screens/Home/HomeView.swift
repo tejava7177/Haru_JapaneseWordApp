@@ -4,19 +4,22 @@ struct HomeView: View {
     @StateObject private var viewModel: HomeViewModel
     @ObservedObject private var mateViewModel: MateViewModel
     private let repository: DictionaryRepository
-    private let settingsStore: AppSettingsStore
+    @ObservedObject private var settingsStore: AppSettingsStore
     private let onRequestMate: () -> Void
+    private let onRequestProfileLogin: () -> Void
 
     init(
         repository: DictionaryRepository,
         settingsStore: AppSettingsStore,
         mateViewModel: MateViewModel,
-        onRequestMate: @escaping () -> Void
+        onRequestMate: @escaping () -> Void,
+        onRequestProfileLogin: @escaping () -> Void
     ) {
         self.repository = repository
-        self.settingsStore = settingsStore
+        _settingsStore = ObservedObject(wrappedValue: settingsStore)
         self.mateViewModel = mateViewModel
         self.onRequestMate = onRequestMate
+        self.onRequestProfileLogin = onRequestProfileLogin
         _viewModel = StateObject(wrappedValue: HomeViewModel(repository: repository, settingsStore: settingsStore, mateService: mateViewModel.mateService))
     }
 
@@ -24,7 +27,19 @@ struct HomeView: View {
     private func mateCardSection() -> some View {
         let state = mateViewModel.state
 
-        if mateViewModel.isMateEnabled == false {
+        if settingsStore.isSignedIn == false {
+            MateCardView(
+                title: "🌿 Mate는 로그인 후 사용 가능",
+                description: "프로필에서 Apple 로그인 후 사용할 수 있어요.",
+                myStatus: nil,
+                mateStatus: nil,
+                canPoke: false,
+                isCTA: true,
+                ctaTitle: "프로필에서 로그인",
+                onTapCTA: onRequestProfileLogin,
+                onPoke: {}
+            )
+        } else if mateViewModel.isMateEnabled == false {
             MateCardView(
                 title: "🌿 Mate와 함께 걷기",
                 description: "원할 때만 켤 수 있어요.",
@@ -115,7 +130,14 @@ struct HomeView: View {
         }
         .task {
             viewModel.loadDeck()
-            mateViewModel.load()
+            if settingsStore.isSignedIn {
+                mateViewModel.load()
+            }
+        }
+        .onChange(of: settingsStore.isSignedIn) { isSignedIn in
+            if isSignedIn {
+                mateViewModel.load()
+            }
         }
     }
 
@@ -283,6 +305,7 @@ struct HomeView: View {
         repository: repository,
         settingsStore: AppSettingsStore(),
         mateViewModel: mateViewModel,
-        onRequestMate: {}
+        onRequestMate: {},
+        onRequestProfileLogin: {}
     )
 }

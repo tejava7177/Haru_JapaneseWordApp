@@ -3,25 +3,55 @@ import SwiftUI
 struct MateView: View {
     @ObservedObject var viewModel: MateViewModel
     @State private var isShowingInactivityPrompt: Bool = false
+    let onRequestProfileLogin: () -> Void
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    if viewModel.isMateEnabled == false {
-                        enableCard
-                    } else {
-                        contentSection
+            Group {
+                if viewModel.isSignedIn == false {
+                    VStack(spacing: 16) {
+                        Text("로그인이 필요해요")
+                            .font(.title3).bold()
+                        Text("Mate 기능(동행/콕)은 프로필에서 로그인 후 사용할 수 있어요.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 24)
+                        Button("프로필에서 로그인하기") {
+                            onRequestProfileLogin()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.black)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 24)
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 16) {
+                            if viewModel.isMateEnabled == false {
+                                enableCard
+                            } else {
+                                contentSection
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 24)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 24)
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .navigationTitle("Mate")
         }
         .task {
-            viewModel.load()
+            if viewModel.isSignedIn {
+                viewModel.load()
+            }
+        }
+        .onChange(of: viewModel.isSignedIn) { isSignedIn in
+            if isSignedIn {
+                viewModel.load()
+            }
         }
         .onChange(of: viewModel.state.shouldShowInactivityPrompt) { newValue in
             if newValue {
@@ -214,5 +244,5 @@ struct MateView: View {
         notifier: LocalNotificationPokeNotifier()
     )
     let viewModel = MateViewModel(mateService: service, settingsStore: AppSettingsStore())
-    MateView(viewModel: viewModel)
+    MateView(viewModel: viewModel, onRequestProfileLogin: {})
 }

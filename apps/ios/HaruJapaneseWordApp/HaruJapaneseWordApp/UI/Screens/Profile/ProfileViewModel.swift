@@ -59,6 +59,24 @@ final class ProfileViewModel: ObservableObject {
         settingsStore.updateHomeDeckLevel(level)
     }
 
+    func signIn(appleUserId: String) -> Bool {
+        settingsStore.signIn(appleUserId: appleUserId)
+        let trimmed = settingsStore.nickname.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty
+    }
+
+    func completeProfile(nickname: String, jlptLevel: String) {
+        settingsStore.completeProfile(nickname: nickname, jlptLevel: jlptLevel)
+    }
+
+    func signOut() {
+        settingsStore.signOut()
+    }
+
+    var currentJLPTLevel: String {
+        settingsStore.jlptLevel
+    }
+
     func loadAvatar(from item: PhotosPickerItem?) async {
         guard let item else { return }
         if let data = try? await item.loadTransferable(type: Data.self) {

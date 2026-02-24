@@ -17,60 +17,17 @@ struct OnboardingView: View {
 
     var body: some View {
         ZStack {
-            Color(.systemBackground)
-                .ignoresSafeArea()
+            Color.yellow.ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                TabView(selection: $selectedIndex) {
-                    onboardingPage(
-                        title: "오늘의 추천",
-                        description: [
-                            "하루에 추천되는 단어 카드 3장을 넘겨볼 수 있어요.",
-                            "오늘의 추천은 하루 동안 유지돼요."
-                        ]
-                    )
-                    .tag(0)
-
-                    onboardingPage(
-                        title: "학습 체크 ✓",
-                        description: [
-                            "✓를 누르면 학습한 단어로 표시돼요.",
-                            "학습한 단어는 추천에서 잠시 쉬어요."
-                        ],
-                        showsButton: true
-                    )
-                    .tag(1)
-                }
-                .tabViewStyle(.page(indexDisplayMode: .always))
+            VStack(spacing: 12) {
+                Text("ONBOARDING SIMPLE")
+                    .font(.system(size: 28, weight: .bold))
+                Text("...")
+                    .font(.body)
             }
-
-            Text("ONBOARDING VISIBLE")
-                .font(.system(size: 28, weight: .bold))
-                .foregroundStyle(.primary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 24)
         }
         .onAppear {
-            print("✅ ONBOARDING_VIEW_APPEAR")
-        }
-        .sheet(isPresented: $isShowingProfileSheet) {
-            ProfileSetupSheet(nickname: $nickname, jlptLevel: $jlptLevel) { nickname, level in
-                if let settingsStore = settingsStore {
-                    settingsStore.completeProfile(nickname: nickname, jlptLevel: level)
-                    settingsStore.markOnboardingSeen()
-                }
-                isShowingProfileSheet = false
-                onFinish()
-            }
-        }
-        .alert("로그인 실패", isPresented: Binding(get: {
-            errorMessage != nil
-        }, set: { _ in
-            errorMessage = nil
-        })) {
-            Button("확인", role: .cancel) { }
-        } message: {
-            Text(errorMessage ?? "")
+            print("✅ ONBOARDING_SIMPLE_APPEAR")
         }
     }
 

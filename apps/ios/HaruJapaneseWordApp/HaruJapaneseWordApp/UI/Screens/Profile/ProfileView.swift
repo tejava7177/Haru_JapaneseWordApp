@@ -7,6 +7,10 @@ struct ProfileView: View {
     @State private var isGuidePresented: Bool = false
     @State private var isShowingToast: Bool = false
     @State private var toastMessage: String = ""
+    @State private var isShowingProfileSheet: Bool = false
+    @State private var nickname: String = ""
+    @State private var jlptLevel: String = JLPTLevel.n5.rawValue
+    @State private var errorMessage: String?
 
     private let levelOptions: [JLPTLevel] = [.n5, .n4, .n3, .n2, .n1]
 
@@ -17,6 +21,43 @@ struct ProfileView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section("로그인") {
+                    if viewModel.settings.isSignedIn {
+                        HStack {
+                            Text("로그인됨")
+                            Spacer()
+                            Text("Apple")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Button(role: .destructive) {
+                            viewModel.signOut()
+                        } label: {
+                            Text("로그아웃")
+                        }
+                    } else {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Apple로 로그인하면 Mate 기능을 사용할 수 있어요.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+
+                            AppleSignInButton { userId in
+                                let needsProfile = viewModel.signIn(appleUserId: userId)
+                                if needsProfile {
+                                    nickname = ""
+                                    jlptLevel = viewModel.currentJLPTLevel
+                                    isShowingProfileSheet = true
+                                }
+                            } onFailure: { error in
+                                errorMessage = "Apple 로그인에 실패했어요. 다시 시도해 주세요.\n\(error.localizedDescription)"
+                            }
+                            .frame(height: 52)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+
                 Section {
                     HStack(spacing: 16) {
                         PhotosPicker(selection: $viewModel.selectedPhotoItem, matching: .images) {
@@ -129,8 +170,23 @@ struct ProfileView: View {
         } message: {
             Text("오늘의 덱과 학습 체크 기록을 초기화합니다.")
         }
+        .alert("로그인 실패", isPresented: Binding(get: {
+            errorMessage != nil
+        }, set: { _ in
+            errorMessage = nil
+        })) {
+            Button("확인", role: .cancel) { }
+        } message: {
+            Text(errorMessage ?? "")
+        }
         .sheet(isPresented: $isGuidePresented) {
             GuideView()
+        }
+        .sheet(isPresented: $isShowingProfileSheet) {
+            ProfileSetupSheet(nickname: $nickname, jlptLevel: $jlptLevel) { nickname, level in
+                viewModel.completeProfile(nickname: nickname, jlptLevel: level)
+                isShowingProfileSheet = false
+            }
         }
         .overlay(alignment: .bottom) {
             if isShowingToast {
