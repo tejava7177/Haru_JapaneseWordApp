@@ -6,39 +6,59 @@ struct OnboardingView: View {
     @State private var nickname: String = ""
     @State private var jlptLevel: String = JLPTLevel.n5.rawValue
     @State private var errorMessage: String?
-    let settingsStore: AppSettingsStore
+    let settingsStore: AppSettingsStore?
     let onFinish: () -> Void
 
-    var body: some View {
-        VStack(spacing: 0) {
-            TabView(selection: $selectedIndex) {
-                onboardingPage(
-                    title: "오늘의 추천",
-                    description: [
-                        "하루에 추천되는 단어 카드 3장을 넘겨볼 수 있어요.",
-                        "오늘의 추천은 하루 동안 유지돼요."
-                    ]
-                )
-                .tag(0)
+    init(settingsStore: AppSettingsStore, onFinish: @escaping () -> Void) {
+        self.settingsStore = settingsStore
+        self.onFinish = onFinish
+        print("✅ ONBOARDING_VIEW_INIT settingsStore=\(settingsStore)")
+    }
 
-                onboardingPage(
-                    title: "학습 체크 ✓",
-                    description: [
-                        "✓를 누르면 학습한 단어로 표시돼요.",
-                        "학습한 단어는 추천에서 잠시 쉬어요."
-                    ],
-                    showsButton: true
-                )
-                .tag(1)
+    var body: some View {
+        ZStack {
+            Color(.systemBackground)
+                .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                TabView(selection: $selectedIndex) {
+                    onboardingPage(
+                        title: "오늘의 추천",
+                        description: [
+                            "하루에 추천되는 단어 카드 3장을 넘겨볼 수 있어요.",
+                            "오늘의 추천은 하루 동안 유지돼요."
+                        ]
+                    )
+                    .tag(0)
+
+                    onboardingPage(
+                        title: "학습 체크 ✓",
+                        description: [
+                            "✓를 누르면 학습한 단어로 표시돼요.",
+                            "학습한 단어는 추천에서 잠시 쉬어요."
+                        ],
+                        showsButton: true
+                    )
+                    .tag(1)
+                }
+                .tabViewStyle(.page(indexDisplayMode: .always))
             }
-            .tabViewStyle(.page(indexDisplayMode: .always))
+
+            Text("ONBOARDING VISIBLE")
+                .font(.system(size: 28, weight: .bold))
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 24)
         }
-        .background(Color.white)
-        .background(Color(.systemBackground).ignoresSafeArea())
+        .onAppear {
+            print("✅ ONBOARDING_VIEW_APPEAR")
+        }
         .sheet(isPresented: $isShowingProfileSheet) {
             ProfileSetupSheet(nickname: $nickname, jlptLevel: $jlptLevel) { nickname, level in
-                settingsStore.completeProfile(nickname: nickname, jlptLevel: level)
-                settingsStore.markOnboardingSeen()
+                if let settingsStore = settingsStore {
+                    settingsStore.completeProfile(nickname: nickname, jlptLevel: level)
+                    settingsStore.markOnboardingSeen()
+                }
                 isShowingProfileSheet = false
                 onFinish()
             }
@@ -84,6 +104,10 @@ struct OnboardingView: View {
             if showsButton {
                 VStack(spacing: 12) {
                     AppleSignInButton { userId in
+                        guard let settingsStore = settingsStore else {
+                            errorMessage = "설정 정보를 불러오지 못했어요. 앱을 다시 실행해 주세요."
+                            return
+                        }
                         settingsStore.signIn(appleUserId: userId)
                         nickname = ""
                         jlptLevel = settingsStore.jlptLevel

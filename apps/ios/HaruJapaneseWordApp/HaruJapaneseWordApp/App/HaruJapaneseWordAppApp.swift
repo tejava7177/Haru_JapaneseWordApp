@@ -32,7 +32,12 @@ struct HaruJapaneseWordAppApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView(repository: repository, deepLinkRouter: deepLinkRouter)
+            ZStack {
+                Color.green.ignoresSafeArea()
+                Text("APP ENTRY OK")
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundColor(.white)
+            }
         }
     }
 }
