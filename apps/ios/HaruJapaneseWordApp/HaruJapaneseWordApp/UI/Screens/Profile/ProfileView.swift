@@ -1,6 +1,7 @@
 import SwiftUI
 import PhotosUI
 import UIKit
+import AuthenticationServices
 
 struct ProfileView: View {
     @StateObject private var viewModel: ProfileViewModel
@@ -312,35 +313,80 @@ private struct LevelDescriptionCard: View {
 #Preview {
     ProfileView(settingsStore: AppSettingsStore())
 }
-// Fallback placeholder for AppleSignInButton if the real component is not available in this target.
-// Replace with your actual Sign in with Apple implementation.
+
+// Real implementation of Sign in with Apple button using AuthenticationServices
 struct AppleSignInButton: View {
     let onSuccess: (String) -> Void
     let onFailure: (Error) -> Void
 
-    init(_ onSuccess: @escaping (String) -> Void, onFailure: @escaping (Error) -> Void) {
-        self.onSuccess = onSuccess
-        self.onFailure = onFailure
+    var body: some View {
+        SignInWithAppleButtonRepresentable(onSuccess: onSuccess, onFailure: onFailure)
+            .frame(maxWidth: .infinity)
+            .frame(height: 52)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .accessibilityLabel("Apple로 로그인")
+    }
+}
+
+private struct SignInWithAppleButtonRepresentable: UIViewRepresentable {
+    let onSuccess: (String) -> Void
+    let onFailure: (Error) -> Void
+    func makeUIView(context: Context) -> ASAuthorizationAppleIDButton {
+        let button = ASAuthorizationAppleIDButton(type: .signIn, style: .black)
+        button.cornerRadius = 12
+        button.addTarget(context.coordinator, action: #selector(Coordinator.didTapButton), for: .touchUpInside)
+        return button
     }
 
-    var body: some View {
-        Button {
-            // Simulate success with a mock user identifier. Replace with real ASAuthorization flow.
-            onSuccess("mock-user-id")
-        } label: {
-            HStack {
-                Image(systemName: "apple.logo")
-                Text("Apple로 로그인")
-                    .fontWeight(.semibold)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
-            .background(Color.black)
-            .foregroundStyle(.white)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    func updateUIView(_ uiView: ASAuthorizationAppleIDButton, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onSuccess: onSuccess, onFailure: onFailure)
+    }
+
+    final class Coordinator: NSObject, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
+        let onSuccess: (String) -> Void
+        let onFailure: (Error) -> Void
+
+        init(onSuccess: @escaping (String) -> Void, onFailure: @escaping (Error) -> Void) {
+            self.onSuccess = onSuccess
+            self.onFailure = onFailure
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Apple로 로그인")
+
+        @objc func didTapButton() {
+            let provider = ASAuthorizationAppleIDProvider()
+            let request = provider.createRequest()
+            request.requestedScopes = [.fullName, .email]
+
+            let controller = ASAuthorizationController(authorizationRequests: [request])
+            controller.delegate = self
+            controller.presentationContextProvider = self
+            controller.performRequests()
+        }
+
+        // MARK: - ASAuthorizationControllerDelegate
+        func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
+            if let credential = authorization.credential as? ASAuthorizationAppleIDCredential {
+                // The stable user identifier for the app and developer team
+                let userID = credential.user
+                onSuccess(userID)
+            } else {
+                onFailure(NSError(domain: "AppleSignIn", code: -1, userInfo: [NSLocalizedDescriptionKey: "인증 자격 증명을 가져올 수 없어요."]))
+            }
+        }
+
+        func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+            onFailure(error)
+        }
+
+        // MARK: - ASAuthorizationControllerPresentationContextProviding
+        func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+            // Try to find a key window for presentation
+            return UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .flatMap { $0.windows }
+                .first { $0.isKeyWindow } ?? ASPresentationAnchor()
+        }
     }
 }
 
