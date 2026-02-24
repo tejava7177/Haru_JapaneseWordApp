@@ -15,6 +15,16 @@ final class AppSettingsStore: ObservableObject {
     private let appleUserIdKey = "auth_apple_user_id"
     private let mateUserIdKey = "mate_user_id"
 
+    enum MateDevSlot: String {
+        case A
+        case B
+        case C
+
+        var userId: String {
+            "DEV-\(rawValue)"
+        }
+    }
+
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
         self.settings = AppSettingsStore.loadSettings(userDefaults: userDefaults)
@@ -61,6 +71,10 @@ final class AppSettingsStore: ObservableObject {
         updated.mateUserId = userId
         settings = updated
         save(settings: updated)
+    }
+
+    func signInForMateDevSlot(_ slot: MateDevSlot) {
+        signInForMate(userId: slot.userId)
     }
 
     func signOutForMate() {

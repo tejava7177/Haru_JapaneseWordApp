@@ -2,8 +2,9 @@ import SwiftUI
 
 struct RootView: View {
     private let repository: DictionaryRepository
-    @StateObject private var settingsStore = AppSettingsStore()
+    @StateObject private var settingsStore: AppSettingsStore
     @StateObject private var wordListViewModel: WordListViewModel
+    @StateObject private var mateViewModel: MateViewModel
     @State private var isShowingOnboarding: Bool = false
     @State private var selectedTab: RootTab = .home
 
@@ -16,6 +17,13 @@ struct RootView: View {
 
     init(repository: DictionaryRepository) {
         self.repository = repository
+        let settingsStore = AppSettingsStore()
+        _settingsStore = StateObject(wrappedValue: settingsStore)
+
+        let mateRepository = SQLiteMateRepository()
+        let mateService = MateService(repository: mateRepository, appUserIdProvider: { settingsStore.mateUserId })
+        _mateViewModel = StateObject(wrappedValue: MateViewModel(service: mateService, settingsStore: settingsStore))
+
         _wordListViewModel = StateObject(wrappedValue: WordListViewModel(repository: repository))
     }
 
@@ -35,7 +43,7 @@ struct RootView: View {
 
             Group {
                 if settingsStore.isMateLoggedIn {
-                    Text("Mate")
+                    MateView(viewModel: mateViewModel)
                 } else {
                     MateSignInRequiredView {
                         selectedTab = .profile

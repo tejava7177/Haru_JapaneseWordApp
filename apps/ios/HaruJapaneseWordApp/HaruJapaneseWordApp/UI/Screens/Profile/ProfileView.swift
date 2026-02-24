@@ -120,8 +120,16 @@ struct ProfileView: View {
                                 .foregroundStyle(.secondary)
 
                             #if targetEnvironment(simulator)
-                            Button("Dev Login for Mate") {
-                                viewModel.signInForMate(userId: "SIM-\(UUID().uuidString)")
+                            VStack(alignment: .leading, spacing: 8) {
+                                Button("Dev Slot A로 로그인") {
+                                    viewModel.signInForMateDevSlot(.A)
+                                }
+                                Button("Dev Slot B로 로그인") {
+                                    viewModel.signInForMateDevSlot(.B)
+                                }
+                                Button("Dev Slot C로 로그인") {
+                                    viewModel.signInForMateDevSlot(.C)
+                                }
                             }
                             .buttonStyle(.borderedProminent)
                             .tint(.black)

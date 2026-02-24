@@ -82,6 +82,10 @@ final class ProfileViewModel: ObservableObject {
         settingsStore.signInForMate(userId: userId)
     }
 
+    func signInForMateDevSlot(_ slot: AppSettingsStore.MateDevSlot) {
+        settingsStore.signInForMateDevSlot(slot)
+    }
+
     func signOutForMate() {
         settingsStore.signOutForMate()
     }
