@@ -36,6 +36,13 @@ final class ProfileViewModel: ObservableObject {
                 self?.settings = value
             }
             .store(in: &cancellables)
+
+        settingsStore.$isSignedIn
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
     }
 
     func updateNickname(_ nickname: String) {
@@ -56,6 +63,16 @@ final class ProfileViewModel: ObservableObject {
     func updateHomeDeckLevel(_ level: JLPTLevel) {
         settings.homeDeckLevel = level
         settingsStore.updateHomeDeckLevel(level)
+    }
+
+    var isSignedIn: Bool { settingsStore.isSignedIn }
+
+    func signInWithApple(userId: String) {
+        settingsStore.signIn(appleUserId: userId)
+    }
+
+    func signOut() {
+        settingsStore.signOut()
     }
 
     func loadAvatar(from item: PhotosPickerItem?) async {

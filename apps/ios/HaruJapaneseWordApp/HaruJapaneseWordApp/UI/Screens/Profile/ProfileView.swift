@@ -7,6 +7,7 @@ struct ProfileView: View {
     @State private var isGuidePresented: Bool = false
     @State private var isShowingToast: Bool = false
     @State private var toastMessage: String = ""
+    @State private var errorMessage: String?
 
     private let levelOptions: [JLPTLevel] = [.n5, .n4, .n3, .n2, .n1]
 
@@ -17,102 +18,12 @@ struct ProfileView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    HStack(spacing: 16) {
-                        PhotosPicker(selection: $viewModel.selectedPhotoItem, matching: .images) {
-                            avatarView
-                        }
-                        .buttonStyle(.plain)
-
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(viewModel.profile.nickname.isEmpty ? "하루" : viewModel.profile.nickname)
-                                .font(.title3)
-                                .fontWeight(.semibold)
-                            Text("프로필을 설정해 보세요.")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(.vertical, 8)
-                }
-
-                Section("프로필") {
-                    TextField(
-                        "닉네임",
-                        text: Binding(
-                            get: { viewModel.profile.nickname },
-                            set: { viewModel.updateNickname($0) }
-                        )
-                    )
-
-                    TextField(
-                        "한 줄 소개",
-                        text: Binding(
-                            get: { viewModel.profile.bio },
-                            set: { viewModel.updateBio($0) }
-                        )
-                    )
-
-                    HStack {
-                        Text("@")
-                            .foregroundStyle(.secondary)
-                        TextField(
-                            "인스타 아이디",
-                            text: Binding(
-                                get: { viewModel.profile.instagramId },
-                                set: { viewModel.updateInstagram($0) }
-                            )
-                        )
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    }
-                }
-
-                Section("학습 설정") {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("학습 레벨은 하나만 선택할 수 있어요.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-
-                        let edgePadding: CGFloat = 16
-                        let edgeCompensation: CGFloat = 16
-
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(levelOptions) { level in
-                                    LevelSelectionChip(
-                                        level: level,
-                                        isSelected: viewModel.settings.homeDeckLevel == level
-                                    ) {
-                                        viewModel.updateHomeDeckLevel(level)
-                                        showToast(message: "학습 레벨이 \(level.title)로 설정됐어요")
-                                    }
-                                }
-                            }
-                            .padding(.leading, viewModel.settings.homeDeckLevel == .n5 ? edgePadding + edgeCompensation : edgePadding)
-                            .padding(.trailing, viewModel.settings.homeDeckLevel == .n1 ? edgePadding + edgeCompensation : edgePadding)
-                            .padding(.vertical, 4)
-                        }
-
-                        LevelDescriptionCard(level: viewModel.settings.homeDeckLevel)
-                    }
-                }
-
-                Section("도움말") {
-                    Button {
-                        isGuidePresented = true
-                    } label: {
-                        Text("사용 가이드")
-                    }
-                }
-
-                Section("데이터") {
-                    Button(role: .destructive) {
-                        viewModel.isResetAlertPresented = true
-                    } label: {
-                        Text("학습 데이터 초기화")
-                    }
-                }
+                profileHeaderSection
+                signInSection
+                profileEditSection
+                learningSettingsSection
+                helpSection
+                dataSection
             }
             .navigationTitle("프로필")
         }
@@ -129,6 +40,15 @@ struct ProfileView: View {
         } message: {
             Text("오늘의 덱과 학습 체크 기록을 초기화합니다.")
         }
+        .alert("로그인 실패", isPresented: Binding(get: {
+            errorMessage != nil
+        }, set: { _ in
+            errorMessage = nil
+        })) {
+            Button("확인", role: .cancel) { }
+        } message: {
+            Text(errorMessage ?? "")
+        }
         .sheet(isPresented: $isGuidePresented) {
             GuideView()
         }
@@ -143,6 +63,143 @@ struct ProfileView: View {
                     .clipShape(Capsule())
                     .padding(.bottom, 24)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+    }
+
+    private var profileHeaderSection: some View {
+        Section {
+            HStack(spacing: 16) {
+                PhotosPicker(selection: $viewModel.selectedPhotoItem, matching: .images) {
+                    avatarView
+                }
+                .buttonStyle(.plain)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    let nickname = viewModel.profile.nickname
+                    Text(nickname.isEmpty ? "하루" : nickname)
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                    Text(viewModel.isSignedIn ? "Apple 계정 연결됨" : "프로필을 설정해 보세요.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.vertical, 8)
+        }
+    }
+
+    private var signInSection: some View {
+        Section("로그인") {
+            if viewModel.isSignedIn {
+                HStack {
+                    Text("Apple 계정이 연결되어 있어요.")
+                    Spacer()
+                    Text("연결됨")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Button(role: .destructive) {
+                    viewModel.signOut()
+                } label: {
+                    Text("로그아웃")
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Apple로 로그인하면 Mate(동행) 기능을 사용할 수 있어요.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
+                    AppleSignInButton { userId in
+                        viewModel.signInWithApple(userId: userId)
+                    } onFailure: { error in
+                        errorMessage = "Apple 로그인에 실패했어요. 다시 시도해 주세요.\n\(error.localizedDescription)"
+                    }
+                    .frame(height: 52)
+                }
+                .padding(.vertical, 4)
+            }
+        }
+    }
+
+    private var profileEditSection: some View {
+        Section("프로필") {
+            let nicknameBinding = Binding(
+                get: { viewModel.profile.nickname },
+                set: { viewModel.updateNickname($0) }
+            )
+            let bioBinding = Binding(
+                get: { viewModel.profile.bio },
+                set: { viewModel.updateBio($0) }
+            )
+            let instagramBinding = Binding(
+                get: { viewModel.profile.instagramId },
+                set: { viewModel.updateInstagram($0) }
+            )
+
+            TextField("닉네임", text: nicknameBinding)
+
+            TextField("한 줄 소개", text: bioBinding)
+
+            HStack {
+                Text("@")
+                    .foregroundStyle(.secondary)
+                TextField("인스타 아이디", text: instagramBinding)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+            }
+        }
+    }
+
+    private var learningSettingsSection: some View {
+        Section("학습 설정") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("학습 레벨은 하나만 선택할 수 있어요.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                let edgePadding: CGFloat = 16
+                let edgeCompensation: CGFloat = 16
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(levelOptions) { level in
+                            LevelSelectionChip(
+                                level: level,
+                                isSelected: viewModel.settings.homeDeckLevel == level
+                            ) {
+                                viewModel.updateHomeDeckLevel(level)
+                                showToast(message: "학습 레벨이 \(level.title)로 설정됐어요")
+                            }
+                        }
+                    }
+                    .padding(.leading, viewModel.settings.homeDeckLevel == .n5 ? edgePadding + edgeCompensation : edgePadding)
+                    .padding(.trailing, viewModel.settings.homeDeckLevel == .n1 ? edgePadding + edgeCompensation : edgePadding)
+                    .padding(.vertical, 4)
+                }
+
+                LevelDescriptionCard(level: viewModel.settings.homeDeckLevel)
+            }
+        }
+    }
+
+    private var helpSection: some View {
+        Section("도움말") {
+            Button {
+                isGuidePresented = true
+            } label: {
+                Text("사용 가이드")
+            }
+        }
+    }
+
+    private var dataSection: some View {
+        Section("데이터") {
+            Button(role: .destructive) {
+                viewModel.isResetAlertPresented = true
+            } label: {
+                Text("학습 데이터 초기화")
             }
         }
     }
@@ -191,25 +248,25 @@ private struct LevelSelectionChip: View {
             Text(level.title)
                 .font(.callout)
                 .fontWeight(isSelected ? .semibold : .regular)
-            .foregroundStyle(isSelected ? .white : .primary)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .padding(.trailing, isSelected ? extraTrailingForCheck : 0)
-            .background(isSelected ? Color.accentColor : Color.clear)
-            .overlay(
-                Capsule()
-                    .stroke(isSelected ? Color.accentColor : Color(uiColor: .systemGray3), lineWidth: 1)
-            )
-            .clipShape(Capsule())
-            .overlay(alignment: .trailing) {
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.caption2)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.white)
-                        .padding(.trailing, 8)
+                .foregroundStyle(isSelected ? .white : .primary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .padding(.trailing, isSelected ? extraTrailingForCheck : 0)
+                .background(isSelected ? Color.accentColor : Color.clear)
+                .overlay(
+                    Capsule()
+                        .stroke(isSelected ? Color.accentColor : Color(uiColor: .systemGray3), lineWidth: 1)
+                )
+                .clipShape(Capsule())
+                .overlay(alignment: .trailing) {
+                    if isSelected {
+                        Image(systemName: "checkmark")
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.white)
+                            .padding(.trailing, 8)
+                    }
                 }
-            }
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(level.title) 레벨")
@@ -255,3 +312,35 @@ private struct LevelDescriptionCard: View {
 #Preview {
     ProfileView(settingsStore: AppSettingsStore())
 }
+// Fallback placeholder for AppleSignInButton if the real component is not available in this target.
+// Replace with your actual Sign in with Apple implementation.
+struct AppleSignInButton: View {
+    let onSuccess: (String) -> Void
+    let onFailure: (Error) -> Void
+
+    init(_ onSuccess: @escaping (String) -> Void, onFailure: @escaping (Error) -> Void) {
+        self.onSuccess = onSuccess
+        self.onFailure = onFailure
+    }
+
+    var body: some View {
+        Button {
+            // Simulate success with a mock user identifier. Replace with real ASAuthorization flow.
+            onSuccess("mock-user-id")
+        } label: {
+            HStack {
+                Image(systemName: "apple.logo")
+                Text("Apple로 로그인")
+                    .fontWeight(.semibold)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(Color.black)
+            .foregroundStyle(.white)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Apple로 로그인")
+    }
+}
+

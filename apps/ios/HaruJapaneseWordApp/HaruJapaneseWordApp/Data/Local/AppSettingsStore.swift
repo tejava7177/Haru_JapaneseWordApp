@@ -4,16 +4,22 @@ import Combine
 final class AppSettingsStore: ObservableObject {
     @Published private(set) var settings: AppSettings
     @Published private(set) var hasSeenOnboarding: Bool
+    @Published private(set) var isSignedIn: Bool
+    @Published private(set) var appleUserId: String?
 
     private let userDefaults: UserDefaults
 
     private let homeDeckLevelKey = "settings_home_deck_level"
     private let onboardingKey = "has_seen_onboarding"
+    private let isSignedInKey = "auth_is_signed_in"
+    private let appleUserIdKey = "auth_apple_user_id"
 
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
         self.settings = AppSettingsStore.loadSettings(userDefaults: userDefaults)
         self.hasSeenOnboarding = userDefaults.bool(forKey: onboardingKey)
+        self.isSignedIn = userDefaults.bool(forKey: isSignedInKey)
+        self.appleUserId = userDefaults.string(forKey: appleUserIdKey)
     }
 
     func updateHomeDeckLevel(_ level: JLPTLevel) {
@@ -28,6 +34,20 @@ final class AppSettingsStore: ObservableObject {
     func markOnboardingSeen() {
         hasSeenOnboarding = true
         userDefaults.set(true, forKey: onboardingKey)
+    }
+
+    func signIn(appleUserId: String) {
+        self.appleUserId = appleUserId
+        isSignedIn = true
+        userDefaults.set(true, forKey: isSignedInKey)
+        userDefaults.set(appleUserId, forKey: appleUserIdKey)
+    }
+
+    func signOut() {
+        appleUserId = nil
+        isSignedIn = false
+        userDefaults.set(false, forKey: isSignedInKey)
+        userDefaults.removeObject(forKey: appleUserIdKey)
     }
 
     private static func loadSettings(userDefaults: UserDefaults) -> AppSettings {
