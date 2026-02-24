@@ -332,6 +332,7 @@ private struct SignInWithAppleButtonRepresentable: UIViewRepresentable {
     let onSuccess: (String) -> Void
     let onFailure: (Error) -> Void
     func makeUIView(context: Context) -> ASAuthorizationAppleIDButton {
+        print("[AppleSignInButton] makeUIView")
         let button = ASAuthorizationAppleIDButton(type: .signIn, style: .black)
         button.cornerRadius = 12
         button.addTarget(context.coordinator, action: #selector(Coordinator.didTapButton), for: .touchUpInside)
@@ -341,31 +342,58 @@ private struct SignInWithAppleButtonRepresentable: UIViewRepresentable {
     func updateUIView(_ uiView: ASAuthorizationAppleIDButton, context: Context) {}
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onSuccess: onSuccess, onFailure: onFailure)
+        print("[AppleSignInButton] makeCoordinator")
+        return Coordinator(onSuccess: onSuccess, onFailure: onFailure)
     }
 
     final class Coordinator: NSObject, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
         let onSuccess: (String) -> Void
         let onFailure: (Error) -> Void
+        private var hasCallback: Bool = false
+        private var watchdogWorkItem: DispatchWorkItem?
 
         init(onSuccess: @escaping (String) -> Void, onFailure: @escaping (Error) -> Void) {
             self.onSuccess = onSuccess
             self.onFailure = onFailure
+            super.init()
+            print("[AppleSignInButton] coordinatorInit")
+        }
+
+        deinit {
+            print("[AppleSignInButton] coordinatorDeinit")
         }
 
         @objc func didTapButton() {
+            print("[AppleSignInButton] tap")
+            hasCallback = false
+            watchdogWorkItem?.cancel()
+            let workItem = DispatchWorkItem { [weak self] in
+                guard let self, self.hasCallback == false else { return }
+                print("[AppleSignInButton] watchdogTimeout (no callback within 8s)")
+            }
+            watchdogWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + 8, execute: workItem)
+
+            print("[AppleAuth] start")
             let provider = ASAuthorizationAppleIDProvider()
             let request = provider.createRequest()
             request.requestedScopes = [.fullName, .email]
+            print("[AppleAuth] makeRequest")
 
             let controller = ASAuthorizationController(authorizationRequests: [request])
+            print("[AppleAuth] controllerCreated")
             controller.delegate = self
             controller.presentationContextProvider = self
+            print("[AppleAuth] performRequests")
             controller.performRequests()
         }
 
         // MARK: - ASAuthorizationControllerDelegate
         func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
+            hasCallback = true
+            watchdogWorkItem?.cancel()
+            print("[AppleSignInButton] didCompleteWithAuthorization")
+            print("[AppleAuth] success")
             if let credential = authorization.credential as? ASAuthorizationAppleIDCredential {
                 // The stable user identifier for the app and developer team
                 let userID = credential.user
@@ -376,11 +404,24 @@ private struct SignInWithAppleButtonRepresentable: UIViewRepresentable {
         }
 
         func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+            hasCallback = true
+            watchdogWorkItem?.cancel()
+            print("[AppleSignInButton] didCompleteWithError")
+            let nsError = error as NSError
+            let authCode = ASAuthorizationError.Code(rawValue: nsError.code)
+            let userInfoKeys = nsError.userInfo.keys.map { "\($0)" }
+            if nsError.domain == ASAuthorizationError.errorDomain, let authCode {
+                print("[AppleAuth] failure domain=\(nsError.domain) code=\(nsError.code) authCode=\(authCode) description=\(nsError.localizedDescription)")
+            } else {
+                print("[AppleAuth] failure domain=\(nsError.domain) code=\(nsError.code) description=\(nsError.localizedDescription)")
+            }
+            print("[AppleAuth] failure userInfoKeys=\(userInfoKeys)")
             onFailure(error)
         }
 
         // MARK: - ASAuthorizationControllerPresentationContextProviding
         func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+            print("[AppleSignInButton] presentationAnchor")
             // Try to find a key window for presentation
             return UIApplication.shared.connectedScenes
                 .compactMap { $0 as? UIWindowScene }
