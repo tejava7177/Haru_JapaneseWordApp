@@ -65,14 +65,25 @@ final class ProfileViewModel: ObservableObject {
         settingsStore.updateHomeDeckLevel(level)
     }
 
-    var isSignedIn: Bool { settingsStore.isSignedIn }
+    var isMateLoggedIn: Bool { settingsStore.isMateLoggedIn }
+
+    var mateUserIdPrefix: String {
+        let value = settingsStore.mateUserId
+        guard value.isEmpty == false else { return "" }
+        let prefixLength = min(8, value.count)
+        return String(value.prefix(prefixLength))
+    }
 
     func signInWithApple(userId: String) {
         settingsStore.signIn(appleUserId: userId)
     }
 
-    func signOut() {
-        settingsStore.signOut()
+    func signInForMate(userId: String) {
+        settingsStore.signInForMate(userId: userId)
+    }
+
+    func signOutForMate() {
+        settingsStore.signOutForMate()
     }
 
     func loadAvatar(from item: PhotosPickerItem?) async {

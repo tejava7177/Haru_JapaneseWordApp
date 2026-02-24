@@ -1,6 +1,7 @@
 import SwiftUI
 import PhotosUI
 import UIKit
+import Foundation
 import AuthenticationServices
 
 struct ProfileView: View {
@@ -81,9 +82,9 @@ struct ProfileView: View {
                     Text(nickname.isEmpty ? "하루" : nickname)
                         .font(.title3)
                         .fontWeight(.semibold)
-                    Text(viewModel.isSignedIn ? "Apple 계정 연결됨" : "프로필을 설정해 보세요.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                            Text(viewModel.isMateLoggedIn ? "Mate 로그인됨" : "프로필을 설정해 보세요.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
                 }
             }
             .padding(.vertical, 8)
@@ -92,36 +93,50 @@ struct ProfileView: View {
 
     private var signInSection: some View {
         Section("로그인") {
-            if viewModel.isSignedIn {
-                HStack {
-                    Text("Apple 계정이 연결되어 있어요.")
-                    Spacer()
-                    Text("연결됨")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                    if viewModel.isMateLoggedIn {
+                        HStack {
+                            Text("Mate 로그인 상태예요.")
+                            Spacer()
+                            if viewModel.mateUserIdPrefix.isEmpty == false {
+                                Text(viewModel.mateUserIdPrefix)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text("연결됨")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            }
+                        }
 
-                Button(role: .destructive) {
-                    viewModel.signOut()
-                } label: {
-                    Text("로그아웃")
-                }
-            } else {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Apple로 로그인하면 Mate(동행) 기능을 사용할 수 있어요.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        Button(role: .destructive) {
+                            viewModel.signOutForMate()
+                        } label: {
+                            Text("Mate 로그아웃")
+                        }
+                    } else {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Apple로 로그인하면 Mate(동행) 기능을 사용할 수 있어요.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
 
-                    AppleSignInButton { userId in
-                        viewModel.signInWithApple(userId: userId)
-                    } onFailure: { error in
-                        errorMessage = "Apple 로그인에 실패했어요. 다시 시도해 주세요.\n\(error.localizedDescription)"
+                            #if targetEnvironment(simulator)
+                            Button("Dev Login for Mate") {
+                                viewModel.signInForMate(userId: "SIM-\(UUID().uuidString)")
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.black)
+                            #else
+                            AppleSignInButton { userId in
+                                viewModel.signInWithApple(userId: userId)
+                            } onFailure: { error in
+                                errorMessage = "Apple 로그인에 실패했어요. 다시 시도해 주세요.\n\(error.localizedDescription)"
+                            }
+                            .frame(height: 52)
+                            #endif
+                        }
+                        .padding(.vertical, 4)
                     }
-                    .frame(height: 52)
                 }
-                .padding(.vertical, 4)
-            }
-        }
     }
 
     private var profileEditSection: some View {
@@ -430,4 +445,3 @@ private struct SignInWithAppleButtonRepresentable: UIViewRepresentable {
         }
     }
 }
-
