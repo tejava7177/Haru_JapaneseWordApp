@@ -121,6 +121,42 @@ final class DictionaryDatabase {
         print("[DB] tables=\(tables)")
         let lyricTable = "lyric_entries"
         print("[DB] has_lyric_entries=\(tables.contains(lyricTable))")
+
+        let mateTables = try readAllText(
+            sql: """
+            SELECT name
+            FROM sqlite_master
+            WHERE type='table' AND name IN ('mate_room','mate_poke','mate_daily_status')
+            ORDER BY name;
+            """
+        )
+        let hasMateRoom = mateTables.contains("mate_room")
+        let hasMatePoke = mateTables.contains("mate_poke")
+        let hasMateDaily = mateTables.contains("mate_daily_status")
+        print("[DB] mate_tables=\(mateTables)")
+        print("[DB] mate_room_exists=\(hasMateRoom) mate_poke_exists=\(hasMatePoke) mate_daily_status_exists=\(hasMateDaily)")
+        if hasMateRoom {
+            let roomCount = try readSingleText(sql: "SELECT COUNT(*) FROM mate_room;")
+            print("[DB] mate_room_count=\(roomCount)")
+            let latestRoom = try readSingleText(
+                sql: """
+                SELECT 'rowid=' || rowid || ',id=' || id ||
+                       ',user_a_id=' || user_a_id || ',user_b_id=' || user_b_id ||
+                       ',invite_code=' || invite_code || ',created_at=' || created_at ||
+                       ',last_interaction_at=' || last_interaction_at || ',is_active=' || is_active
+                FROM mate_room
+                ORDER BY rowid DESC
+                LIMIT 1;
+                """
+            )
+            if latestRoom.isEmpty {
+                print("[DB] mate_room_latest=none")
+            } else {
+                print("[DB] mate_room_latest=\(latestRoom)")
+            }
+        } else {
+            print("[DB] MATE_TABLE_MISSING")
+        }
     }
     #endif
 
@@ -159,17 +195,13 @@ final class DictionaryDatabase {
 
     private static func bootstrapIfNeeded(bundledURL: URL, writableURL: URL) throws {
         let fileManager = FileManager.default
-        #if DEBUG
-        let forceCopy = true
-        #else
-        let forceCopy = false
-        #endif
+        let allowResetCopy = false
 
-        if forceCopy {
+        if allowResetCopy {
             try removeDatabaseFiles(at: writableURL)
         }
 
-        if forceCopy || fileManager.fileExists(atPath: writableURL.path) == false {
+        if allowResetCopy || fileManager.fileExists(atPath: writableURL.path) == false {
             do {
                 try fileManager.copyItem(at: bundledURL, to: writableURL)
                 print(
@@ -179,6 +211,8 @@ final class DictionaryDatabase {
             } catch {
                 throw DatabaseError.fileCopyFailed(message: "copy failed: \(error)")
             }
+        } else {
+            print("[DB] copy skipped (exists) path=\(writableURL.path) \(fileInfo(for: writableURL))")
         }
     }
 

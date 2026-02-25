@@ -15,7 +15,7 @@ final class SQLiteMateRepository {
 
     init() {
         self.dbPath = Self.writableDatabaseURL().path
-        ensureTables()
+        ensureSchema()
     }
 
     func fetchActiveRoom(for userId: String) -> MateRoom? {
@@ -82,23 +82,31 @@ final class SQLiteMateRepository {
         if room.userAId == joinerId {
             throw MateRepositoryError.cannotJoinOwnInvite
         }
+        print("[SQLiteMateRepository] joinByInviteCode write_begin userId=\(joinerId) inviteCode=\(inviteCode)")
+        var db: SQLiteDB?
         do {
-            let db = try SQLiteDB(path: dbPath, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
-            defer { db.close() }
+            db = try SQLiteDB(path: dbPath, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
+            defer { db?.close() }
             let sql = """
             UPDATE mate_room
             SET user_b_id = ?
             WHERE id = ?;
             """
-            let stmt = try db.prepare(sql)
-            defer { db.finalize(stmt) }
-            try db.bind(joinerId, to: 1, in: stmt)
-            try db.bind(room.id, to: 2, in: stmt)
-            _ = try db.step(stmt)
+            let stmt = try db!.prepare(sql)
+            defer { db!.finalize(stmt) }
+            try db!.bind(joinerId, to: 1, in: stmt)
+            try db!.bind(room.id, to: 2, in: stmt)
+            _ = try db!.step(stmt)
         } catch {
-            print("[SQLiteMateRepository] joinByInviteCode failed: \(error)")
+            let sqliteCode = SQLiteDB.errorCode(from: db?.rawHandle)
+            let sqliteMessage = SQLiteDB.errorMessage(from: db?.rawHandle)
+            print(
+                "[SQLiteMateRepository] joinByInviteCode failed: \(error.localizedDescription) " +
+                    "sqlite_code=\(sqliteCode) sqlite_message=\(sqliteMessage)"
+            )
         }
         if let updated = fetchActiveRoom(for: joinerId) {
+            print("MATE_ROOM_WRITE_OK roomId=\(updated.id) userA=\(updated.userAId) userB=\(updated.userBId)")
             return updated
         }
         return room
@@ -362,7 +370,7 @@ final class SQLiteMateRepository {
         return false
     }
 
-    private func ensureTables() {
+    private func ensureSchema() {
         do {
             let db = try SQLiteDB(path: dbPath, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
             defer { db.close() }
@@ -371,8 +379,10 @@ final class SQLiteMateRepository {
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_a_id TEXT NOT NULL,
                 user_b_id TEXT NOT NULL,
-                invite_code TEXT NOT NULL,
-                created_at INTEGER NOT NULL,
+                invite_code TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL,
+                last_poke_at TEXT NULL,
+                ended_at TEXT NULL,
                 last_interaction_at INTEGER NOT NULL,
                 is_active INTEGER NOT NULL
             );
@@ -386,9 +396,9 @@ final class SQLiteMateRepository {
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 room_id INTEGER NOT NULL,
                 sender_id TEXT NOT NULL,
-                receiver_id TEXT NOT NULL,
                 word_id INTEGER NOT NULL,
-                created_at INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                receiver_id TEXT NOT NULL,
                 date_key_kst TEXT NOT NULL,
                 consumed_at INTEGER
             );
@@ -396,8 +406,41 @@ final class SQLiteMateRepository {
             let pokeStmt = try db.prepare(pokeSql)
             defer { db.finalize(pokeStmt) }
             _ = try db.step(pokeStmt)
+
+            let dailySql = """
+            CREATE TABLE IF NOT EXISTS mate_daily_status (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT NOT NULL,
+                date_key TEXT NOT NULL,
+                did_study INTEGER NOT NULL DEFAULT 0,
+                UNIQUE(user_id, date_key)
+            );
+            """
+            let dailyStmt = try db.prepare(dailySql)
+            defer { db.finalize(dailyStmt) }
+            _ = try db.step(dailyStmt)
+
+            let checkSql = """
+            SELECT name
+            FROM sqlite_master
+            WHERE type='table' AND name IN ('mate_room','mate_poke','mate_daily_status')
+            ORDER BY name;
+            """
+            let checkStmt = try db.prepare(checkSql)
+            defer { db.finalize(checkStmt) }
+            var tables: [String] = []
+            while try db.step(checkStmt) {
+                if let name = SQLiteDB.columnText(checkStmt, 0) {
+                    tables.append(name)
+                }
+            }
+            let hasRoom = tables.contains("mate_room")
+            let hasPoke = tables.contains("mate_poke")
+            let hasDaily = tables.contains("mate_daily_status")
+            print("[SQLiteMateRepository] mate_tables=\(tables)")
+            print("[SQLiteMateRepository] mate_room_exists=\(hasRoom) mate_poke_exists=\(hasPoke) mate_daily_status_exists=\(hasDaily)")
         } catch {
-            print("[SQLiteMateRepository] ensureTables failed: \(error)")
+            print("[SQLiteMateRepository] ensureSchema failed: \(error)")
         }
     }
 
@@ -435,4 +478,3 @@ final class SQLiteMateRepository {
         return URL(fileURLWithPath: "jlpt_starter.sqlite")
     }
 }
-

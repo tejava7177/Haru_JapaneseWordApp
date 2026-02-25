@@ -15,6 +15,7 @@ final class SQLiteDB {
 
     private var db: OpaquePointer?
     let openFlags: Int32
+    var rawHandle: OpaquePointer? { db }
 
     init(path: String, flags: Int32 = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE) throws {
         var handle: OpaquePointer?
@@ -104,6 +105,13 @@ final class SQLiteDB {
             return "Unknown SQLite error"
         }
         return String(cString: cString)
+    }
+
+    static func errorCode(from db: OpaquePointer?) -> Int32 {
+        guard let db else {
+            return -1
+        }
+        return sqlite3_errcode(db)
     }
 
     static func columnText(_ statement: OpaquePointer, _ index: Int32) -> String? {

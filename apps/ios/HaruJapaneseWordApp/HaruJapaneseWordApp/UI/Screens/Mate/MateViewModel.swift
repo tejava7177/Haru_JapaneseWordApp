@@ -27,8 +27,19 @@ final class MateViewModel: ObservableObject {
 
     func load() {
         service.cleanupIfNeeded()
+        let userId = settingsStore.mateUserId
+        if userId.isEmpty {
+            print("MATE_VM_REFRESH_EMPTY_USERID")
+            return
+        }
+        print("MATE_VM_REFRESH userId=\(userId)")
         activeRoom = service.loadActiveRoom()
         inviteCode = activeRoom?.inviteCode ?? ""
+        if let activeRoom {
+            print("MATE_ROOM_FOUND room=\(activeRoom)")
+        } else {
+            print("MATE_ROOM_NOT_FOUND")
+        }
     }
 
     func createInviteCode() {
