@@ -3,7 +3,7 @@ import Combine
 import UserNotifications
 
 enum MatchCelebration: Identifiable, Equatable {
-    case connected(partnerLabel: String, roomId: Int)
+    case connected(message: MatchCelebrationMessage, roomId: Int)
 
     var id: Int {
         switch self {
@@ -113,8 +113,8 @@ final class MateViewModel: ObservableObject {
             return
         }
         lastCelebratedRoomId = room.id
-        let partnerLabel = counterpartLabel(for: room)
-        matchCelebration = .connected(partnerLabel: partnerLabel, roomId: room.id)
+        let message = MatchCelebrationMessageProvider.random()
+        matchCelebration = .connected(message: message, roomId: room.id)
         scheduleMatchNotificationIfAllowed()
     }
 

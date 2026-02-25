@@ -152,20 +152,33 @@ struct MateView: View {
     }
 
     private func toastView(for celebration: MatchCelebration) -> some View {
-        let message: String
+        let message: MatchCelebrationMessage
         switch celebration {
-        case .connected:
-            message = "동행이 시작됐어요 🎉"
+        case .connected(let m, _):
+            message = m
         }
-        return Text(message)
-            .font(.subheadline.weight(.semibold))
-            .padding(.vertical, 10)
-            .padding(.horizontal, 16)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(Color(uiColor: .systemBackground))
-                    .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 4)
-            )
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(message.title)
+                .font(.subheadline.weight(.semibold))
+                .fontDesign(message.isJapaneseOnly ? .serif : .default)
+            HStack(spacing: 6) {
+                Text(message.subtitle)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fontDesign(message.isJapaneseOnly ? .serif : .default)
+                if message.isJapaneseOnly {
+                    Text("🌸")
+                        .font(.footnote)
+                }
+            }
+        }
+        .padding(.vertical, 10)
+        .padding(.horizontal, 16)
+        .background(
+            Capsule(style: .continuous)
+                .fill(Color(uiColor: .systemBackground))
+                .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 4)
+        )
     }
 }
 
