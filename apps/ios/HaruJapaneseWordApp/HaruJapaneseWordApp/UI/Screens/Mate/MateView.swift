@@ -1,7 +1,9 @@
 import SwiftUI
+import UIKit
 
 struct MateView: View {
     @StateObject private var viewModel: MateViewModel
+    @State private var cardAppear: Bool = false
 
     init(viewModel: MateViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -26,6 +28,24 @@ struct MateView: View {
         .onAppear {
             viewModel.load()
         }
+        .onChange(of: viewModel.matchCelebration) { celebration in
+            guard celebration != nil else { return }
+            let feedback = UINotificationFeedbackGenerator()
+            feedback.notificationOccurred(.success)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    viewModel.matchCelebration = nil
+                }
+            }
+        }
+        .overlay(alignment: .top) {
+            if let celebration = viewModel.matchCelebration {
+                toastView(for: celebration)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .padding(.top, 12)
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: viewModel.matchCelebration?.id ?? -1)
         .alert("안내", isPresented: $viewModel.isShowingAlert) {
             Button("확인", role: .cancel) { }
         } message: {
@@ -114,6 +134,38 @@ struct MateView: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(Color(uiColor: .secondarySystemBackground))
         )
+        .scaleEffect(cardAppear ? 1.0 : 0.96)
+        .opacity(cardAppear ? 1.0 : 0.0)
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: cardAppear)
+        .onAppear {
+            cardAppear = true
+        }
+        .onDisappear {
+            cardAppear = false
+        }
+        .onChange(of: room.id) { _ in
+            cardAppear = false
+            DispatchQueue.main.async {
+                cardAppear = true
+            }
+        }
+    }
+
+    private func toastView(for celebration: MatchCelebration) -> some View {
+        let message: String
+        switch celebration {
+        case .connected:
+            message = "동행이 시작됐어요 🎉"
+        }
+        return Text(message)
+            .font(.subheadline.weight(.semibold))
+            .padding(.vertical, 10)
+            .padding(.horizontal, 16)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color(uiColor: .systemBackground))
+                    .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 4)
+            )
     }
 }
 
