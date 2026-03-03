@@ -42,6 +42,32 @@ final class SQLiteMateRepository {
         return nil
     }
 
+    func fetchActiveRooms(for userId: String) -> [MateRoom] {
+        do {
+            let db = try SQLiteDB(path: dbPath, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
+            defer { db.close() }
+            let sql = """
+            SELECT id, user_a_id, user_b_id, invite_code, created_at, last_interaction_at, is_active
+            FROM mate_room
+            WHERE is_active = 1 AND (user_a_id = ? OR user_b_id = ?)
+            ORDER BY id DESC;
+            """
+            let stmt = try db.prepare(sql)
+            defer { db.finalize(stmt) }
+            try db.bind(userId, to: 1, in: stmt)
+            try db.bind(userId, to: 2, in: stmt)
+
+            var rooms: [MateRoom] = []
+            while try db.step(stmt) {
+                rooms.append(Self.readRoom(from: stmt))
+            }
+            return rooms
+        } catch {
+            print("[SQLiteMateRepository] fetchActiveRooms failed: \(error)")
+            return []
+        }
+    }
+
     func createInviteCode(for userId: String, now: Date = Date()) -> String {
         if let room = fetchActiveRoom(for: userId) {
             return room.inviteCode

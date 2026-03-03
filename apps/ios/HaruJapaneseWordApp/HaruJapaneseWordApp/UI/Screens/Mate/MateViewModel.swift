@@ -13,23 +13,43 @@ enum MatchCelebration: Identifiable, Equatable {
     }
 }
 
+struct MateRoomCardItem: Identifiable, Equatable {
+    let id: Int
+    let room: MateRoom
+    let counterpartLabel: String
+    let lastInteractionText: String
+    let jlptLevel: JLPTLevel?
+    let extraInfoText: String
+}
+
 @MainActor
 final class MateViewModel: ObservableObject {
-    @Published private(set) var activeRoom: MateRoom?
+    static let maxMateCount: Int = 4
+
+    @Published private(set) var activeRooms: [MateRoom] = []
+    @Published private(set) var connectedRoomCards: [MateRoomCardItem] = []
     @Published var inviteCode: String = ""
     @Published var inputInviteCode: String = ""
+    @Published var inviteSectionErrorMessage: String?
+    @Published private(set) var isBusy: Bool = false
     @Published var alertMessage: String = ""
     @Published var isShowingAlert: Bool = false
     @Published var matchCelebration: MatchCelebration?
 
     private let service: MateService
     private let settingsStore: AppSettingsStore
+    private let userMetaProvider: MateUserMetaProvider
     private var cancellables: Set<AnyCancellable> = []
-    private var lastCelebratedRoomId: Int?
+    private var celebratedRoomIds: Set<Int> = []
 
-    init(service: MateService, settingsStore: AppSettingsStore) {
+    init(
+        service: MateService,
+        settingsStore: AppSettingsStore,
+        userMetaProvider: MateUserMetaProvider = DevMateUserMetaProvider()
+    ) {
         self.service = service
         self.settingsStore = settingsStore
+        self.userMetaProvider = userMetaProvider
 
         settingsStore.$settings
             .receive(on: RunLoop.main)
@@ -39,83 +59,130 @@ final class MateViewModel: ObservableObject {
             .store(in: &cancellables)
     }
 
+    var connectedMateCount: Int {
+        connectedRoomCards.count
+    }
+
+    var canAddNewMate: Bool {
+        connectedMateCount < Self.maxMateCount
+    }
+
     func load() {
         service.cleanupIfNeeded()
         let userId = settingsStore.mateUserId
         if userId.isEmpty {
-            print("MATE_VM_REFRESH_EMPTY_USERID")
+            activeRooms = []
+            connectedRoomCards = []
+            inviteCode = ""
             return
         }
-        print("MATE_VM_REFRESH userId=\(userId)")
-        let previousRoom = activeRoom
-        activeRoom = service.loadActiveRoom()
-        inviteCode = activeRoom?.inviteCode ?? ""
-        if let activeRoom {
-            print("MATE_ROOM_FOUND room=\(activeRoom)")
-            triggerCelebrationIfNeeded(room: activeRoom, previousRoom: previousRoom)
-        } else {
-            print("MATE_ROOM_NOT_FOUND")
+
+        let previousActiveRooms = activeRooms
+        activeRooms = service.loadActiveRooms()
+        inviteCode = activeRooms.first?.inviteCode ?? ""
+        connectedRoomCards = makeConnectedRoomCards(from: activeRooms, myUserId: userId)
+
+        for room in activeRooms where room.hasMate {
+            let previousRoom = previousActiveRooms.first(where: { $0.id == room.id })
+            triggerCelebrationIfNeeded(room: room, previousRoom: previousRoom)
         }
     }
 
     func createInviteCode() {
+        guard canAddNewMate else {
+            inviteSectionErrorMessage = "동행은 최대 \(Self.maxMateCount)명까지 가능해요"
+            return
+        }
+        print("MATE_ACTION_CREATE_INVITE")
+        isBusy = true
+        defer { isBusy = false }
+        inviteSectionErrorMessage = nil
         inviteCode = service.createInviteCode()
-        activeRoom = service.loadActiveRoom()
+        load()
     }
 
     func joinByInviteCode() {
-        let trimmed = inputInviteCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        guard trimmed.isEmpty == false else {
-            showAlert("초대 코드를 입력해 주세요.")
+        joinByInviteCode(inputInviteCode)
+    }
+
+    func joinByInviteCode(_ inviteCode: String) {
+        guard canAddNewMate else {
+            inviteSectionErrorMessage = "동행은 최대 \(Self.maxMateCount)명까지 가능해요"
             return
         }
+        let trimmed = inviteCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard trimmed.isEmpty == false else {
+            inviteSectionErrorMessage = "초대 코드를 입력해 주세요."
+            return
+        }
+        print("MATE_ACTION_JOIN_INVITE code=\(trimmed)")
+        isBusy = true
+        defer { isBusy = false }
+        inviteSectionErrorMessage = nil
         do {
             let room = try service.joinByInviteCode(trimmed)
-            triggerCelebrationIfNeeded(room: room, previousRoom: activeRoom)
+            let previousRoom = activeRooms.first(where: { $0.id == room.id })
+            triggerCelebrationIfNeeded(room: room, previousRoom: previousRoom)
             inputInviteCode = ""
             load()
         } catch {
-            showAlert("초대 코드에 참여하지 못했어요.")
+            inviteSectionErrorMessage = "초대 코드에 참여하지 못했어요."
         }
     }
 
-    func endRoom() {
-        guard let room = activeRoom else { return }
-        service.endRoom(roomId: room.id, reason: "user_end")
+    func endRoom(roomId: Int) {
+        print("MATE_ACTION_END_ROOM roomId=\(roomId)")
+        isBusy = true
+        defer { isBusy = false }
+        service.endRoom(roomId: roomId, reason: "user_end")
         load()
     }
 
     func counterpartLabel(for room: MateRoom) -> String {
-        let myId = settingsStore.mateUserId
-        let otherId = (room.userAId == myId) ? room.userBId : room.userAId
-        if otherId.hasPrefix("DEV-"), let suffix = otherId.split(separator: "-").last {
+        let otherId = counterpartUserId(for: room)
+        if otherId.hasPrefix("DEV-"), let suffix = otherId.split(separator: "-").last, suffix.isEmpty == false {
             return String(suffix)
         }
         return otherId.isEmpty ? "대기중" : otherId
     }
 
-    func lastInteractionDescription(now: Date = Date()) -> String {
-        guard let room = activeRoom else { return "-" }
+    func lastInteractionDescription(for room: MateRoom, now: Date = Date()) -> String {
         let days = service.daysSinceLastInteraction(room: room, now: now)
         if days <= 0 { return "오늘" }
         return "\(days)일 전"
     }
 
-    private func showAlert(_ message: String) {
-        alertMessage = message
-        isShowingAlert = true
-    }
-
     private func triggerCelebrationIfNeeded(room: MateRoom, previousRoom: MateRoom?) {
         guard room.isActive, room.hasMate else { return }
-        guard lastCelebratedRoomId != room.id else { return }
+        guard celebratedRoomIds.contains(room.id) == false else { return }
         if let previousRoom, previousRoom.id == room.id, previousRoom.hasMate {
             return
         }
-        lastCelebratedRoomId = room.id
+        celebratedRoomIds.insert(room.id)
         let message = MatchCelebrationMessageProvider.random()
         matchCelebration = .connected(message: message, roomId: room.id)
         scheduleMatchNotificationIfAllowed()
+    }
+
+    private func counterpartUserId(for room: MateRoom) -> String {
+        let myUserId = settingsStore.mateUserId
+        return room.userAId != myUserId ? room.userAId : room.userBId
+    }
+
+    private func makeConnectedRoomCards(from rooms: [MateRoom], myUserId: String) -> [MateRoomCardItem] {
+        rooms
+            .filter { $0.hasMate }
+            .map { room in
+                let otherId = room.userAId != myUserId ? room.userAId : room.userBId
+                return MateRoomCardItem(
+                    id: room.id,
+                    room: room,
+                    counterpartLabel: counterpartLabel(for: room),
+                    lastInteractionText: lastInteractionDescription(for: room),
+                    jlptLevel: userMetaProvider.jlptLevel(for: otherId),
+                    extraInfoText: "기록 준비중"
+                )
+            }
     }
 
     private func scheduleMatchNotificationIfAllowed() {

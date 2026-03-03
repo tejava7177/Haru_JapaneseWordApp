@@ -3,7 +3,7 @@ import UIKit
 
 struct MateView: View {
     @StateObject private var viewModel: MateViewModel
-    @State private var cardAppear: Bool = false
+    @State private var isInviteSectionExpanded: Bool = false
 
     init(viewModel: MateViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -13,10 +13,28 @@ struct MateView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    if let room = viewModel.activeRoom, room.hasMate {
-                        activeRoomSection(room: room)
+                    if viewModel.connectedRoomCards.isEmpty {
+                        emptyMateSection
                     } else {
-                        inviteSection
+                        myMateSection
+                    }
+
+                    addMateButtonSection
+
+                    if isInviteSectionExpanded {
+                        InviteSectionView(
+                            myInviteCode: viewModel.inviteCode,
+                            inviteCodeInput: $viewModel.inputInviteCode,
+                            onCreateInviteCode: {
+                                viewModel.createInviteCode()
+                            },
+                            onJoin: { inviteCode in
+                                viewModel.joinByInviteCode(inviteCode)
+                            },
+                            isBusy: viewModel.isBusy,
+                            errorMessage: viewModel.inviteSectionErrorMessage
+                        )
+                        .transition(.move(edge: .top).combined(with: .opacity))
                     }
                 }
                 .padding(.horizontal, 16)
@@ -27,6 +45,14 @@ struct MateView: View {
         }
         .onAppear {
             viewModel.load()
+        }
+        .onChange(of: viewModel.connectedMateCount) { count in
+            guard count >= MateViewModel.maxMateCount else { return }
+            if isInviteSectionExpanded {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isInviteSectionExpanded = false
+                }
+            }
         }
         .onChange(of: viewModel.matchCelebration) { celebration in
             guard celebration != nil else { return }
@@ -53,100 +79,52 @@ struct MateView: View {
         }
     }
 
-    private var inviteSection: some View {
+    private var myMateSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("초대코드 매칭")
+            Text("내 동행")
                 .font(.headline)
-            Text("초대코드로만 동행을 시작할 수 있어요.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
 
-            if viewModel.inviteCode.isEmpty == false {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("내 초대코드")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    HStack {
-                        Text(viewModel.inviteCode)
-                            .font(.title2)
-                            .fontWeight(.bold)
-                        Spacer()
-                        Button("복사") {
-                            UIPasteboard.general.string = viewModel.inviteCode
-                        }
-                        .buttonStyle(.bordered)
+            LazyVStack(spacing: 12) {
+                ForEach(viewModel.connectedRoomCards) { item in
+                    MateRoomCardView(item: item) {
+                        viewModel.endRoom(roomId: item.room.id)
                     }
                 }
-                .padding(12)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color(uiColor: .secondarySystemBackground))
-                )
             }
-
-            Button("초대코드 만들기") {
-                viewModel.createInviteCode()
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.black)
-
-            VStack(alignment: .leading, spacing: 8) {
-                TextField("초대 코드 입력", text: $viewModel.inputInviteCode)
-                    .textInputAutocapitalization(.characters)
-                    .textFieldStyle(.roundedBorder)
-                Button("동행 시작") {
-                    viewModel.joinByInviteCode()
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.black)
-            }
-            .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(uiColor: .secondarySystemBackground))
-            )
         }
     }
 
-    private func activeRoomSection(room: MateRoom) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("연결됨")
+    private var emptyMateSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("내 동행")
                 .font(.headline)
-            Text("상대: \(viewModel.counterpartLabel(for: room))")
+            Text("아직 동행이 없어요. 초대코드로 시작해보세요.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            Text("최근 콕: \(viewModel.lastInteractionDescription())")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        }
+    }
 
-            Button("콕 찌르기 (준비중)") {}
-                .buttonStyle(.borderedProminent)
-                .tint(.black)
-                .disabled(true)
-
-            Button("동행 종료") {
-                viewModel.endRoom()
+    private var addMateButtonSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                guard viewModel.canAddNewMate else { return }
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isInviteSectionExpanded.toggle()
+                }
+            } label: {
+                HStack {
+                    Image(systemName: isInviteSectionExpanded ? "chevron.up" : "plus")
+                    Text(isInviteSectionExpanded ? "새 동행 추가 접기" : "새 동행 추가")
+                }
+                .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
-        }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color(uiColor: .secondarySystemBackground))
-        )
-        .scaleEffect(cardAppear ? 1.0 : 0.96)
-        .opacity(cardAppear ? 1.0 : 0.0)
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: cardAppear)
-        .onAppear {
-            cardAppear = true
-        }
-        .onDisappear {
-            cardAppear = false
-        }
-        .onChange(of: room.id) { _ in
-            cardAppear = false
-            DispatchQueue.main.async {
-                cardAppear = true
+            .disabled(viewModel.canAddNewMate == false)
+
+            if viewModel.canAddNewMate == false {
+                Text("동행은 최대 4명까지 가능해요")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
     }

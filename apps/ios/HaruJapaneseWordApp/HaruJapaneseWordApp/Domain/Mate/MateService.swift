@@ -20,6 +20,10 @@ final class MateService {
         repository.fetchActiveRoom(for: appUserIdProvider())
     }
 
+    func loadActiveRooms() -> [MateRoom] {
+        repository.fetchActiveRooms(for: appUserIdProvider())
+    }
+
     func createInviteCode() -> String {
         repository.createInviteCode(for: appUserIdProvider())
     }
