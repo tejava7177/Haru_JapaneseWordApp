@@ -44,7 +44,10 @@ struct MateView: View {
             .navigationTitle("Mate")
         }
         .onAppear {
-            viewModel.load()
+            viewModel.onViewAppear()
+        }
+        .onDisappear {
+            viewModel.onViewDisappear()
         }
         .onChange(of: viewModel.connectedMateCount) { count in
             guard count >= MateViewModel.maxMateCount else { return }
@@ -86,9 +89,16 @@ struct MateView: View {
 
             LazyVStack(spacing: 12) {
                 ForEach(viewModel.connectedRoomCards) { item in
-                    MateRoomCardView(item: item) {
+                    MateRoomCardView(
+                        item: item,
+                        isBusy: viewModel.isBusy,
+                        onSendPoke: {
+                            viewModel.sendPoke()
+                        },
+                        onEndRoom: {
                         viewModel.endRoom(roomId: item.room.id)
-                    }
+                        }
+                    )
                 }
             }
         }

@@ -20,6 +20,8 @@ struct MateRoomCardItem: Identifiable, Equatable {
     let lastInteractionText: String
     let jlptLevel: JLPTLevel?
     let extraInfoText: String
+    let canSendPokeToday: Bool
+    let pokeStatusText: String?
 }
 
 @MainActor
@@ -35,12 +37,17 @@ final class MateViewModel: ObservableObject {
     @Published var alertMessage: String = ""
     @Published var isShowingAlert: Bool = false
     @Published var matchCelebration: MatchCelebration?
+    @Published var latestPoke: MatePoke?
+    @Published var canSendPokeToday: Bool = true
+    @Published var pokeStatusText: String?
 
     private let service: MateService
     private let settingsStore: AppSettingsStore
     private let userMetaProvider: MateUserMetaProvider
     private var cancellables: Set<AnyCancellable> = []
     private var celebratedRoomIds: Set<Int> = []
+    private var pollTask: Task<Void, Never>?
+    private var isViewVisible: Bool = false
 
     init(
         service: MateService,
@@ -59,12 +66,27 @@ final class MateViewModel: ObservableObject {
             .store(in: &cancellables)
     }
 
+    deinit {
+        pollTask?.cancel()
+    }
+
     var connectedMateCount: Int {
         connectedRoomCards.count
     }
 
     var canAddNewMate: Bool {
         connectedMateCount < Self.maxMateCount
+    }
+
+    func onViewAppear() {
+        isViewVisible = true
+        load()
+        startPokePollingIfNeeded()
+    }
+
+    func onViewDisappear() {
+        isViewVisible = false
+        stopPokePolling()
     }
 
     func load() {
@@ -74,17 +96,29 @@ final class MateViewModel: ObservableObject {
             activeRooms = []
             connectedRoomCards = []
             inviteCode = ""
+            latestPoke = nil
+            canSendPokeToday = false
+            pokeStatusText = nil
+            stopPokePolling()
             return
         }
 
         let previousActiveRooms = activeRooms
         activeRooms = service.loadActiveRooms()
         inviteCode = activeRooms.first?.inviteCode ?? ""
-        connectedRoomCards = makeConnectedRoomCards(from: activeRooms, myUserId: userId)
+        rebuildConnectedCards(myUserId: userId)
 
         for room in activeRooms where room.hasMate {
             let previousRoom = previousActiveRooms.first(where: { $0.id == room.id })
             triggerCelebrationIfNeeded(room: room, previousRoom: previousRoom)
+        }
+
+        Task {
+            await refreshPokeState(shouldLogPollUpdate: false)
+        }
+
+        if isViewVisible {
+            startPokePollingIfNeeded()
         }
     }
 
@@ -138,18 +172,49 @@ final class MateViewModel: ObservableObject {
         load()
     }
 
+    func sendPoke() {
+        guard isBusy == false else { return }
+        let currentUserId = settingsStore.mateUserId
+        guard currentUserId.isEmpty == false else { return }
+
+        if let roomId = activeRooms.first(where: { $0.hasMate })?.id {
+            print("[MatePoke] send start user=\(currentUserId) room=\(roomId)")
+        }
+
+        isBusy = true
+        Task {
+            let result = await service.sendPoke(currentUserId: currentUserId)
+            await MainActor.run {
+                isBusy = false
+                switch result {
+                case .success(let poke):
+                    print("[MatePoke] send ok pokeId=\(poke.id ?? -1) createdAt=\(Int(poke.createdAt.timeIntervalSince1970))")
+                    latestPoke = poke
+                    canSendPokeToday = false
+                    pokeStatusText = "오늘 콕 완료"
+                    updateLastInteraction(roomId: poke.roomId, at: poke.createdAt)
+                    rebuildConnectedCards(myUserId: currentUserId)
+                case .failure(let error):
+                    if isAlreadyPokedToday(error) {
+                        print("[MatePoke] send blocked alreadyPokedToday")
+                        canSendPokeToday = false
+                        pokeStatusText = "오늘 콕 완료"
+                        rebuildConnectedCards(myUserId: currentUserId)
+                    } else {
+                        alertMessage = "콕 전송에 실패했어요."
+                        isShowingAlert = true
+                    }
+                }
+            }
+        }
+    }
+
     func counterpartLabel(for room: MateRoom) -> String {
         let otherId = counterpartUserId(for: room)
         if otherId.hasPrefix("DEV-"), let suffix = otherId.split(separator: "-").last, suffix.isEmpty == false {
             return String(suffix)
         }
         return otherId.isEmpty ? "대기중" : otherId
-    }
-
-    func lastInteractionDescription(for room: MateRoom, now: Date = Date()) -> String {
-        let days = service.daysSinceLastInteraction(room: room, now: now)
-        if days <= 0 { return "오늘" }
-        return "\(days)일 전"
     }
 
     private func triggerCelebrationIfNeeded(room: MateRoom, previousRoom: MateRoom?) {
@@ -169,20 +234,111 @@ final class MateViewModel: ObservableObject {
         return room.userAId != myUserId ? room.userAId : room.userBId
     }
 
-    private func makeConnectedRoomCards(from rooms: [MateRoom], myUserId: String) -> [MateRoomCardItem] {
-        rooms
+    private func startPokePollingIfNeeded() {
+        guard pollTask == nil else { return }
+        guard activeRooms.contains(where: { $0.hasMate }) else { return }
+        pollTask = Task { [weak self] in
+            while Task.isCancelled == false {
+                try? await Task.sleep(nanoseconds: 2_500_000_000)
+                guard Task.isCancelled == false else { break }
+                await self?.refreshPokeState(shouldLogPollUpdate: true)
+            }
+        }
+    }
+
+    private func stopPokePolling() {
+        pollTask?.cancel()
+        pollTask = nil
+    }
+
+    private func refreshPokeState(shouldLogPollUpdate: Bool) async {
+        let currentUserId = settingsStore.mateUserId
+        guard currentUserId.isEmpty == false else { return }
+
+        let previousLatest = latestPoke
+        let refreshedRoom = await service.refreshRoom()
+        if let refreshedRoom {
+            updateLastInteraction(roomId: refreshedRoom.id, at: refreshedRoom.lastInteractionAt)
+        }
+
+        let fetchedLatest = await service.fetchLatestPoke()
+        let fetchedCanSend = await service.canSendPokeToday(currentUserId: currentUserId)
+
+        latestPoke = fetchedLatest
+        canSendPokeToday = fetchedCanSend
+        pokeStatusText = fetchedCanSend ? nil : "오늘 콕 완료"
+        rebuildConnectedCards(myUserId: currentUserId)
+
+        if shouldLogPollUpdate,
+           let fetchedLatest,
+           hasPokeChanged(previous: previousLatest, next: fetchedLatest) {
+            print("[MatePoke] poll updated latestPokeAt=\(Int(fetchedLatest.createdAt.timeIntervalSince1970))")
+        }
+    }
+
+    private func hasPokeChanged(previous: MatePoke?, next: MatePoke) -> Bool {
+        if let previous {
+            return previous.id != next.id || previous.createdAt != next.createdAt
+        }
+        return true
+    }
+
+    private func interactionDate(for room: MateRoom) -> Date {
+        if let latestPoke, latestPoke.roomId == room.id {
+            return latestPoke.createdAt
+        }
+        return room.lastInteractionAt
+    }
+
+    private func rebuildConnectedCards(myUserId: String) {
+        connectedRoomCards = activeRooms
             .filter { $0.hasMate }
             .map { room in
                 let otherId = room.userAId != myUserId ? room.userAId : room.userBId
+                let interactionDate = interactionDate(for: room)
                 return MateRoomCardItem(
                     id: room.id,
                     room: room,
                     counterpartLabel: counterpartLabel(for: room),
-                    lastInteractionText: lastInteractionDescription(for: room),
+                    lastInteractionText: lastInteractionDescription(interactionDate: interactionDate),
                     jlptLevel: userMetaProvider.jlptLevel(for: otherId),
-                    extraInfoText: "기록 준비중"
+                    extraInfoText: "기록 준비중",
+                    canSendPokeToday: canSendPokeToday,
+                    pokeStatusText: pokeStatusText
                 )
             }
+    }
+
+    private func updateLastInteraction(roomId: Int, at date: Date) {
+        activeRooms = activeRooms.map { room in
+            guard room.id == roomId else { return room }
+            return MateRoom(
+                id: room.id,
+                userAId: room.userAId,
+                userBId: room.userBId,
+                inviteCode: room.inviteCode,
+                createdAt: room.createdAt,
+                lastInteractionAt: date,
+                isActive: room.isActive
+            )
+        }
+    }
+
+    private func lastInteractionDescription(interactionDate: Date, now: Date = Date()) -> String {
+        let days = DateKey.daysBetweenKST(from: interactionDate, to: now)
+        if days <= 0 { return "오늘" }
+        return "\(days)일 전"
+    }
+
+    private func isAlreadyPokedToday(_ error: Error) -> Bool {
+        if let pokeError = error as? MatePokeError, pokeError == .alreadyPokedToday {
+            return true
+        }
+        if let repositoryError = error as? SQLiteMateRepository.MateRepositoryError,
+           repositoryError == .alreadyPokedToday {
+            return true
+        }
+        return false
     }
 
     private func scheduleMatchNotificationIfAllowed() {

@@ -1,14 +1,14 @@
 import Foundation
 import SQLite3
 
-final class SQLiteMateRepository {
+final class SQLiteMateRepository: MateRepositoryProtocol {
     enum MateRepositoryError: Error {
         case roomAlreadyExists
         case invalidInviteCode
         case roomAlreadyMatched
         case cannotJoinOwnInvite
         case senderNotInRoom
-        case cannotSendPoke
+        case alreadyPokedToday
     }
 
     private let dbPath: String
@@ -68,7 +68,7 @@ final class SQLiteMateRepository {
         }
     }
 
-    func createInviteCode(for userId: String, now: Date = Date()) -> String {
+    func createInviteCode(for userId: String, now: Date) -> String {
         if let room = fetchActiveRoom(for: userId) {
             return room.inviteCode
         }
@@ -95,7 +95,7 @@ final class SQLiteMateRepository {
         return inviteCode
     }
 
-    func joinByInviteCode(inviteCode: String, joinerId: String, now: Date = Date()) throws -> MateRoom {
+    func joinByInviteCode(inviteCode: String, joinerId: String, now: Date) throws -> MateRoom {
         if fetchActiveRoom(for: joinerId) != nil {
             throw MateRepositoryError.roomAlreadyExists
         }
@@ -152,158 +152,122 @@ final class SQLiteMateRepository {
         }
     }
 
-    func canSendPoke(room: MateRoom, senderId: String, todayKey: String) -> Bool {
-        do {
-            let db = try SQLiteDB(path: dbPath, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
-            defer { db.close() }
-            let pendingSql = """
-            SELECT COUNT(*)
-            FROM mate_poke
-            WHERE room_id = ? AND sender_id = ? AND consumed_at IS NULL;
-            """
-            let pendingStmt = try db.prepare(pendingSql)
-            defer { db.finalize(pendingStmt) }
-            try db.bind(room.id, to: 1, in: pendingStmt)
-            try db.bind(senderId, to: 2, in: pendingStmt)
-            if try db.step(pendingStmt) {
-                let count = SQLiteDB.columnInt(pendingStmt, 0)
-                if count > 0 {
-                    return false
-                }
-            }
-
-            let dailySql = """
-            SELECT COUNT(*)
-            FROM mate_poke
-            WHERE room_id = ? AND sender_id = ? AND date_key_kst = ?;
-            """
-            let dailyStmt = try db.prepare(dailySql)
-            defer { db.finalize(dailyStmt) }
-            try db.bind(room.id, to: 1, in: dailyStmt)
-            try db.bind(senderId, to: 2, in: dailyStmt)
-            try db.bind(todayKey, to: 3, in: dailyStmt)
-            if try db.step(dailyStmt) {
-                let count = SQLiteDB.columnInt(dailyStmt, 0)
-                if count > 0 {
-                    return false
-                }
-            }
-        } catch {
-            print("[SQLiteMateRepository] canSendPoke failed: \(error)")
-        }
-        return true
+    func fetchRoomForUser(userId: String) throws -> MateRoom? {
+        fetchActiveRoom(for: userId)
     }
 
-    func sendPoke(roomId: Int, senderId: String, wordId: Int, now: Date, todayKey: String) throws {
+    func hasSentPokeToday(roomId: Int, fromUserId: String, now: Date) throws -> Bool {
+        let range = dayEpochRange(for: now)
+        let db = try SQLiteDB(path: dbPath, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
+        defer { db.close() }
+        return try hasSentPokeToday(
+            in: db,
+            roomId: roomId,
+            fromUserId: fromUserId,
+            startEpoch: range.start,
+            endEpoch: range.end
+        )
+    }
+
+    func sendPoke(roomId: Int, fromUserId: String, now: Date) throws -> MatePoke {
         guard let room = fetchRoomById(roomId) else {
-            throw MateRepositoryError.senderNotInRoom
+            throw MatePokeError.senderNotInRoom
         }
-        let receiverId: String
-        if room.userAId == senderId {
-            receiverId = room.userBId
-        } else if room.userBId == senderId {
-            receiverId = room.userAId
+        let toUserId: String
+        if room.userAId == fromUserId {
+            toUserId = room.userBId
+        } else if room.userBId == fromUserId {
+            toUserId = room.userAId
         } else {
-            throw MateRepositoryError.senderNotInRoom
+            throw MatePokeError.senderNotInRoom
         }
-        if canSendPoke(room: room, senderId: senderId, todayKey: todayKey) == false {
-            throw MateRepositoryError.cannotSendPoke
+        guard toUserId.isEmpty == false else {
+            throw MatePokeError.senderNotInRoom
         }
+
         let nowEpoch = Int(now.timeIntervalSince1970)
-        do {
-            let db = try SQLiteDB(path: dbPath, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
-            defer { db.close() }
-            let sql = """
-            INSERT INTO mate_poke (room_id, sender_id, receiver_id, word_id, created_at, date_key_kst, consumed_at)
-            VALUES (?, ?, ?, ?, ?, ?, NULL);
-            """
-            let stmt = try db.prepare(sql)
-            defer { db.finalize(stmt) }
-            try db.bind(roomId, to: 1, in: stmt)
-            try db.bind(senderId, to: 2, in: stmt)
-            try db.bind(receiverId, to: 3, in: stmt)
-            try db.bind(wordId, to: 4, in: stmt)
-            try db.bind(nowEpoch, to: 5, in: stmt)
-            try db.bind(todayKey, to: 6, in: stmt)
-            _ = try db.step(stmt)
-        } catch {
-            print("[SQLiteMateRepository] sendPoke failed: \(error)")
-        }
-        touchLastInteraction(roomId: roomId, at: now)
-    }
+        let range = dayEpochRange(for: now)
+        let db = try SQLiteDB(path: dbPath, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
+        defer { db.close() }
 
-    func fetchInboxPokes(userId: String) -> [MatePoke] {
-        do {
-            let db = try SQLiteDB(path: dbPath, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
-            defer { db.close() }
-            let sql = """
-            SELECT id, room_id, sender_id, receiver_id, word_id, created_at, date_key_kst, consumed_at
-            FROM mate_poke
-            WHERE receiver_id = ? AND consumed_at IS NULL
-            ORDER BY created_at DESC;
-            """
-            let stmt = try db.prepare(sql)
-            defer { db.finalize(stmt) }
-            try db.bind(userId, to: 1, in: stmt)
-            var result: [MatePoke] = []
-            while try db.step(stmt) {
-                let id = SQLiteDB.columnInt(stmt, 0)
-                let roomId = SQLiteDB.columnInt(stmt, 1)
-                let senderId = SQLiteDB.columnText(stmt, 2) ?? ""
-                let receiverId = SQLiteDB.columnText(stmt, 3) ?? ""
-                let wordId = SQLiteDB.columnInt(stmt, 4)
-                let createdAt = Date(timeIntervalSince1970: TimeInterval(SQLiteDB.columnInt(stmt, 5)))
-                let dateKey = SQLiteDB.columnText(stmt, 6) ?? ""
-                let consumedEpoch = SQLiteDB.columnInt(stmt, 7)
-                let consumedAt = consumedEpoch > 0 ? Date(timeIntervalSince1970: TimeInterval(consumedEpoch)) : nil
-                result.append(
-                    MatePoke(
-                        id: id,
-                        roomId: roomId,
-                        senderId: senderId,
-                        receiverId: receiverId,
-                        wordId: wordId,
-                        createdAt: createdAt,
-                        dateKeyKST: dateKey,
-                        consumedAt: consumedAt
-                    )
-                )
+        guard let handle = db.rawHandle else { throw MatePokeError.noActiveRoom }
+        if sqlite3_exec(handle, "BEGIN IMMEDIATE TRANSACTION", nil, nil, nil) != SQLITE_OK {
+            throw SQLiteDB.SQLiteError.stepFailed(message: SQLiteDB.errorMessage(from: handle))
+        }
+        var committed = false
+        defer {
+            if committed == false {
+                _ = sqlite3_exec(handle, "ROLLBACK", nil, nil, nil)
             }
-            return result
-        } catch {
-            print("[SQLiteMateRepository] fetchInboxPokes failed: \(error)")
-            return []
         }
+
+        let alreadySent = try hasSentPokeToday(
+            in: db,
+            roomId: roomId,
+            fromUserId: fromUserId,
+            startEpoch: range.start,
+            endEpoch: range.end
+        )
+        if alreadySent {
+            throw MatePokeError.alreadyPokedToday
+        }
+
+        let insertSql = """
+        INSERT INTO mate_poke (room_id, from_user_id, to_user_id, created_at)
+        VALUES (?, ?, ?, ?);
+        """
+        let insertStmt = try db.prepare(insertSql)
+        defer { db.finalize(insertStmt) }
+        try db.bind(roomId, to: 1, in: insertStmt)
+        try db.bind(fromUserId, to: 2, in: insertStmt)
+        try db.bind(toUserId, to: 3, in: insertStmt)
+        try db.bind(nowEpoch, to: 4, in: insertStmt)
+        _ = try db.step(insertStmt)
+
+        let touchSql = "UPDATE mate_room SET last_interaction_at = ? WHERE id = ?;"
+        let touchStmt = try db.prepare(touchSql)
+        defer { db.finalize(touchStmt) }
+        try db.bind(nowEpoch, to: 1, in: touchStmt)
+        try db.bind(roomId, to: 2, in: touchStmt)
+        _ = try db.step(touchStmt)
+
+        if sqlite3_exec(handle, "COMMIT", nil, nil, nil) != SQLITE_OK {
+            throw SQLiteDB.SQLiteError.stepFailed(message: SQLiteDB.errorMessage(from: handle))
+        }
+        committed = true
+
+        let pokeId = Int(sqlite3_last_insert_rowid(handle))
+        return MatePoke(id: pokeId, roomId: roomId, fromUserId: fromUserId, toUserId: toUserId, createdAt: now)
     }
 
-    func markPokeConsumed(pokeId: Int, consumedAt: Date) {
-        do {
-            let db = try SQLiteDB(path: dbPath, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
-            defer { db.close() }
-            let sql = "UPDATE mate_poke SET consumed_at = ? WHERE id = ?;"
-            let stmt = try db.prepare(sql)
-            defer { db.finalize(stmt) }
-            try db.bind(Int(consumedAt.timeIntervalSince1970), to: 1, in: stmt)
-            try db.bind(pokeId, to: 2, in: stmt)
-            _ = try db.step(stmt)
-        } catch {
-            print("[SQLiteMateRepository] markPokeConsumed failed: \(error)")
+    func fetchLatestPoke(roomId: Int) throws -> MatePoke? {
+        let db = try SQLiteDB(path: dbPath, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
+        defer { db.close() }
+        let sql = """
+        SELECT id, room_id, from_user_id, to_user_id, created_at
+        FROM mate_poke
+        WHERE room_id = ?
+        ORDER BY created_at DESC
+        LIMIT 1;
+        """
+        let stmt = try db.prepare(sql)
+        defer { db.finalize(stmt) }
+        try db.bind(roomId, to: 1, in: stmt)
+        if try db.step(stmt) {
+            return Self.readPoke(from: stmt)
         }
+        return nil
     }
 
-    func touchLastInteraction(roomId: Int, at: Date) {
-        do {
-            let db = try SQLiteDB(path: dbPath, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
-            defer { db.close() }
-            let sql = "UPDATE mate_room SET last_interaction_at = ? WHERE id = ?;"
-            let stmt = try db.prepare(sql)
-            defer { db.finalize(stmt) }
-            try db.bind(Int(at.timeIntervalSince1970), to: 1, in: stmt)
-            try db.bind(roomId, to: 2, in: stmt)
-            _ = try db.step(stmt)
-        } catch {
-            print("[SQLiteMateRepository] touchLastInteraction failed: \(error)")
-        }
+    func touchInteraction(roomId: Int, at: Date) throws {
+        let db = try SQLiteDB(path: dbPath, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
+        defer { db.close() }
+        let sql = "UPDATE mate_room SET last_interaction_at = ? WHERE id = ?;"
+        let stmt = try db.prepare(sql)
+        defer { db.finalize(stmt) }
+        try db.bind(Int(at.timeIntervalSince1970), to: 1, in: stmt)
+        try db.bind(roomId, to: 2, in: stmt)
+        _ = try db.step(stmt)
     }
 
     func cleanupExpiredRooms(now: Date) {
@@ -406,7 +370,7 @@ final class SQLiteMateRepository {
                 user_a_id TEXT NOT NULL,
                 user_b_id TEXT NOT NULL,
                 invite_code TEXT NOT NULL UNIQUE,
-                created_at TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
                 last_poke_at TEXT NULL,
                 ended_at TEXT NULL,
                 last_interaction_at INTEGER NOT NULL,
@@ -421,12 +385,9 @@ final class SQLiteMateRepository {
             CREATE TABLE IF NOT EXISTS mate_poke (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 room_id INTEGER NOT NULL,
-                sender_id TEXT NOT NULL,
-                word_id INTEGER NOT NULL,
-                created_at TEXT NOT NULL,
-                receiver_id TEXT NOT NULL,
-                date_key_kst TEXT NOT NULL,
-                consumed_at INTEGER
+                from_user_id TEXT NOT NULL,
+                to_user_id TEXT NOT NULL,
+                created_at INTEGER NOT NULL
             );
             """
             let pokeStmt = try db.prepare(pokeSql)
@@ -446,28 +407,119 @@ final class SQLiteMateRepository {
             defer { db.finalize(dailyStmt) }
             _ = try db.step(dailyStmt)
 
-            let checkSql = """
-            SELECT name
-            FROM sqlite_master
-            WHERE type='table' AND name IN ('mate_room','mate_poke','mate_daily_status')
-            ORDER BY name;
-            """
-            let checkStmt = try db.prepare(checkSql)
-            defer { db.finalize(checkStmt) }
-            var tables: [String] = []
-            while try db.step(checkStmt) {
-                if let name = SQLiteDB.columnText(checkStmt, 0) {
-                    tables.append(name)
-                }
-            }
-            let hasRoom = tables.contains("mate_room")
-            let hasPoke = tables.contains("mate_poke")
-            let hasDaily = tables.contains("mate_daily_status")
-            print("[SQLiteMateRepository] mate_tables=\(tables)")
-            print("[SQLiteMateRepository] mate_room_exists=\(hasRoom) mate_poke_exists=\(hasPoke) mate_daily_status_exists=\(hasDaily)")
+            try ensureRoomColumns(db)
+            try ensurePokeColumns(db)
+            try ensurePokeIndices(db)
         } catch {
             print("[SQLiteMateRepository] ensureSchema failed: \(error)")
         }
+    }
+
+    private func ensureRoomColumns(_ db: SQLiteDB) throws {
+        let columns = try columnNames(tableName: "mate_room", db: db)
+        guard columns.contains("last_interaction_at") == false else { return }
+        let alterSql = "ALTER TABLE mate_room ADD COLUMN last_interaction_at INTEGER NOT NULL DEFAULT 0;"
+        let alterStmt = try db.prepare(alterSql)
+        defer { db.finalize(alterStmt) }
+        _ = try db.step(alterStmt)
+    }
+
+    private func ensurePokeColumns(_ db: SQLiteDB) throws {
+        var columns = try columnNames(tableName: "mate_poke", db: db)
+
+        if columns.contains("from_user_id") == false {
+            let stmt = try db.prepare("ALTER TABLE mate_poke ADD COLUMN from_user_id TEXT;")
+            defer { db.finalize(stmt) }
+            _ = try db.step(stmt)
+            columns.insert("from_user_id")
+        }
+        if columns.contains("to_user_id") == false {
+            let stmt = try db.prepare("ALTER TABLE mate_poke ADD COLUMN to_user_id TEXT;")
+            defer { db.finalize(stmt) }
+            _ = try db.step(stmt)
+            columns.insert("to_user_id")
+        }
+        if columns.contains("created_at") == false {
+            let stmt = try db.prepare("ALTER TABLE mate_poke ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0;")
+            defer { db.finalize(stmt) }
+            _ = try db.step(stmt)
+            columns.insert("created_at")
+        }
+
+        if columns.contains("sender_id") {
+            let stmt = try db.prepare(
+                "UPDATE mate_poke SET from_user_id = COALESCE(from_user_id, sender_id) WHERE from_user_id IS NULL OR from_user_id = '';"
+            )
+            defer { db.finalize(stmt) }
+            _ = try db.step(stmt)
+        }
+        if columns.contains("receiver_id") {
+            let stmt = try db.prepare(
+                "UPDATE mate_poke SET to_user_id = COALESCE(to_user_id, receiver_id) WHERE to_user_id IS NULL OR to_user_id = '';"
+            )
+            defer { db.finalize(stmt) }
+            _ = try db.step(stmt)
+        }
+    }
+
+    private func ensurePokeIndices(_ db: SQLiteDB) throws {
+        let indexSqlList = [
+            "CREATE INDEX IF NOT EXISTS idx_mate_poke_room_created ON mate_poke(room_id, created_at);",
+            "CREATE INDEX IF NOT EXISTS idx_mate_poke_from_day ON mate_poke(from_user_id, created_at);"
+        ]
+        for sql in indexSqlList {
+            let stmt = try db.prepare(sql)
+            defer { db.finalize(stmt) }
+            _ = try db.step(stmt)
+        }
+    }
+
+    private func columnNames(tableName: String, db: SQLiteDB) throws -> Set<String> {
+        let stmt = try db.prepare("PRAGMA table_info(\(tableName));")
+        defer { db.finalize(stmt) }
+        var names: Set<String> = []
+        while try db.step(stmt) {
+            if let name = SQLiteDB.columnText(stmt, 1) {
+                names.insert(name)
+            }
+        }
+        return names
+    }
+
+    private func dayEpochRange(for now: Date) -> (start: Int, end: Int) {
+        let calendar = Calendar.current
+        let start = calendar.startOfDay(for: now)
+        guard let end = calendar.date(byAdding: DateComponents(day: 1, second: -1), to: start) else {
+            let epoch = Int(now.timeIntervalSince1970)
+            return (epoch, epoch)
+        }
+        return (Int(start.timeIntervalSince1970), Int(end.timeIntervalSince1970))
+    }
+
+    private func hasSentPokeToday(
+        in db: SQLiteDB,
+        roomId: Int,
+        fromUserId: String,
+        startEpoch: Int,
+        endEpoch: Int
+    ) throws -> Bool {
+        let sql = """
+        SELECT COUNT(*)
+        FROM mate_poke
+        WHERE room_id = ?
+          AND from_user_id = ?
+          AND created_at BETWEEN ? AND ?;
+        """
+        let stmt = try db.prepare(sql)
+        defer { db.finalize(stmt) }
+        try db.bind(roomId, to: 1, in: stmt)
+        try db.bind(fromUserId, to: 2, in: stmt)
+        try db.bind(startEpoch, to: 3, in: stmt)
+        try db.bind(endEpoch, to: 4, in: stmt)
+        if try db.step(stmt) {
+            return SQLiteDB.columnInt(stmt, 0) > 0
+        }
+        return false
     }
 
     private static func readRoom(from stmt: OpaquePointer) -> MateRoom {
@@ -486,6 +538,16 @@ final class SQLiteMateRepository {
             createdAt: createdAt,
             lastInteractionAt: lastInteractionAt,
             isActive: isActive
+        )
+    }
+
+    private static func readPoke(from stmt: OpaquePointer) -> MatePoke {
+        MatePoke(
+            id: SQLiteDB.columnInt(stmt, 0),
+            roomId: SQLiteDB.columnInt(stmt, 1),
+            fromUserId: SQLiteDB.columnText(stmt, 2) ?? "",
+            toUserId: SQLiteDB.columnText(stmt, 3) ?? "",
+            createdAt: Date(timeIntervalSince1970: TimeInterval(SQLiteDB.columnInt(stmt, 4)))
         )
     }
 

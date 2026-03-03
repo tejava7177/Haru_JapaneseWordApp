@@ -2,6 +2,8 @@ import SwiftUI
 
 struct MateRoomCardView: View {
     let item: MateRoomCardItem
+    let isBusy: Bool
+    let onSendPoke: () -> Void
     let onEndRoom: () -> Void
 
     var body: some View {
@@ -34,10 +36,12 @@ struct MateRoomCardView: View {
             Divider()
 
             HStack(spacing: 10) {
-                Button("콕 찌르기 (준비중)") {}
+                Button("콕 찌르기") {
+                    onSendPoke()
+                }
                     .buttonStyle(.borderedProminent)
                     .tint(.black)
-                    .disabled(true)
+                    .disabled(item.canSendPokeToday == false || isBusy)
 
                 Spacer()
 
@@ -45,6 +49,13 @@ struct MateRoomCardView: View {
                     onEndRoom()
                 }
                 .buttonStyle(.bordered)
+                .disabled(isBusy)
+            }
+
+            if let pokeStatusText = item.pokeStatusText, pokeStatusText.isEmpty == false {
+                Text(pokeStatusText)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
         }
         .padding(16)
