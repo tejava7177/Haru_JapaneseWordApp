@@ -8,6 +8,7 @@ import UIKit
 final class ProfileViewModel: ObservableObject {
     @Published var profile: UserProfile
     @Published var settings: AppSettings
+    @Published var selectedLearningLevel: JLPTLevel
     @Published var selectedPhotoItem: PhotosPickerItem?
     @Published var isResetAlertPresented: Bool = false
 
@@ -29,11 +30,13 @@ final class ProfileViewModel: ObservableObject {
         self.learnedStore = learnedStore
         self.profile = profileStore.load()
         self.settings = settingsStore.settings
+        self.selectedLearningLevel = settingsStore.profileLevel(for: settingsStore.mateUserId)
 
         settingsStore.$settings
             .receive(on: RunLoop.main)
             .sink { [weak self] value in
                 self?.settings = value
+                self?.selectedLearningLevel = settingsStore.profileLevel(for: value.mateUserId)
             }
             .store(in: &cancellables)
 
@@ -60,9 +63,11 @@ final class ProfileViewModel: ObservableObject {
         profileStore.updateInstagram(instagramId)
     }
 
-    func updateHomeDeckLevel(_ level: JLPTLevel) {
-        settings.homeDeckLevel = level
-        settingsStore.updateHomeDeckLevel(level)
+    func updateProfileLevel(_ level: JLPTLevel) {
+        let userId = settingsStore.mateUserId
+        guard userId.isEmpty == false else { return }
+        selectedLearningLevel = level
+        settingsStore.updateProfileLevel(level, for: userId)
     }
 
     var isMateLoggedIn: Bool { settingsStore.isMateLoggedIn }

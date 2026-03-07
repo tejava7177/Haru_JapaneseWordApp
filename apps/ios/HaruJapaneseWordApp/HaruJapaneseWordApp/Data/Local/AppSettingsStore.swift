@@ -6,6 +6,7 @@ final class AppSettingsStore: ObservableObject {
     @Published private(set) var hasSeenOnboarding: Bool
     @Published private(set) var isSignedIn: Bool
     @Published private(set) var appleUserId: String?
+    @Published private(set) var profileLevelsByUserId: [String: String]
 
     private let userDefaults: UserDefaults
 
@@ -14,6 +15,7 @@ final class AppSettingsStore: ObservableObject {
     private let isSignedInKey = "auth_is_signed_in"
     private let appleUserIdKey = "auth_apple_user_id"
     private let mateUserIdKey = "mate_user_id"
+    private let profileLevelsByUserIdKey = "settings_profile_levels_by_user_id"
 
     enum MateDevSlot: String {
         case A
@@ -31,6 +33,14 @@ final class AppSettingsStore: ObservableObject {
         self.hasSeenOnboarding = userDefaults.bool(forKey: onboardingKey)
         self.isSignedIn = userDefaults.bool(forKey: isSignedInKey)
         self.appleUserId = userDefaults.string(forKey: appleUserIdKey)
+        self.profileLevelsByUserId = AppSettingsStore.loadProfileLevelsByUserId(userDefaults: userDefaults)
+
+        if settings.mateUserId.isEmpty == false {
+            var updated = settings
+            updated.homeDeckLevel = profileLevel(for: settings.mateUserId)
+            settings = updated
+            save(settings: updated)
+        }
     }
 
     func updateHomeDeckLevel(_ level: JLPTLevel) {
@@ -38,6 +48,10 @@ final class AppSettingsStore: ObservableObject {
         updated.homeDeckLevel = level
         settings = updated
         save(settings: updated)
+
+        if settings.mateUserId.isEmpty == false {
+            saveProfileLevel(level, for: settings.mateUserId)
+        }
     }
 
     func save(settings: AppSettings) {
@@ -69,6 +83,7 @@ final class AppSettingsStore: ObservableObject {
     func signInForMate(userId: String) {
         var updated = settings
         updated.mateUserId = userId
+        updated.homeDeckLevel = profileLevel(for: userId)
         settings = updated
         save(settings: updated)
     }
@@ -88,10 +103,42 @@ final class AppSettingsStore: ObservableObject {
     var isMateLoggedIn: Bool { settings.isMateLoggedIn }
     var mateUserId: String { settings.mateUserId }
 
+    func profileLevel(for userId: String) -> JLPTLevel {
+        guard userId.isEmpty == false else { return .n5 }
+        let rawValue = profileLevelsByUserId[userId] ?? JLPTLevel.n5.rawValue
+        return JLPTLevel(rawValue: rawValue) ?? .n5
+    }
+
+    func updateProfileLevel(_ level: JLPTLevel, for userId: String) {
+        guard userId.isEmpty == false else { return }
+        saveProfileLevel(level, for: userId)
+
+        if settings.mateUserId == userId {
+            var updated = settings
+            updated.homeDeckLevel = level
+            settings = updated
+            save(settings: updated)
+        }
+    }
+
     private static func loadSettings(userDefaults: UserDefaults) -> AppSettings {
         let levelRaw = userDefaults.string(forKey: "settings_home_deck_level") ?? JLPTLevel.n5.rawValue
         let level = JLPTLevel(rawValue: levelRaw) ?? .n5
         let mateUserId = userDefaults.string(forKey: "mate_user_id") ?? ""
         return AppSettings(homeDeckLevel: level, mateUserId: mateUserId)
+    }
+
+    private static func loadProfileLevelsByUserId(userDefaults: UserDefaults) -> [String: String] {
+        guard let values = userDefaults.dictionary(forKey: "settings_profile_levels_by_user_id") as? [String: String] else {
+            return [:]
+        }
+        return values
+    }
+
+    private func saveProfileLevel(_ level: JLPTLevel, for userId: String) {
+        var updated = profileLevelsByUserId
+        updated[userId] = level.rawValue
+        profileLevelsByUserId = updated
+        userDefaults.set(updated, forKey: profileLevelsByUserIdKey)
     }
 }

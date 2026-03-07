@@ -18,7 +18,7 @@ struct MateRoomCardItem: Identifiable, Equatable {
     let room: MateRoom
     let counterpartLabel: String
     let lastInteractionText: String
-    let jlptLevel: JLPTLevel?
+    let jlptLevel: JLPTLevel
     let extraInfoText: String
     let canSendPokeToday: Bool
     let pokeStatusText: String?
@@ -52,11 +52,11 @@ final class MateViewModel: ObservableObject {
     init(
         service: MateService,
         settingsStore: AppSettingsStore,
-        userMetaProvider: MateUserMetaProvider = DevMateUserMetaProvider()
+        userMetaProvider: MateUserMetaProvider? = nil
     ) {
         self.service = service
         self.settingsStore = settingsStore
-        self.userMetaProvider = userMetaProvider
+        self.userMetaProvider = userMetaProvider ?? DevMateUserMetaProvider(settingsStore: settingsStore)
 
         settingsStore.$settings
             .receive(on: RunLoop.main)

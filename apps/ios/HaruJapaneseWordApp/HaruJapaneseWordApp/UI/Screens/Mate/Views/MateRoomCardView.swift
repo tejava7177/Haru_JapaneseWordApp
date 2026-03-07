@@ -68,11 +68,7 @@ struct MateRoomCardView: View {
 }
 
 private struct JLPTBadgeView: View {
-    let level: JLPTLevel?
-
-    private var title: String {
-        level?.title ?? "?"
-    }
+    let level: JLPTLevel
 
     private var fillColor: Color {
         switch level {
@@ -86,13 +82,11 @@ private struct JLPTBadgeView: View {
             return .orange.opacity(0.2)
         case .n5:
             return .gray.opacity(0.2)
-        case .none:
-            return .gray.opacity(0.14)
         }
     }
 
     var body: some View {
-        Text(title)
+        Text(level.title)
             .font(.caption.weight(.semibold))
             .foregroundStyle(.primary)
             .padding(.horizontal, 10)

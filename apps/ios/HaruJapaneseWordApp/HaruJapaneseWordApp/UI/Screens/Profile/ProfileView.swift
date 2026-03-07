@@ -182,6 +182,11 @@ struct ProfileView: View {
                 Text("학습 레벨은 하나만 선택할 수 있어요.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                if viewModel.isMateLoggedIn == false {
+                    Text("Dev Slot 로그인 후 사용자별 레벨을 저장할 수 있어요.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
 
                 let edgePadding: CGFloat = 16
                 let edgeCompensation: CGFloat = 16
@@ -191,19 +196,20 @@ struct ProfileView: View {
                         ForEach(levelOptions) { level in
                             LevelSelectionChip(
                                 level: level,
-                                isSelected: viewModel.settings.homeDeckLevel == level
+                                isSelected: viewModel.selectedLearningLevel == level
                             ) {
-                                viewModel.updateHomeDeckLevel(level)
+                                viewModel.updateProfileLevel(level)
                                 showToast(message: "학습 레벨이 \(level.title)로 설정됐어요")
                             }
                         }
                     }
-                    .padding(.leading, viewModel.settings.homeDeckLevel == .n5 ? edgePadding + edgeCompensation : edgePadding)
-                    .padding(.trailing, viewModel.settings.homeDeckLevel == .n1 ? edgePadding + edgeCompensation : edgePadding)
+                    .padding(.leading, viewModel.selectedLearningLevel == .n5 ? edgePadding + edgeCompensation : edgePadding)
+                    .padding(.trailing, viewModel.selectedLearningLevel == .n1 ? edgePadding + edgeCompensation : edgePadding)
                     .padding(.vertical, 4)
                 }
+                .disabled(viewModel.isMateLoggedIn == false)
 
-                LevelDescriptionCard(level: viewModel.settings.homeDeckLevel)
+                LevelDescriptionCard(level: viewModel.selectedLearningLevel)
             }
         }
     }
