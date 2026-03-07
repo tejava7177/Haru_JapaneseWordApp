@@ -26,7 +26,7 @@ struct MateRoomCardItem: Identifiable, Equatable {
 
 @MainActor
 final class MateViewModel: ObservableObject {
-    static let maxMateCount: Int = 4
+    static let maxMateCount: Int = MateService.maxActiveMatesPerUser
 
     @Published private(set) var activeRooms: [MateRoom] = []
     @Published private(set) var connectedRoomCards: [MateRoomCardItem] = []
@@ -37,9 +37,9 @@ final class MateViewModel: ObservableObject {
     @Published var alertMessage: String = ""
     @Published var isShowingAlert: Bool = false
     @Published var matchCelebration: MatchCelebration?
-    @Published var latestPoke: MatePoke?
-    @Published var canSendPokeToday: Bool = true
-    @Published var pokeStatusText: String?
+    @Published private(set) var latestPokeByRoomId: [Int: MatePoke] = [:]
+    @Published private(set) var canSendPokeByRoomId: [Int: Bool] = [:]
+    @Published private(set) var pokeStatusByRoomId: [Int: String] = [:]
 
     private let service: MateService
     private let settingsStore: AppSettingsStore
@@ -75,7 +75,7 @@ final class MateViewModel: ObservableObject {
     }
 
     var canAddNewMate: Bool {
-        connectedMateCount < Self.maxMateCount
+        activeRooms.count < Self.maxMateCount
     }
 
     func onViewAppear() {
@@ -96,16 +96,16 @@ final class MateViewModel: ObservableObject {
             activeRooms = []
             connectedRoomCards = []
             inviteCode = ""
-            latestPoke = nil
-            canSendPokeToday = false
-            pokeStatusText = nil
+            latestPokeByRoomId = [:]
+            canSendPokeByRoomId = [:]
+            pokeStatusByRoomId = [:]
             stopPokePolling()
             return
         }
 
         let previousActiveRooms = activeRooms
-        activeRooms = service.loadActiveRooms()
-        inviteCode = activeRooms.first?.inviteCode ?? ""
+        activeRooms = service.getActiveRooms()
+        inviteCode = activeRooms.first(where: { $0.userAId == userId && $0.userBId.isEmpty })?.inviteCode ?? ""
         rebuildConnectedCards(myUserId: userId)
 
         for room in activeRooms where room.hasMate {
@@ -131,8 +131,14 @@ final class MateViewModel: ObservableObject {
         isBusy = true
         defer { isBusy = false }
         inviteSectionErrorMessage = nil
-        inviteCode = service.createInviteCode()
-        load()
+        do {
+            inviteCode = try service.createInvite()
+            load()
+        } catch let mateError as MateError {
+            inviteSectionErrorMessage = mateError.userMessage
+        } catch {
+            inviteSectionErrorMessage = "동행을 시작하지 못했어요. 다시 시도해 주세요."
+        }
     }
 
     func joinByInviteCode() {
@@ -154,13 +160,15 @@ final class MateViewModel: ObservableObject {
         defer { isBusy = false }
         inviteSectionErrorMessage = nil
         do {
-            let room = try service.joinByInviteCode(trimmed)
+            let room = try service.join(inviteCode: trimmed)
             let previousRoom = activeRooms.first(where: { $0.id == room.id })
             triggerCelebrationIfNeeded(room: room, previousRoom: previousRoom)
             inputInviteCode = ""
             load()
+        } catch let mateError as MateError {
+            inviteSectionErrorMessage = mateError.userMessage
         } catch {
-            inviteSectionErrorMessage = "초대 코드에 참여하지 못했어요."
+            inviteSectionErrorMessage = "동행을 시작하지 못했어요. 다시 시도해 주세요."
         }
     }
 
@@ -168,37 +176,43 @@ final class MateViewModel: ObservableObject {
         print("MATE_ACTION_END_ROOM roomId=\(roomId)")
         isBusy = true
         defer { isBusy = false }
-        service.endRoom(roomId: roomId, reason: "user_end")
-        load()
+        do {
+            try service.end(roomId: roomId)
+            load()
+        } catch let mateError as MateError {
+            alertMessage = mateError.userMessage
+            isShowingAlert = true
+        } catch {
+            alertMessage = "동행을 종료하지 못했어요."
+            isShowingAlert = true
+        }
     }
 
-    func sendPoke() {
+    func sendPoke(roomId: Int) {
         guard isBusy == false else { return }
         let currentUserId = settingsStore.mateUserId
         guard currentUserId.isEmpty == false else { return }
 
-        if let roomId = activeRooms.first(where: { $0.hasMate })?.id {
-            print("[MatePoke] send start user=\(currentUserId) room=\(roomId)")
-        }
+        print("[MatePoke] send start user=\(currentUserId) room=\(roomId)")
 
         isBusy = true
         Task {
-            let result = await service.sendPoke(currentUserId: currentUserId)
+            let result = await service.sendPoke(roomId: roomId, currentUserId: currentUserId)
             await MainActor.run {
                 isBusy = false
                 switch result {
                 case .success(let poke):
                     print("[MatePoke] send ok pokeId=\(poke.id ?? -1) createdAt=\(Int(poke.createdAt.timeIntervalSince1970))")
-                    latestPoke = poke
-                    canSendPokeToday = false
-                    pokeStatusText = "오늘 콕 완료"
+                    latestPokeByRoomId[poke.roomId] = poke
+                    canSendPokeByRoomId[poke.roomId] = false
+                    pokeStatusByRoomId[poke.roomId] = "오늘 콕 완료"
                     updateLastInteraction(roomId: poke.roomId, at: poke.createdAt)
                     rebuildConnectedCards(myUserId: currentUserId)
                 case .failure(let error):
                     if isAlreadyPokedToday(error) {
                         print("[MatePoke] send blocked alreadyPokedToday")
-                        canSendPokeToday = false
-                        pokeStatusText = "오늘 콕 완료"
+                        canSendPokeByRoomId[roomId] = false
+                        pokeStatusByRoomId[roomId] = "오늘 콕 완료"
                         rebuildConnectedCards(myUserId: currentUserId)
                     } else {
                         alertMessage = "콕 전송에 실패했어요."
@@ -255,25 +269,38 @@ final class MateViewModel: ObservableObject {
         let currentUserId = settingsStore.mateUserId
         guard currentUserId.isEmpty == false else { return }
 
-        let previousLatest = latestPoke
-        let refreshedRoom = await service.refreshRoom()
-        if let refreshedRoom {
-            updateLastInteraction(roomId: refreshedRoom.id, at: refreshedRoom.lastInteractionAt)
+        var refreshedLatestByRoomId: [Int: MatePoke] = [:]
+        var refreshedCanSendByRoomId: [Int: Bool] = [:]
+        var refreshedStatusByRoomId: [Int: String] = [:]
+        let previousLatestByRoomId = latestPokeByRoomId
+
+        for room in activeRooms where room.hasMate {
+            if let refreshedRoom = await service.refreshRoom(roomId: room.id) {
+                updateLastInteraction(roomId: refreshedRoom.id, at: refreshedRoom.lastInteractionAt)
+            }
+
+            let fetchedLatest = await service.fetchLatestPoke(roomId: room.id)
+            let fetchedCanSend = await service.canSendPokeToday(roomId: room.id, currentUserId: currentUserId)
+
+            if let fetchedLatest {
+                refreshedLatestByRoomId[room.id] = fetchedLatest
+            }
+            refreshedCanSendByRoomId[room.id] = fetchedCanSend
+            if fetchedCanSend == false {
+                refreshedStatusByRoomId[room.id] = "오늘 콕 완료"
+            }
+
+            if shouldLogPollUpdate,
+               let fetchedLatest,
+               hasPokeChanged(previous: previousLatestByRoomId[room.id], next: fetchedLatest) {
+                print("[MatePoke] poll updated room=\(room.id) latestPokeAt=\(Int(fetchedLatest.createdAt.timeIntervalSince1970))")
+            }
         }
 
-        let fetchedLatest = await service.fetchLatestPoke()
-        let fetchedCanSend = await service.canSendPokeToday(currentUserId: currentUserId)
-
-        latestPoke = fetchedLatest
-        canSendPokeToday = fetchedCanSend
-        pokeStatusText = fetchedCanSend ? nil : "오늘 콕 완료"
+        latestPokeByRoomId = refreshedLatestByRoomId
+        canSendPokeByRoomId = refreshedCanSendByRoomId
+        pokeStatusByRoomId = refreshedStatusByRoomId
         rebuildConnectedCards(myUserId: currentUserId)
-
-        if shouldLogPollUpdate,
-           let fetchedLatest,
-           hasPokeChanged(previous: previousLatest, next: fetchedLatest) {
-            print("[MatePoke] poll updated latestPokeAt=\(Int(fetchedLatest.createdAt.timeIntervalSince1970))")
-        }
     }
 
     private func hasPokeChanged(previous: MatePoke?, next: MatePoke) -> Bool {
@@ -284,7 +311,7 @@ final class MateViewModel: ObservableObject {
     }
 
     private func interactionDate(for room: MateRoom) -> Date {
-        if let latestPoke, latestPoke.roomId == room.id {
+        if let latestPoke = latestPokeByRoomId[room.id] {
             return latestPoke.createdAt
         }
         return room.lastInteractionAt
@@ -296,6 +323,7 @@ final class MateViewModel: ObservableObject {
             .map { room in
                 let otherId = room.userAId != myUserId ? room.userAId : room.userBId
                 let interactionDate = interactionDate(for: room)
+                let canSendPokeToday = canSendPokeByRoomId[room.id] ?? true
                 return MateRoomCardItem(
                     id: room.id,
                     room: room,
@@ -304,7 +332,7 @@ final class MateViewModel: ObservableObject {
                     jlptLevel: userMetaProvider.jlptLevel(for: otherId),
                     extraInfoText: "기록 준비중",
                     canSendPokeToday: canSendPokeToday,
-                    pokeStatusText: pokeStatusText
+                    pokeStatusText: pokeStatusByRoomId[room.id]
                 )
             }
     }
@@ -332,10 +360,6 @@ final class MateViewModel: ObservableObject {
 
     private func isAlreadyPokedToday(_ error: Error) -> Bool {
         if let pokeError = error as? MatePokeError, pokeError == .alreadyPokedToday {
-            return true
-        }
-        if let repositoryError = error as? SQLiteMateRepository.MateRepositoryError,
-           repositoryError == .alreadyPokedToday {
             return true
         }
         return false

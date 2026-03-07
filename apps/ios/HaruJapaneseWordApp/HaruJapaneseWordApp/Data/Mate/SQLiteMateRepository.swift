@@ -2,15 +2,7 @@ import Foundation
 import SQLite3
 
 final class SQLiteMateRepository: MateRepositoryProtocol {
-    enum MateRepositoryError: Error {
-        case roomAlreadyExists
-        case invalidInviteCode
-        case roomAlreadyMatched
-        case cannotJoinOwnInvite
-        case senderNotInRoom
-        case alreadyPokedToday
-    }
-
+    private static let maxActiveMatesPerUser = 3
     private let dbPath: String
 
     init() {
@@ -18,69 +10,59 @@ final class SQLiteMateRepository: MateRepositoryProtocol {
         ensureSchema()
     }
 
-    func fetchActiveRoom(for userId: String) -> MateRoom? {
-        do {
-            let db = try SQLiteDB(path: dbPath, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
-            defer { db.close() }
-            let sql = """
-            SELECT id, user_a_id, user_b_id, invite_code, created_at, last_interaction_at, is_active
-            FROM mate_room
-            WHERE is_active = 1 AND (user_a_id = ? OR user_b_id = ?)
-            ORDER BY id DESC
-            LIMIT 1;
-            """
-            let stmt = try db.prepare(sql)
-            defer { db.finalize(stmt) }
-            try db.bind(userId, to: 1, in: stmt)
-            try db.bind(userId, to: 2, in: stmt)
-            if try db.step(stmt) {
-                return Self.readRoom(from: stmt)
-            }
-        } catch {
-            print("[SQLiteMateRepository] fetchActiveRoom failed: \(error)")
+    func fetchActiveRooms(for userId: String) throws -> [MateRoom] {
+        let db = try SQLiteDB(path: dbPath, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
+        defer { db.close() }
+        let sql = """
+        SELECT id, user_a_id, user_b_id, invite_code, created_at, last_interaction_at, is_active
+        FROM mate_room
+        WHERE is_active = 1 AND (user_a_id = ? OR user_b_id = ?)
+        ORDER BY last_interaction_at DESC;
+        """
+        let stmt = try db.prepare(sql)
+        defer { db.finalize(stmt) }
+        try db.bind(userId, to: 1, in: stmt)
+        try db.bind(userId, to: 2, in: stmt)
+
+        var rooms: [MateRoom] = []
+        while try db.step(stmt) {
+            rooms.append(Self.readRoom(from: stmt))
         }
-        return nil
+        return rooms
     }
 
-    func fetchActiveRooms(for userId: String) -> [MateRoom] {
-        do {
-            let db = try SQLiteDB(path: dbPath, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
-            defer { db.close() }
-            let sql = """
-            SELECT id, user_a_id, user_b_id, invite_code, created_at, last_interaction_at, is_active
-            FROM mate_room
-            WHERE is_active = 1 AND (user_a_id = ? OR user_b_id = ?)
-            ORDER BY id DESC;
-            """
-            let stmt = try db.prepare(sql)
-            defer { db.finalize(stmt) }
-            try db.bind(userId, to: 1, in: stmt)
-            try db.bind(userId, to: 2, in: stmt)
-
-            var rooms: [MateRoom] = []
-            while try db.step(stmt) {
-                rooms.append(Self.readRoom(from: stmt))
-            }
-            return rooms
-        } catch {
-            print("[SQLiteMateRepository] fetchActiveRooms failed: \(error)")
-            return []
-        }
+    func countActiveRooms(for userId: String) throws -> Int {
+        let db = try SQLiteDB(path: dbPath, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
+        defer { db.close() }
+        return try countActiveRooms(for: userId, in: db)
     }
 
-    func createInviteCode(for userId: String, now: Date) -> String {
-        if let room = fetchActiveRoom(for: userId) {
-            return room.inviteCode
+    func existsActiveRoom(between user1: String, and user2: String) throws -> Bool {
+        let db = try SQLiteDB(path: dbPath, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
+        defer { db.close() }
+        return try existsActiveRoom(between: user1, and: user2, in: db)
+    }
+
+    func createInviteCode(for userId: String, now: Date) throws -> String {
+        let db = try SQLiteDB(path: dbPath, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
+        defer { db.close() }
+
+        let activeCount = try countActiveRooms(for: userId, in: db)
+        if activeCount >= Self.maxActiveMatesPerUser {
+            throw MateError.myMateLimitReached
         }
+
+        if let pendingInvite = try fetchPendingInviteCode(for: userId, in: db) {
+            return pendingInvite
+        }
+
         let inviteCode = generateInviteCode()
         let nowEpoch = Int(now.timeIntervalSince1970)
+        let sql = """
+        INSERT INTO mate_room (user_a_id, user_b_id, invite_code, created_at, last_interaction_at, is_active)
+        VALUES (?, ?, ?, ?, ?, 1);
+        """
         do {
-            let db = try SQLiteDB(path: dbPath, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
-            defer { db.close() }
-            let sql = """
-            INSERT INTO mate_room (user_a_id, user_b_id, invite_code, created_at, last_interaction_at, is_active)
-            VALUES (?, ?, ?, ?, ?, 1);
-            """
             let stmt = try db.prepare(sql)
             defer { db.finalize(stmt) }
             try db.bind(userId, to: 1, in: stmt)
@@ -89,71 +71,100 @@ final class SQLiteMateRepository: MateRepositoryProtocol {
             try db.bind(nowEpoch, to: 4, in: stmt)
             try db.bind(nowEpoch, to: 5, in: stmt)
             _ = try db.step(stmt)
+            return inviteCode
         } catch {
-            print("[SQLiteMateRepository] createInviteCode failed: \(error)")
+            throw MateError.roomCreationFailed
         }
-        return inviteCode
     }
 
     func joinByInviteCode(inviteCode: String, joinerId: String, now: Date) throws -> MateRoom {
-        if fetchActiveRoom(for: joinerId) != nil {
-            throw MateRepositoryError.roomAlreadyExists
+        let db = try SQLiteDB(path: dbPath, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
+        defer { db.close() }
+
+        guard let handle = db.rawHandle else {
+            throw MateError.roomCreationFailed
         }
-        guard let room = fetchRoomByInvite(inviteCode: inviteCode) else {
-            throw MateRepositoryError.invalidInviteCode
+        if sqlite3_exec(handle, "BEGIN IMMEDIATE TRANSACTION", nil, nil, nil) != SQLITE_OK {
+            throw MateError.roomCreationFailed
         }
-        if room.userBId.isEmpty == false {
-            throw MateRepositoryError.roomAlreadyMatched
+        var committed = false
+        defer {
+            if committed == false {
+                _ = sqlite3_exec(handle, "ROLLBACK", nil, nil, nil)
+            }
         }
+
+        guard let room = try fetchJoinableRoomByInvite(inviteCode: inviteCode, in: db) else {
+            throw MateError.invalidInviteCode
+        }
+
         if room.userAId == joinerId {
-            throw MateRepositoryError.cannotJoinOwnInvite
+            throw MateError.cannotJoinOwnInvite
         }
-        print("[SQLiteMateRepository] joinByInviteCode write_begin userId=\(joinerId) inviteCode=\(inviteCode)")
-        var db: SQLiteDB?
-        do {
-            db = try SQLiteDB(path: dbPath, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
-            defer { db?.close() }
-            let sql = """
-            UPDATE mate_room
-            SET user_b_id = ?
-            WHERE id = ?;
-            """
-            let stmt = try db!.prepare(sql)
-            defer { db!.finalize(stmt) }
-            try db!.bind(joinerId, to: 1, in: stmt)
-            try db!.bind(room.id, to: 2, in: stmt)
-            _ = try db!.step(stmt)
-        } catch {
-            let sqliteCode = SQLiteDB.errorCode(from: db?.rawHandle)
-            let sqliteMessage = SQLiteDB.errorMessage(from: db?.rawHandle)
-            print(
-                "[SQLiteMateRepository] joinByInviteCode failed: \(error.localizedDescription) " +
-                    "sqlite_code=\(sqliteCode) sqlite_message=\(sqliteMessage)"
-            )
+
+        let ownerId = room.userAId
+        let ownerActiveCount = try countActiveRooms(for: ownerId, in: db)
+        if ownerActiveCount >= Self.maxActiveMatesPerUser {
+            throw MateError.ownerMateLimitReached
         }
-        if let updated = fetchActiveRoom(for: joinerId) {
-            print("MATE_ROOM_WRITE_OK roomId=\(updated.id) userA=\(updated.userAId) userB=\(updated.userBId)")
-            return updated
+
+        let joinerActiveCount = try countActiveRooms(for: joinerId, in: db)
+        if joinerActiveCount >= Self.maxActiveMatesPerUser {
+            throw MateError.myMateLimitReached
         }
-        return room
+
+        let alreadyConnected = try existsActiveRoom(between: ownerId, and: joinerId, in: db)
+        if alreadyConnected {
+            throw MateError.duplicateActiveMate
+        }
+
+        let nowEpoch = Int(now.timeIntervalSince1970)
+        let consumedInviteCode = consumedInviteCode(for: room.id, at: nowEpoch)
+        let updateSql = """
+        UPDATE mate_room
+        SET user_b_id = ?, invite_code = ?, last_interaction_at = ?
+        WHERE id = ? AND is_active = 1 AND user_b_id = '';
+        """
+        let updateStmt = try db.prepare(updateSql)
+        defer { db.finalize(updateStmt) }
+        try db.bind(joinerId, to: 1, in: updateStmt)
+        try db.bind(consumedInviteCode, to: 2, in: updateStmt)
+        try db.bind(nowEpoch, to: 3, in: updateStmt)
+        try db.bind(room.id, to: 4, in: updateStmt)
+        _ = try db.step(updateStmt)
+
+        guard sqlite3_changes(handle) == 1 else {
+            throw MateError.roomCreationFailed
+        }
+
+        if sqlite3_exec(handle, "COMMIT", nil, nil, nil) != SQLITE_OK {
+            throw MateError.roomCreationFailed
+        }
+        committed = true
+
+        guard let updatedRoom = try fetchRoomById(room.id, in: db) else {
+            throw MateError.roomCreationFailed
+        }
+        return updatedRoom
     }
 
-    func endRoom(roomId: Int, reason: String) {
-        do {
-            let db = try SQLiteDB(path: dbPath, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
-            defer { db.close() }
-            let sql = "UPDATE mate_room SET is_active = 0 WHERE id = ?;"
-            let stmt = try db.prepare(sql)
-            defer { db.finalize(stmt) }
-            try db.bind(roomId, to: 1, in: stmt)
-            _ = try db.step(stmt)
-        } catch {
-            print("[SQLiteMateRepository] endRoom failed: \(error)")
-        }
-    }
+    func endRoom(roomId: Int, requestedBy userId: String) throws {
+        let db = try SQLiteDB(path: dbPath, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
+        defer { db.close() }
 
-    func fetchRoomForUser(userId: String) throws -> MateRoom? {
-        fetchActiveRoom(for: userId)
+        guard let room = try fetchRoomById(roomId, in: db) else {
+            throw MateError.roomNotFound
+        }
+
+        if room.userAId != userId && room.userBId != userId {
+            throw MateError.unauthorizedRoomAccess
+        }
+
+        let sql = "UPDATE mate_room SET is_active = 0 WHERE id = ?;"
+        let stmt = try db.prepare(sql)
+        defer { db.finalize(stmt) }
+        try db.bind(roomId, to: 1, in: stmt)
+        _ = try db.step(stmt)
     }
 
     func hasSentPokeToday(roomId: Int, fromUserId: String, now: Date) throws -> Bool {
@@ -170,8 +181,8 @@ final class SQLiteMateRepository: MateRepositoryProtocol {
     }
 
     func sendPoke(roomId: Int, fromUserId: String, now: Date) throws -> MatePoke {
-        guard let room = fetchRoomById(roomId) else {
-            throw MatePokeError.senderNotInRoom
+        guard let room = fetchRoomById(roomId), room.isActive else {
+            throw MatePokeError.noActiveRoom
         }
         let toUserId: String
         if room.userAId == fromUserId {
@@ -289,46 +300,102 @@ final class SQLiteMateRepository: MateRepositoryProtocol {
         }
     }
 
-    private func fetchRoomById(_ roomId: Int) -> MateRoom? {
-        do {
-            let db = try SQLiteDB(path: dbPath, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
-            defer { db.close() }
-            let sql = """
-            SELECT id, user_a_id, user_b_id, invite_code, created_at, last_interaction_at, is_active
-            FROM mate_room
-            WHERE id = ?;
-            """
-            let stmt = try db.prepare(sql)
-            defer { db.finalize(stmt) }
-            try db.bind(roomId, to: 1, in: stmt)
-            if try db.step(stmt) {
-                return Self.readRoom(from: stmt)
-            }
-        } catch {
-            print("[SQLiteMateRepository] fetchRoomById failed: \(error)")
+    private func fetchPendingInviteCode(for userId: String, in db: SQLiteDB) throws -> String? {
+        let sql = """
+        SELECT invite_code
+        FROM mate_room
+        WHERE is_active = 1 AND user_a_id = ? AND user_b_id = ''
+        ORDER BY created_at DESC
+        LIMIT 1;
+        """
+        let stmt = try db.prepare(sql)
+        defer { db.finalize(stmt) }
+        try db.bind(userId, to: 1, in: stmt)
+        if try db.step(stmt) {
+            return SQLiteDB.columnText(stmt, 0)
         }
         return nil
     }
 
-    private func fetchRoomByInvite(inviteCode: String) -> MateRoom? {
+    private func fetchJoinableRoomByInvite(inviteCode: String, in db: SQLiteDB) throws -> MateRoom? {
+        let sql = """
+        SELECT id, user_a_id, user_b_id, invite_code, created_at, last_interaction_at, is_active
+        FROM mate_room
+        WHERE invite_code = ? AND is_active = 1 AND user_b_id = ''
+        ORDER BY id DESC
+        LIMIT 1;
+        """
+        let stmt = try db.prepare(sql)
+        defer { db.finalize(stmt) }
+        try db.bind(inviteCode, to: 1, in: stmt)
+        if try db.step(stmt) {
+            return Self.readRoom(from: stmt)
+        }
+        return nil
+    }
+
+    private func countActiveRooms(for userId: String, in db: SQLiteDB) throws -> Int {
+        let sql = """
+        SELECT COUNT(*)
+        FROM mate_room
+        WHERE is_active = 1 AND (user_a_id = ? OR user_b_id = ?);
+        """
+        let stmt = try db.prepare(sql)
+        defer { db.finalize(stmt) }
+        try db.bind(userId, to: 1, in: stmt)
+        try db.bind(userId, to: 2, in: stmt)
+        if try db.step(stmt) {
+            return SQLiteDB.columnInt(stmt, 0)
+        }
+        return 0
+    }
+
+    private func existsActiveRoom(between user1: String, and user2: String, in db: SQLiteDB) throws -> Bool {
+        let sql = """
+        SELECT COUNT(*)
+        FROM mate_room
+        WHERE is_active = 1
+          AND user_b_id <> ''
+          AND ((user_a_id = ? AND user_b_id = ?) OR (user_a_id = ? AND user_b_id = ?));
+        """
+        let stmt = try db.prepare(sql)
+        defer { db.finalize(stmt) }
+        try db.bind(user1, to: 1, in: stmt)
+        try db.bind(user2, to: 2, in: stmt)
+        try db.bind(user2, to: 3, in: stmt)
+        try db.bind(user1, to: 4, in: stmt)
+        if try db.step(stmt) {
+            return SQLiteDB.columnInt(stmt, 0) > 0
+        }
+        return false
+    }
+
+    private func consumedInviteCode(for roomId: Int, at nowEpoch: Int) -> String {
+        "USED-\(roomId)-\(nowEpoch)"
+    }
+
+    private func fetchRoomById(_ roomId: Int) -> MateRoom? {
         do {
             let db = try SQLiteDB(path: dbPath, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
             defer { db.close() }
-            let sql = """
-            SELECT id, user_a_id, user_b_id, invite_code, created_at, last_interaction_at, is_active
-            FROM mate_room
-            WHERE invite_code = ? AND is_active = 1
-            ORDER BY id DESC
-            LIMIT 1;
-            """
-            let stmt = try db.prepare(sql)
-            defer { db.finalize(stmt) }
-            try db.bind(inviteCode, to: 1, in: stmt)
-            if try db.step(stmt) {
-                return Self.readRoom(from: stmt)
-            }
+            return try fetchRoomById(roomId, in: db)
         } catch {
-            print("[SQLiteMateRepository] fetchRoomByInvite failed: \(error)")
+            print("[SQLiteMateRepository] fetchRoomById failed: \(error)")
+            return nil
+        }
+    }
+
+    private func fetchRoomById(_ roomId: Int, in db: SQLiteDB) throws -> MateRoom? {
+        let sql = """
+        SELECT id, user_a_id, user_b_id, invite_code, created_at, last_interaction_at, is_active
+        FROM mate_room
+        WHERE id = ?;
+        """
+        let stmt = try db.prepare(sql)
+        defer { db.finalize(stmt) }
+        try db.bind(roomId, to: 1, in: stmt)
+        if try db.step(stmt) {
+            return Self.readRoom(from: stmt)
         }
         return nil
     }
@@ -347,7 +414,7 @@ final class SQLiteMateRepository: MateRepositoryProtocol {
         do {
             let db = try SQLiteDB(path: dbPath, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
             defer { db.close() }
-            let sql = "SELECT COUNT(*) FROM mate_room WHERE invite_code = ? AND is_active = 1;"
+            let sql = "SELECT COUNT(*) FROM mate_room WHERE invite_code = ?;"
             let stmt = try db.prepare(sql)
             defer { db.finalize(stmt) }
             try db.bind(code, to: 1, in: stmt)

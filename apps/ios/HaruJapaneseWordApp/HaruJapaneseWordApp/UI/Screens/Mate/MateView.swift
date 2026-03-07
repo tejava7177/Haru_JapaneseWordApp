@@ -49,8 +49,8 @@ struct MateView: View {
         .onDisappear {
             viewModel.onViewDisappear()
         }
-        .onChange(of: viewModel.connectedMateCount) { count in
-            guard count >= MateViewModel.maxMateCount else { return }
+        .onChange(of: viewModel.canAddNewMate) { canAdd in
+            guard canAdd == false else { return }
             if isInviteSectionExpanded {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     isInviteSectionExpanded = false
@@ -93,7 +93,7 @@ struct MateView: View {
                         item: item,
                         isBusy: viewModel.isBusy,
                         onSendPoke: {
-                            viewModel.sendPoke()
+                            viewModel.sendPoke(roomId: item.room.id)
                         },
                         onEndRoom: {
                         viewModel.endRoom(roomId: item.room.id)
@@ -132,7 +132,7 @@ struct MateView: View {
             .disabled(viewModel.canAddNewMate == false)
 
             if viewModel.canAddNewMate == false {
-                Text("동행은 최대 4명까지 가능해요")
+                Text("동행은 최대 3명까지 가능해요.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

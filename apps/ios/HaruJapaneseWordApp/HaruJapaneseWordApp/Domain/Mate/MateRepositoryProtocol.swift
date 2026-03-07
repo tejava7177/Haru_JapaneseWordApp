@@ -8,13 +8,13 @@ enum MatePokeError: Error, Equatable {
 
 protocol MateRepositoryProtocol {
     func cleanupExpiredRooms(now: Date)
-    func fetchActiveRoom(for userId: String) -> MateRoom?
-    func fetchActiveRooms(for userId: String) -> [MateRoom]
-    func createInviteCode(for userId: String, now: Date) -> String
+    func fetchActiveRooms(for userId: String) throws -> [MateRoom]
+    func countActiveRooms(for userId: String) throws -> Int
+    func existsActiveRoom(between user1: String, and user2: String) throws -> Bool
+    func createInviteCode(for userId: String, now: Date) throws -> String
     func joinByInviteCode(inviteCode: String, joinerId: String, now: Date) throws -> MateRoom
-    func endRoom(roomId: Int, reason: String)
+    func endRoom(roomId: Int, requestedBy userId: String) throws
 
-    func fetchRoomForUser(userId: String) throws -> MateRoom?
     func hasSentPokeToday(roomId: Int, fromUserId: String, now: Date) throws -> Bool
     func sendPoke(roomId: Int, fromUserId: String, now: Date) throws -> MatePoke
     func fetchLatestPoke(roomId: Int) throws -> MatePoke?
@@ -23,12 +23,12 @@ protocol MateRepositoryProtocol {
 
 final class StubMateRepository: MateRepositoryProtocol {
     func cleanupExpiredRooms(now: Date) { }
-    func fetchActiveRoom(for userId: String) -> MateRoom? { nil }
-    func fetchActiveRooms(for userId: String) -> [MateRoom] { [] }
-    func createInviteCode(for userId: String, now: Date) -> String { "" }
+    func fetchActiveRooms(for userId: String) throws -> [MateRoom] { [] }
+    func countActiveRooms(for userId: String) throws -> Int { 0 }
+    func existsActiveRoom(between user1: String, and user2: String) throws -> Bool { false }
+    func createInviteCode(for userId: String, now: Date) throws -> String { "" }
     func joinByInviteCode(inviteCode: String, joinerId: String, now: Date) throws -> MateRoom { throw MatePokeError.noActiveRoom }
-    func endRoom(roomId: Int, reason: String) { }
-    func fetchRoomForUser(userId: String) throws -> MateRoom? { nil }
+    func endRoom(roomId: Int, requestedBy userId: String) throws { }
     func hasSentPokeToday(roomId: Int, fromUserId: String, now: Date) throws -> Bool { false }
     func sendPoke(roomId: Int, fromUserId: String, now: Date) throws -> MatePoke { throw MatePokeError.noActiveRoom }
     func fetchLatestPoke(roomId: Int) throws -> MatePoke? { nil }
