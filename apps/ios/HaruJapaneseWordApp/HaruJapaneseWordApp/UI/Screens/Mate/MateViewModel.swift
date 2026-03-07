@@ -225,10 +225,7 @@ final class MateViewModel: ObservableObject {
 
     func counterpartLabel(for room: MateRoom) -> String {
         let otherId = counterpartUserId(for: room)
-        if otherId.hasPrefix("DEV-"), let suffix = otherId.split(separator: "-").last, suffix.isEmpty == false {
-            return String(suffix)
-        }
-        return otherId.isEmpty ? "대기중" : otherId
+        return userMetaProvider.displayName(for: otherId)
     }
 
     private func triggerCelebrationIfNeeded(room: MateRoom, previousRoom: MateRoom?) {
@@ -327,7 +324,7 @@ final class MateViewModel: ObservableObject {
                 return MateRoomCardItem(
                     id: room.id,
                     room: room,
-                    counterpartLabel: counterpartLabel(for: room),
+                    counterpartLabel: userMetaProvider.displayName(for: otherId),
                     lastInteractionText: lastInteractionDescription(interactionDate: interactionDate),
                     jlptLevel: userMetaProvider.jlptLevel(for: otherId),
                     extraInfoText: "기록 준비중",

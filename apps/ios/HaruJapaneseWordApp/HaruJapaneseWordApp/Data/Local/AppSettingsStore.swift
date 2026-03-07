@@ -6,7 +6,6 @@ final class AppSettingsStore: ObservableObject {
     @Published private(set) var hasSeenOnboarding: Bool
     @Published private(set) var isSignedIn: Bool
     @Published private(set) var appleUserId: String?
-    @Published private(set) var profileLevelsByUserId: [String: String]
 
     private let userDefaults: UserDefaults
 
@@ -15,7 +14,9 @@ final class AppSettingsStore: ObservableObject {
     private let isSignedInKey = "auth_is_signed_in"
     private let appleUserIdKey = "auth_apple_user_id"
     private let mateUserIdKey = "mate_user_id"
-    private let profileLevelsByUserIdKey = "settings_profile_levels_by_user_id"
+
+    private let legacyProfileLevelsByUserIdKey = "settings_profile_levels_by_user_id"
+    private let mateProfilePrefix = "mate_profile"
 
     enum MateDevSlot: String {
         case A
@@ -33,9 +34,9 @@ final class AppSettingsStore: ObservableObject {
         self.hasSeenOnboarding = userDefaults.bool(forKey: onboardingKey)
         self.isSignedIn = userDefaults.bool(forKey: isSignedInKey)
         self.appleUserId = userDefaults.string(forKey: appleUserIdKey)
-        self.profileLevelsByUserId = AppSettingsStore.loadProfileLevelsByUserId(userDefaults: userDefaults)
 
         if settings.mateUserId.isEmpty == false {
+            ensureProfileExists(for: settings.mateUserId)
             var updated = settings
             updated.homeDeckLevel = profileLevel(for: settings.mateUserId)
             settings = updated
@@ -50,7 +51,7 @@ final class AppSettingsStore: ObservableObject {
         save(settings: updated)
 
         if settings.mateUserId.isEmpty == false {
-            saveProfileLevel(level, for: settings.mateUserId)
+            updateCurrentMateJLPTLevel(level)
         }
     }
 
@@ -81,6 +82,7 @@ final class AppSettingsStore: ObservableObject {
     }
 
     func signInForMate(userId: String) {
+        ensureProfileExists(for: userId)
         var updated = settings
         updated.mateUserId = userId
         updated.homeDeckLevel = profileLevel(for: userId)
@@ -104,21 +106,59 @@ final class AppSettingsStore: ObservableObject {
     var mateUserId: String { settings.mateUserId }
 
     func profileLevel(for userId: String) -> JLPTLevel {
-        guard userId.isEmpty == false else { return .n5 }
-        let rawValue = profileLevelsByUserId[userId] ?? JLPTLevel.n5.rawValue
-        return JLPTLevel(rawValue: rawValue) ?? .n5
+        profile(for: userId).jlptLevel
     }
 
     func updateProfileLevel(_ level: JLPTLevel, for userId: String) {
-        guard userId.isEmpty == false else { return }
-        saveProfileLevel(level, for: userId)
+        updateProfileJLPTLevel(level, for: userId)
+    }
 
-        if settings.mateUserId == userId {
-            var updated = settings
-            updated.homeDeckLevel = level
-            settings = updated
-            save(settings: updated)
+    func profile(for userId: String) -> MateUserProfile {
+        guard userId.isEmpty == false else {
+            return MateUserProfile(userId: "", displayName: "", bio: "", instagramId: "", jlptLevel: .n5)
         }
+
+        let displayName = userDefaults.string(forKey: mateProfileKey(userId: userId, field: "display_name"))
+            ?? defaultDisplayName(for: userId)
+        let bio = userDefaults.string(forKey: mateProfileKey(userId: userId, field: "bio")) ?? ""
+        let instagramId = userDefaults.string(forKey: mateProfileKey(userId: userId, field: "instagram_id")) ?? ""
+        let levelRaw = userDefaults.string(forKey: mateProfileKey(userId: userId, field: "jlpt_level"))
+            ?? loadLegacyProfileLevelRaw(for: userId)
+            ?? JLPTLevel.n5.rawValue
+        let jlptLevel = JLPTLevel(rawValue: levelRaw) ?? .n5
+
+        return MateUserProfile(
+            userId: userId,
+            displayName: displayName,
+            bio: bio,
+            instagramId: instagramId,
+            jlptLevel: jlptLevel
+        )
+    }
+
+    func currentMateProfile() -> MateUserProfile? {
+        guard settings.mateUserId.isEmpty == false else { return nil }
+        return profile(for: settings.mateUserId)
+    }
+
+    func updateCurrentMateDisplayName(_ name: String) {
+        guard let current = currentMateProfile() else { return }
+        userDefaults.set(name, forKey: mateProfileKey(userId: current.userId, field: "display_name"))
+    }
+
+    func updateCurrentMateBio(_ bio: String) {
+        guard let current = currentMateProfile() else { return }
+        userDefaults.set(bio, forKey: mateProfileKey(userId: current.userId, field: "bio"))
+    }
+
+    func updateCurrentMateInstagramId(_ instagramId: String) {
+        guard let current = currentMateProfile() else { return }
+        userDefaults.set(instagramId, forKey: mateProfileKey(userId: current.userId, field: "instagram_id"))
+    }
+
+    func updateCurrentMateJLPTLevel(_ level: JLPTLevel) {
+        guard let current = currentMateProfile() else { return }
+        updateProfileJLPTLevel(level, for: current.userId)
     }
 
     private static func loadSettings(userDefaults: UserDefaults) -> AppSettings {
@@ -128,17 +168,45 @@ final class AppSettingsStore: ObservableObject {
         return AppSettings(homeDeckLevel: level, mateUserId: mateUserId)
     }
 
-    private static func loadProfileLevelsByUserId(userDefaults: UserDefaults) -> [String: String] {
-        guard let values = userDefaults.dictionary(forKey: "settings_profile_levels_by_user_id") as? [String: String] else {
-            return [:]
-        }
-        return values
+    private func ensureProfileExists(for userId: String) {
+        guard userId.isEmpty == false else { return }
+        let displayNameKey = mateProfileKey(userId: userId, field: "display_name")
+        guard userDefaults.string(forKey: displayNameKey) == nil else { return }
+
+        userDefaults.set(defaultDisplayName(for: userId), forKey: displayNameKey)
+        userDefaults.set("", forKey: mateProfileKey(userId: userId, field: "bio"))
+        userDefaults.set("", forKey: mateProfileKey(userId: userId, field: "instagram_id"))
+        let levelRaw = loadLegacyProfileLevelRaw(for: userId) ?? JLPTLevel.n5.rawValue
+        userDefaults.set(levelRaw, forKey: mateProfileKey(userId: userId, field: "jlpt_level"))
     }
 
-    private func saveProfileLevel(_ level: JLPTLevel, for userId: String) {
-        var updated = profileLevelsByUserId
-        updated[userId] = level.rawValue
-        profileLevelsByUserId = updated
-        userDefaults.set(updated, forKey: profileLevelsByUserIdKey)
+    private func updateProfileJLPTLevel(_ level: JLPTLevel, for userId: String) {
+        guard userId.isEmpty == false else { return }
+        userDefaults.set(level.rawValue, forKey: mateProfileKey(userId: userId, field: "jlpt_level"))
+
+        if settings.mateUserId == userId {
+            var updated = settings
+            updated.homeDeckLevel = level
+            settings = updated
+            save(settings: updated)
+        }
+    }
+
+    private func defaultDisplayName(for userId: String) -> String {
+        if userId.hasPrefix("DEV-"), let suffix = userId.split(separator: "-").last, suffix.isEmpty == false {
+            return String(suffix)
+        }
+        return userId
+    }
+
+    private func loadLegacyProfileLevelRaw(for userId: String) -> String? {
+        guard let values = userDefaults.dictionary(forKey: legacyProfileLevelsByUserIdKey) as? [String: String] else {
+            return nil
+        }
+        return values[userId]
+    }
+
+    private func mateProfileKey(userId: String, field: String) -> String {
+        "\(mateProfilePrefix).\(userId).\(field)"
     }
 }

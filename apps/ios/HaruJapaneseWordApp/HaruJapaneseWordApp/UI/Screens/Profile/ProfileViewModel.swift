@@ -28,15 +28,17 @@ final class ProfileViewModel: ObservableObject {
         self.settingsStore = settingsStore
         self.homeDeckStore = homeDeckStore
         self.learnedStore = learnedStore
-        self.profile = profileStore.load()
+
+        let legacyProfile = profileStore.load()
+        self.profile = legacyProfile
         self.settings = settingsStore.settings
-        self.selectedLearningLevel = settingsStore.profileLevel(for: settingsStore.mateUserId)
+        self.selectedLearningLevel = settingsStore.settings.homeDeckLevel
 
         settingsStore.$settings
             .receive(on: RunLoop.main)
             .sink { [weak self] value in
                 self?.settings = value
-                self?.selectedLearningLevel = settingsStore.profileLevel(for: value.mateUserId)
+                self?.syncProfileFromCurrentUser()
             }
             .store(in: &cancellables)
 
@@ -46,28 +48,44 @@ final class ProfileViewModel: ObservableObject {
                 self?.objectWillChange.send()
             }
             .store(in: &cancellables)
+
+        syncProfileFromCurrentUser()
     }
 
     func updateNickname(_ nickname: String) {
         profile.nickname = nickname
-        profileStore.updateNickname(nickname)
+        if settingsStore.isMateLoggedIn {
+            settingsStore.updateCurrentMateDisplayName(nickname)
+        } else {
+            profileStore.updateNickname(nickname)
+        }
     }
 
     func updateBio(_ bio: String) {
         profile.bio = bio
-        profileStore.updateBio(bio)
+        if settingsStore.isMateLoggedIn {
+            settingsStore.updateCurrentMateBio(bio)
+        } else {
+            profileStore.updateBio(bio)
+        }
     }
 
     func updateInstagram(_ instagramId: String) {
         profile.instagramId = instagramId
-        profileStore.updateInstagram(instagramId)
+        if settingsStore.isMateLoggedIn {
+            settingsStore.updateCurrentMateInstagramId(instagramId)
+        } else {
+            profileStore.updateInstagram(instagramId)
+        }
     }
 
     func updateProfileLevel(_ level: JLPTLevel) {
-        let userId = settingsStore.mateUserId
-        guard userId.isEmpty == false else { return }
         selectedLearningLevel = level
-        settingsStore.updateProfileLevel(level, for: userId)
+        if settingsStore.isMateLoggedIn {
+            settingsStore.updateCurrentMateJLPTLevel(level)
+        } else {
+            settingsStore.updateHomeDeckLevel(level)
+        }
     }
 
     var isMateLoggedIn: Bool { settingsStore.isMateLoggedIn }
@@ -107,6 +125,22 @@ final class ProfileViewModel: ObservableObject {
     func resetLearningData() {
         learnedStore.resetLearnedData()
         homeDeckStore.resetDeckData()
+    }
+
+    private func syncProfileFromCurrentUser() {
+        if let mateProfile = settingsStore.currentMateProfile() {
+            profile.nickname = mateProfile.displayName
+            profile.bio = mateProfile.bio
+            profile.instagramId = mateProfile.instagramId
+            selectedLearningLevel = mateProfile.jlptLevel
+        } else {
+            let legacyProfile = profileStore.load()
+            profile.nickname = legacyProfile.nickname
+            profile.bio = legacyProfile.bio
+            profile.instagramId = legacyProfile.instagramId
+            profile.avatarData = legacyProfile.avatarData
+            selectedLearningLevel = settingsStore.settings.homeDeckLevel
+        }
     }
 
     private func compressImageData(_ data: Data) -> Data? {
