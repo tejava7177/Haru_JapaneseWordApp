@@ -36,7 +36,7 @@ struct MateRoomCardView: View {
             Divider()
 
             HStack(spacing: 10) {
-                Button("콕 찌르기") {
+                Button("つんつん 보내기") {
                     onSendPoke()
                 }
                     .buttonStyle(.borderedProminent)
@@ -45,7 +45,7 @@ struct MateRoomCardView: View {
 
                 Spacer()
 
-                Button("동행 종료") {
+                Button("버디 종료") {
                     onEndRoom()
                 }
                 .buttonStyle(.bordered)

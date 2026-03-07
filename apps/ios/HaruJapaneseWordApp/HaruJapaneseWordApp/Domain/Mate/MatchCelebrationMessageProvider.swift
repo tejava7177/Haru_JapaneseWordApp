@@ -14,9 +14,9 @@ struct MatchCelebrationMessage: Hashable {
 
 enum MatchCelebrationMessageProvider {
     private static let koOnly: [MatchCelebrationMessage] = [
-        .init(title: "Mate가 성사되었어요 🎉", subtitle: "이제 함께 공부해요 ✨"),
-        .init(title: "동행이 시작됐어요 🌸", subtitle: "오늘도 꾸준히 가볼까요?"),
-        .init(title: "새로운 메이트가 생겼어요 💙", subtitle: "이제 혼자가 아니에요")
+        .init(title: "Buddy가 성사되었어요 🎉", subtitle: "이제 함께 공부해요 ✨"),
+        .init(title: "버디가 시작됐어요 🌸", subtitle: "오늘도 꾸준히 가볼까요?"),
+        .init(title: "새로운 버디가 생겼어요 💙", subtitle: "이제 혼자가 아니에요")
     ]
 
     private static let jpOnly: [MatchCelebrationMessage] = [
@@ -26,8 +26,8 @@ enum MatchCelebrationMessageProvider {
     ]
 
     private static let mixed: [MatchCelebrationMessage] = [
-        .init(title: "Mate가 성사되었어요 🎉", subtitle: "一緒にがんばりましょう ✨"),
-        .init(title: "동행 성공 💫", subtitle: "今日から一緒に勉強です"),
+        .init(title: "Buddy가 성사되었어요 🎉", subtitle: "一緒にがんばりましょう ✨"),
+        .init(title: "버디 성공 💫", subtitle: "今日から一緒に勉強です"),
         .init(title: "이제 콕 찌를 수 있어요 👈", subtitle: "さあ、はじめましょう")
     ]
 

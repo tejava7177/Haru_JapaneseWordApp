@@ -13,7 +13,7 @@ struct InviteSectionView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("초대코드 매칭")
                 .font(.headline)
-            Text("초대코드로만 동행을 시작할 수 있어요.")
+            Text("초대코드로만 버디를 시작할 수 있어요.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
@@ -54,7 +54,7 @@ struct InviteSectionView: View {
                     .textFieldStyle(.roundedBorder)
                     .disabled(isBusy)
 
-                Button("동행 시작") {
+                Button("버디 시작") {
                     onJoin(inviteCodeInput)
                 }
                 .buttonStyle(.borderedProminent)

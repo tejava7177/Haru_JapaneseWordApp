@@ -51,7 +51,7 @@ struct RootView: View {
                 }
             }
             .tabItem {
-                Label("Mate", systemImage: "person.2")
+                Label("Buddy", systemImage: "person.2")
             }
             .tag(RootTab.mate)
 

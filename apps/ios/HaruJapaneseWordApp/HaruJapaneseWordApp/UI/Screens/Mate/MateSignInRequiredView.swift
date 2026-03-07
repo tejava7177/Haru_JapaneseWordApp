@@ -5,10 +5,10 @@ struct MateSignInRequiredView: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            Text("Mate 사용을 위해 로그인 필요")
+            Text("Buddy 사용을 위해 로그인 필요")
                 .font(.title3).bold()
 
-            Text("프로필에서 로그인하면 Mate 기능을 사용할 수 있어요.")
+            Text("프로필에서 로그인하면 Buddy 기능을 사용할 수 있어요.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

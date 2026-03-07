@@ -124,7 +124,7 @@ final class MateViewModel: ObservableObject {
 
     func createInviteCode() {
         guard canAddNewMate else {
-            inviteSectionErrorMessage = "동행은 최대 \(Self.maxMateCount)명까지 가능해요"
+            inviteSectionErrorMessage = "버디는 최대 \(Self.maxMateCount)명까지 가능해요"
             return
         }
         print("MATE_ACTION_CREATE_INVITE")
@@ -137,7 +137,7 @@ final class MateViewModel: ObservableObject {
         } catch let mateError as MateError {
             inviteSectionErrorMessage = mateError.userMessage
         } catch {
-            inviteSectionErrorMessage = "동행을 시작하지 못했어요. 다시 시도해 주세요."
+            inviteSectionErrorMessage = "버디를 시작하지 못했어요. 다시 시도해 주세요."
         }
     }
 
@@ -147,7 +147,7 @@ final class MateViewModel: ObservableObject {
 
     func joinByInviteCode(_ inviteCode: String) {
         guard canAddNewMate else {
-            inviteSectionErrorMessage = "동행은 최대 \(Self.maxMateCount)명까지 가능해요"
+            inviteSectionErrorMessage = "버디는 최대 \(Self.maxMateCount)명까지 가능해요"
             return
         }
         let trimmed = inviteCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
@@ -168,7 +168,7 @@ final class MateViewModel: ObservableObject {
         } catch let mateError as MateError {
             inviteSectionErrorMessage = mateError.userMessage
         } catch {
-            inviteSectionErrorMessage = "동행을 시작하지 못했어요. 다시 시도해 주세요."
+            inviteSectionErrorMessage = "버디를 시작하지 못했어요. 다시 시도해 주세요."
         }
     }
 
@@ -183,7 +183,7 @@ final class MateViewModel: ObservableObject {
             alertMessage = mateError.userMessage
             isShowingAlert = true
         } catch {
-            alertMessage = "동행을 종료하지 못했어요."
+            alertMessage = "버디를 종료하지 못했어요."
             isShowingAlert = true
         }
     }
@@ -369,8 +369,8 @@ final class MateViewModel: ObservableObject {
                 return
             }
             let content = UNMutableNotificationContent()
-            content.title = "Mate 연결됨"
-            content.body = "이제 서로 콕 찌를 수 있어요."
+            content.title = "Buddy 연결됨"
+            content.body = "이제 서로 つんつん 보낼 수 있어요."
             let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
             let request = UNNotificationRequest(
                 identifier: "mate.connected.\(UUID().uuidString)",

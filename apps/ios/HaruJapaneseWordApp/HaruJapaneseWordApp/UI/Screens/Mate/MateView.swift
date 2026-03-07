@@ -41,7 +41,7 @@ struct MateView: View {
                 .padding(.top, 24)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .navigationTitle("Mate")
+            .navigationTitle("Buddy")
         }
         .onAppear {
             viewModel.onViewAppear()
@@ -84,7 +84,7 @@ struct MateView: View {
 
     private var myMateSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("내 동행")
+            Text("내 버디")
                 .font(.headline)
 
             LazyVStack(spacing: 12) {
@@ -106,9 +106,9 @@ struct MateView: View {
 
     private var emptyMateSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("내 동행")
+            Text("내 버디")
                 .font(.headline)
-            Text("아직 동행이 없어요. 초대코드로 시작해보세요.")
+            Text("아직 버디가 없어요. 초대코드로 시작해보세요.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
@@ -124,7 +124,7 @@ struct MateView: View {
             } label: {
                 HStack {
                     Image(systemName: isInviteSectionExpanded ? "chevron.up" : "plus")
-                    Text(isInviteSectionExpanded ? "새 동행 추가 접기" : "새 동행 추가")
+                    Text(isInviteSectionExpanded ? "새 버디 추가 접기" : "새 버디 추가")
                 }
                 .frame(maxWidth: .infinity)
             }
@@ -132,7 +132,7 @@ struct MateView: View {
             .disabled(viewModel.canAddNewMate == false)
 
             if viewModel.canAddNewMate == false {
-                Text("동행은 최대 3명까지 가능해요.")
+                Text("버디는 최대 3명까지 가능해요.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
