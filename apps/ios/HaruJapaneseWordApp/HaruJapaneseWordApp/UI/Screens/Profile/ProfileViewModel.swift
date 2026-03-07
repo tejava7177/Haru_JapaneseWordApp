@@ -89,9 +89,11 @@ final class ProfileViewModel: ObservableObject {
     }
 
     var isMateLoggedIn: Bool { settingsStore.isMateLoggedIn }
+    var currentMateUserId: String { settingsStore.mateUserId }
+    var currentProfile: UserProfile { profile }
 
     var mateUserIdPrefix: String {
-        let value = settingsStore.mateUserId
+        let value = currentMateUserId
         guard value.isEmpty == false else { return "" }
         let prefixLength = min(8, value.count)
         return String(value.prefix(prefixLength))

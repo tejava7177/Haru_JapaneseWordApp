@@ -20,10 +20,11 @@ struct ProfileView: View {
     var body: some View {
         NavigationStack {
             Form {
-                profileHeaderSection
-                signInSection
-                profileEditSection
-                learningSettingsSection
+                if viewModel.isMateLoggedIn {
+                    loggedInContent
+                } else {
+                    guestContent
+                }
                 helpSection
                 dataSection
             }
@@ -69,6 +70,20 @@ struct ProfileView: View {
         }
     }
 
+    @ViewBuilder
+    private var loggedInContent: some View {
+        profileHeaderSection
+        loggedInStatusSection
+        profileEditSection
+        learningSettingsSection
+    }
+
+    @ViewBuilder
+    private var guestContent: some View {
+        guestPromptSection
+        guestLoginSection
+    }
+
     private var profileHeaderSection: some View {
         Section {
             HStack(spacing: 16) {
@@ -78,87 +93,98 @@ struct ProfileView: View {
                 .buttonStyle(.plain)
 
                 VStack(alignment: .leading, spacing: 6) {
-                    let nickname = viewModel.profile.nickname
+                    let nickname = viewModel.currentProfile.nickname
                     Text(nickname.isEmpty ? "하루" : nickname)
                         .font(.title3)
                         .fontWeight(.semibold)
-                            Text(viewModel.isMateLoggedIn ? "Mate 로그인됨" : "프로필을 설정해 보세요.")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+                    Text("프로필을 저장하고 있어요")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
             }
             .padding(.vertical, 8)
         }
     }
 
-    private var signInSection: some View {
+    private var guestPromptSection: some View {
+        Section {
+            GuestProfilePromptCardView()
+        }
+    }
+
+    private var guestLoginSection: some View {
         Section("로그인") {
-                    if viewModel.isMateLoggedIn {
-                        HStack {
-                            Text("Mate 로그인 상태예요.")
-                            Spacer()
-                            if viewModel.mateUserIdPrefix.isEmpty == false {
-                                Text(viewModel.mateUserIdPrefix)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            } else {
-                                Text("연결됨")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            }
-                        }
+            VStack(alignment: .leading, spacing: 12) {
+                Text("로그인하면 프로필과 학습 설정을 저장하고, Mate 기능을 사용할 수 있어요.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Text("테스트용 Dev Slot으로 로그인할 수 있어요.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
 
-                        Button(role: .destructive) {
-                            viewModel.signOutForMate()
-                        } label: {
-                            Text("Mate 로그아웃")
-                        }
-                    } else {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Apple로 로그인하면 Mate(동행) 기능을 사용할 수 있어요.")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-
-                            #if targetEnvironment(simulator)
-                            VStack(alignment: .leading, spacing: 8) {
-                                Button("Dev Slot A로 로그인") {
-                                    viewModel.signInForMateDevSlot(.A)
-                                }
-                                Button("Dev Slot B로 로그인") {
-                                    viewModel.signInForMateDevSlot(.B)
-                                }
-                                Button("Dev Slot C로 로그인") {
-                                    viewModel.signInForMateDevSlot(.C)
-                                }
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .tint(.black)
-                            #else
-                            AppleSignInButton { userId in
-                                viewModel.signInWithApple(userId: userId)
-                            } onFailure: { error in
-                                errorMessage = "Apple 로그인에 실패했어요. 다시 시도해 주세요.\n\(error.localizedDescription)"
-                            }
-                            .frame(height: 52)
-                            #endif
-                        }
-                        .padding(.vertical, 4)
+                #if targetEnvironment(simulator)
+                VStack(alignment: .leading, spacing: 8) {
+                    Button("Dev Slot A로 로그인") {
+                        viewModel.signInForMateDevSlot(.A)
+                    }
+                    Button("Dev Slot B로 로그인") {
+                        viewModel.signInForMateDevSlot(.B)
+                    }
+                    Button("Dev Slot C로 로그인") {
+                        viewModel.signInForMateDevSlot(.C)
                     }
                 }
+                .buttonStyle(.borderedProminent)
+                .tint(.black)
+                #else
+                AppleSignInButton { userId in
+                    viewModel.signInWithApple(userId: userId)
+                } onFailure: { error in
+                    errorMessage = "Apple 로그인에 실패했어요. 다시 시도해 주세요.\n\(error.localizedDescription)"
+                }
+                .frame(height: 52)
+                #endif
+            }
+            .padding(.vertical, 4)
+        }
+    }
+
+    private var loggedInStatusSection: some View {
+        Section("로그인") {
+            HStack {
+                Text("Mate 로그인 상태예요.")
+                Spacer()
+                if viewModel.mateUserIdPrefix.isEmpty == false {
+                    Text(viewModel.mateUserIdPrefix)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("연결됨")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Button(role: .destructive) {
+                viewModel.signOutForMate()
+            } label: {
+                Text("Mate 로그아웃")
+            }
+        }
     }
 
     private var profileEditSection: some View {
         Section("프로필") {
             let nicknameBinding = Binding(
-                get: { viewModel.profile.nickname },
+                get: { viewModel.currentProfile.nickname },
                 set: { viewModel.updateNickname($0) }
             )
             let bioBinding = Binding(
-                get: { viewModel.profile.bio },
+                get: { viewModel.currentProfile.bio },
                 set: { viewModel.updateBio($0) }
             )
             let instagramBinding = Binding(
-                get: { viewModel.profile.instagramId },
+                get: { viewModel.currentProfile.instagramId },
                 set: { viewModel.updateInstagram($0) }
             )
 
@@ -237,7 +263,7 @@ struct ProfileView: View {
     private var avatarView: some View {
         let size: CGFloat = 72
         return Group {
-            if let data = viewModel.profile.avatarData,
+            if let data = viewModel.currentProfile.avatarData,
                let uiImage = UIImage(data: data) {
                 Image(uiImage: uiImage)
                     .resizable()
@@ -302,6 +328,39 @@ private struct LevelSelectionChip: View {
         .accessibilityLabel("\(level.title) 레벨")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .animation(.easeInOut(duration: 0.15), value: isSelected)
+    }
+}
+
+private struct GuestProfilePromptCardView: View {
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: "person.crop.circle.badge.plus")
+                .font(.system(size: 30, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 44, height: 44)
+                .background(Color(uiColor: .tertiarySystemFill))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("로그인하고 동행을 시작해보세요")
+                    .font(.headline)
+                Text("로그인하면 프로필과 학습 설정을 저장하고, Mate 기능을 사용할 수 있어요.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Text("로그인 후 사용 가능")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Color(uiColor: .tertiarySystemFill))
+                    .clipShape(Capsule())
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(uiColor: .secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 

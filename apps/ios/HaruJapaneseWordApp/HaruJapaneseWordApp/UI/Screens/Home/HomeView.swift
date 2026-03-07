@@ -137,7 +137,7 @@ struct HomeView: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "paperplane.fill")
-                    Text("콕 전송하기")
+                    Text("つんつん 보내기")
                 }
                 .font(.callout)
                 .padding(.horizontal, 14)
