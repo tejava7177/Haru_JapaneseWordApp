@@ -4,7 +4,6 @@ struct MateRoomCardView: View {
     let item: MateRoomCardItem
     let isBusy: Bool
     let onSendPoke: () -> Void
-    let onEndRoom: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -39,17 +38,9 @@ struct MateRoomCardView: View {
                 Button("つんつん 보내기") {
                     onSendPoke()
                 }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.black)
-                    .disabled(item.canSendPokeToday == false || isBusy)
-
-                Spacer()
-
-                Button("버디 종료") {
-                    onEndRoom()
-                }
-                .buttonStyle(.bordered)
-                .disabled(isBusy)
+                .buttonStyle(.borderedProminent)
+                .tint(.black)
+                .disabled(item.canSendPokeToday == false || isBusy)
             }
 
             if let pokeStatusText = item.pokeStatusText, pokeStatusText.isEmpty == false {

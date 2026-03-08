@@ -11,36 +11,61 @@ struct MateView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    if viewModel.connectedRoomCards.isEmpty {
-                        emptyMateSection
-                    } else {
-                        myMateSection
-                    }
-
-                    addMateButtonSection
-
-                    if isInviteSectionExpanded {
-                        InviteSectionView(
-                            myInviteCode: viewModel.inviteCode,
-                            inviteCodeInput: $viewModel.inputInviteCode,
-                            onCreateInviteCode: {
-                                viewModel.createInviteCode()
-                            },
-                            onJoin: { inviteCode in
-                                viewModel.joinByInviteCode(inviteCode)
-                            },
+            List {
+                if viewModel.connectedRoomCards.isEmpty {
+                    emptyMateSection
+                        .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 8, trailing: 16))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                } else {
+                    ForEach(viewModel.connectedRoomCards) { item in
+                        MateRoomCardView(
+                            item: item,
                             isBusy: viewModel.isBusy,
-                            errorMessage: viewModel.inviteSectionErrorMessage
+                            onSendPoke: {
+                                viewModel.sendPoke(roomId: item.room.id)
+                            }
                         )
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) {
+                                viewModel.endRoom(roomId: item.room.id)
+                            } label: {
+                                Label("끊기", systemImage: "person.2.slash")
+                            }
+                            .disabled(viewModel.isBusy)
+                        }
+                        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 24)
-                .frame(maxWidth: .infinity, alignment: .leading)
+
+                addMateButtonSection
+                    .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 6, trailing: 16))
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+
+                if isInviteSectionExpanded {
+                    InviteSectionView(
+                        myInviteCode: viewModel.inviteCode,
+                        inviteCodeInput: $viewModel.inputInviteCode,
+                        onCreateInviteCode: {
+                            viewModel.createInviteCode()
+                        },
+                        onJoin: { inviteCode in
+                            viewModel.joinByInviteCode(inviteCode)
+                        },
+                        isBusy: viewModel.isBusy,
+                        errorMessage: viewModel.inviteSectionErrorMessage
+                    )
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 12, trailing: 16))
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                }
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
             .navigationTitle("Buddy")
         }
         .onAppear {
@@ -82,36 +107,10 @@ struct MateView: View {
         }
     }
 
-    private var myMateSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("내 버디")
-                .font(.headline)
-
-            LazyVStack(spacing: 12) {
-                ForEach(viewModel.connectedRoomCards) { item in
-                    MateRoomCardView(
-                        item: item,
-                        isBusy: viewModel.isBusy,
-                        onSendPoke: {
-                            viewModel.sendPoke(roomId: item.room.id)
-                        },
-                        onEndRoom: {
-                        viewModel.endRoom(roomId: item.room.id)
-                        }
-                    )
-                }
-            }
-        }
-    }
-
     private var emptyMateSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("내 버디")
-                .font(.headline)
-            Text("아직 버디가 없어요. 초대코드로 시작해보세요.")
+        Text("아직 버디가 없어요. 초대코드로 시작해보세요.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-        }
     }
 
     private var addMateButtonSection: some View {
