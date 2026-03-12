@@ -3,6 +3,11 @@ import Combine
 
 @MainActor
 final class BuddyDetailViewModel: ObservableObject {
+    enum SendBlockReason {
+        case pendingIncomingAnswer
+        case pendingOutgoingAnswer
+    }
+
     struct UserAlert: Equatable {
         let title: String
         let message: String
@@ -47,7 +52,11 @@ final class BuddyDetailViewModel: ObservableObject {
     }
 
     var canSendSelectedItem: Bool {
-        selectedItem != nil && isSending == false && hasPendingOutgoingAnswer == false
+        selectedItem != nil && isSending == false && currentSendBlockReason == nil
+    }
+
+    var hasPendingIncomingAnswer: Bool {
+        items.contains { $0.direction == .received }
     }
 
     var hasPendingOutgoingAnswer: Bool {
@@ -55,8 +64,14 @@ final class BuddyDetailViewModel: ObservableObject {
     }
 
     var pendingAnswerMessage: String? {
-        guard hasPendingOutgoingAnswer else { return nil }
-        return "상대가 아직 답변 중이에요"
+        switch currentSendBlockReason {
+        case .pendingIncomingAnswer:
+            return "받은 츤츤에 답해야 새 츤츤을 보낼 수 있어요."
+        case .pendingOutgoingAnswer:
+            return "상대가 아직 답변 중이에요"
+        case nil:
+            return nil
+        }
     }
 
     func load() {
@@ -122,8 +137,8 @@ final class BuddyDetailViewModel: ObservableObject {
     }
 
     func sendTsunTsun() {
-        if hasPendingOutgoingAnswer {
-            userAlert = waitingForBuddyAlert()
+        if let blockReason = currentSendBlockReason {
+            userAlert = userAlert(for: blockReason)
             return
         }
 
@@ -234,16 +249,33 @@ final class BuddyDetailViewModel: ObservableObject {
                 .lowercased()
 
             if statusCode == 400 && (
+                normalized.contains("reply first")
+                || normalized.contains("unanswered received tsuntsun")
+                || normalized.contains("received unanswered")
+                || normalized.contains("answer received")
+                || normalized.contains("먼저 받은 츤츤")
+            ) {
+                return userAlert(for: .pendingIncomingAnswer)
+            }
+
+            if statusCode == 400 && (
                 normalized.contains("already sent")
                 || normalized.contains("not answered")
                 || normalized.contains("waiting answer")
                 || normalized.contains("waiting for answer")
             ) {
-                return waitingForBuddyAlert()
+                return userAlert(for: .pendingOutgoingAnswer)
             }
 
             if statusCode == 400, normalized.isEmpty || normalized == "bad request" {
-                return waitingForBuddyAlert()
+                if let currentSendBlockReason {
+                    return userAlert(for: currentSendBlockReason)
+                }
+
+                return UserAlert(
+                    title: "잠시 기다려주세요",
+                    message: "받은 츤츤의 답변을 완료해주세요."
+                )
             }
 
             return nil
@@ -252,11 +284,31 @@ final class BuddyDetailViewModel: ObservableObject {
         }
     }
 
-    private func waitingForBuddyAlert() -> UserAlert {
-        UserAlert(
-            title: "잠시 기다려주세요",
-            message: "아직 \(buddyName)이 츤츤에 답하지 않았어요.\n답변 후 다음 츤츤을 보낼 수 있어요."
-        )
+    private var currentSendBlockReason: SendBlockReason? {
+        if hasPendingIncomingAnswer {
+            return .pendingIncomingAnswer
+        }
+
+        if hasPendingOutgoingAnswer {
+            return .pendingOutgoingAnswer
+        }
+
+        return nil
+    }
+
+    private func userAlert(for blockReason: SendBlockReason) -> UserAlert {
+        switch blockReason {
+        case .pendingIncomingAnswer:
+            return UserAlert(
+                title: "먼저 답변이 필요해요",
+                message: "아직 받은 츤츤에 답하지 않았어요.\n받은 츤츤에 답해야 새 츤츤을 보낼 수 있어요."
+            )
+        case .pendingOutgoingAnswer:
+            return UserAlert(
+                title: "잠시 기다려주세요",
+                message: "아직 \(buddyName)이 츤츤에 답하지 않았어요.\n답변 후 다음 츤츤을 보낼 수 있어요."
+            )
+        }
     }
 
     private func rebuildItems() {
