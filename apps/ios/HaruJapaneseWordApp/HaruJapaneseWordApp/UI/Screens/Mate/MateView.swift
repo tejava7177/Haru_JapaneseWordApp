@@ -19,13 +19,41 @@ struct MateView: View {
                         .listRowBackground(Color.clear)
                 } else {
                     ForEach(viewModel.connectedRoomCards) { item in
-                        MateRoomCardView(
-                            item: item,
-                            isBusy: viewModel.isBusy,
-                            onSendPoke: {
-                                viewModel.sendPoke(roomId: item.room.id)
+                        VStack(alignment: .leading, spacing: 8) {
+                            MateRoomCardView(
+                                item: item,
+                                isBusy: viewModel.isBusy,
+                                onSendPoke: {
+                                    viewModel.sendPoke(roomId: item.room.id)
+                                }
+                            )
+
+                            NavigationLink {
+                                BuddyDetailView(
+                                    viewModel: BuddyDetailViewModel(
+                                        myUserId: viewModel.currentUserId,
+                                        buddyId: item.counterpartUserId,
+                                        buddyName: item.counterpartLabel
+                                    )
+                                )
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "text.book.closed")
+                                    Text("오늘 단어 보기")
+                                        .font(.subheadline.weight(.medium))
+                                }
+                                .foregroundStyle(.primary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .fill(Color(uiColor: .tertiarySystemBackground))
+                                )
                             }
-                        )
+                            .buttonStyle(.plain)
+                            .disabled(Int(item.counterpartUserId) == nil)
+                        }
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button(role: .destructive) {
                                 viewModel.endRoom(roomId: item.room.id)

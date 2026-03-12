@@ -16,6 +16,8 @@ enum MatchCelebration: Identifiable, Equatable {
 struct MateRoomCardItem: Identifiable, Equatable {
     let id: Int
     let room: MateRoom
+    let counterpartUserId: String
+    let counterpartRawUserId: String
     let counterpartLabel: String
     let lastInteractionText: String
     let jlptLevel: JLPTLevel
@@ -27,6 +29,35 @@ struct MateRoomCardItem: Identifiable, Equatable {
 @MainActor
 final class MateViewModel: ObservableObject {
     static let maxMateCount: Int = MateService.maxActiveMatesPerUser
+    static let backendMyUserId: String = "1"
+
+    enum BuddyBackendUserMapper {
+        static func backendUserId(for rawUserId: String, displayName: String) -> String? {
+            let normalizedRawUserId = rawUserId.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let normalizedDisplayName = displayName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+            let mappings: [String: String] = [
+                "juheun": "1",
+                "1": "1",
+                "dev-a": "1",
+                "a": "1",
+                "buddy2": "2",
+                "2": "2",
+                "dev-b": "2",
+                "b": "2",
+                "buddy3": "3",
+                "3": "3",
+                "dev-c": "3",
+                "c": "3",
+                "buddy4": "4",
+                "4": "4",
+                "dev-d": "4",
+                "d": "4"
+            ]
+
+            return mappings[normalizedRawUserId] ?? mappings[normalizedDisplayName]
+        }
+    }
 
     @Published private(set) var activeRooms: [MateRoom] = []
     @Published private(set) var connectedRoomCards: [MateRoomCardItem] = []
@@ -72,6 +103,10 @@ final class MateViewModel: ObservableObject {
 
     var connectedMateCount: Int {
         connectedRoomCards.count
+    }
+
+    var currentUserId: String {
+        Self.backendMyUserId
     }
 
     var canAddNewMate: Bool {
@@ -319,12 +354,15 @@ final class MateViewModel: ObservableObject {
             .filter { $0.hasMate }
             .map { room in
                 let otherId = room.userAId != myUserId ? room.userAId : room.userBId
+                let displayName = userMetaProvider.displayName(for: otherId)
                 let interactionDate = interactionDate(for: room)
                 let canSendPokeToday = canSendPokeByRoomId[room.id] ?? true
                 return MateRoomCardItem(
                     id: room.id,
                     room: room,
-                    counterpartLabel: userMetaProvider.displayName(for: otherId),
+                    counterpartUserId: BuddyBackendUserMapper.backendUserId(for: otherId, displayName: displayName) ?? otherId,
+                    counterpartRawUserId: otherId,
+                    counterpartLabel: displayName,
                     lastInteractionText: lastInteractionDescription(interactionDate: interactionDate),
                     jlptLevel: userMetaProvider.jlptLevel(for: otherId),
                     extraInfoText: "기록 준비중",
