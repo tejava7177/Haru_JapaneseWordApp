@@ -2,12 +2,14 @@ import SwiftUI
 
 struct TsunTsunInboxView: View {
     @StateObject private var viewModel: TsunTsunInboxViewModel
+    private let settingsStore: AppSettingsStore
     private let service: BuddyAPIServiceProtocol
 
     init(
         settingsStore: AppSettingsStore,
         service: BuddyAPIServiceProtocol = BuddyAPIService()
     ) {
+        self.settingsStore = settingsStore
         self.service = service
         _viewModel = StateObject(
             wrappedValue: TsunTsunInboxViewModel(settingsStore: settingsStore, service: service)
@@ -30,7 +32,7 @@ struct TsunTsunInboxView: View {
 
                         ForEach(viewModel.items) { item in
                             NavigationLink {
-                                TsunTsunAnswerView(item: item, service: service) { answeredId in
+                                TsunTsunAnswerView(item: item, settingsStore: settingsStore, service: service) { answeredId in
                                     viewModel.removeAnsweredItem(tsuntsunId: answeredId)
                                 }
                             } label: {

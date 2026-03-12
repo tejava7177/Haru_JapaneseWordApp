@@ -3,17 +3,12 @@ import Combine
 
 @MainActor
 final class TsunTsunAnswerViewModel: ObservableObject {
-    struct SubmissionResult: Equatable {
-        let title: String
-        let detail: String
-        let correctText: String?
-        let selectedText: String?
-        let isCorrect: Bool?
-    }
-
     @Published var selectedMeaningId: Int?
+    @Published private(set) var submittedMeaningId: Int?
+    @Published private(set) var correctMeaningId: Int?
+    @Published private(set) var isCorrect: Bool?
+    @Published private(set) var submissionMessage: String?
     @Published private(set) var isSubmitting: Bool = false
-    @Published private(set) var submissionResult: SubmissionResult?
     @Published var errorMessage: String?
 
     let item: TsunTsunInboxItemResponse
@@ -29,11 +24,51 @@ final class TsunTsunAnswerViewModel: ObservableObject {
     }
 
     var canSubmit: Bool {
-        selectedMeaningId != nil && isSubmitting == false && submissionResult == nil
+        selectedMeaningId != nil && isSubmitting == false && hasSubmitted == false
     }
 
     var hasAnsweredSuccessfully: Bool {
-        submissionResult != nil
+        hasSubmitted
+    }
+
+    var hasSubmitted: Bool {
+        submittedMeaningId != nil
+    }
+
+    var effectiveCorrectMeaningId: Int? {
+        correctMeaningId ?? item.choices.first(where: { $0.meaningId == submittedMeaningId })?.meaningId
+    }
+
+    var selectedChoiceText: String? {
+        let meaningId = submittedMeaningId ?? selectedMeaningId
+        guard let meaningId else { return nil }
+        return item.choices.first(where: { $0.meaningId == meaningId })?.text
+    }
+
+    var correctChoiceText: String? {
+        guard let effectiveCorrectMeaningId else { return nil }
+        return item.choices.first(where: { $0.meaningId == effectiveCorrectMeaningId })?.text
+    }
+
+    var feedbackText: String? {
+        guard hasSubmitted else { return nil }
+
+        if let submissionMessage, submissionMessage.isEmpty == false {
+            return submissionMessage
+        }
+
+        if submittedMeaningId == -1 {
+            return "정답을 확인하고 바로 다음 츤츤을 보내보세요."
+        }
+
+        switch isCorrect {
+        case true:
+            return "정답이에요."
+        case false:
+            return "정답을 확인했어요."
+        case nil:
+            return "답변을 보냈어요."
+        }
     }
 
     func submitAnswer() {
@@ -48,7 +83,7 @@ final class TsunTsunAnswerViewModel: ObservableObject {
                     tsuntsunId: item.tsuntsunId,
                     meaningId: selectedMeaningId
                 )
-                submissionResult = makeSubmissionResult(from: response, selectedMeaningId: selectedMeaningId)
+                applySubmission(from: response, selectedMeaningId: selectedMeaningId)
                 NotificationCenter.default.post(name: .tsunTsunInboxDidChange, object: nil)
                 isSubmitting = false
             } catch {
@@ -58,51 +93,13 @@ final class TsunTsunAnswerViewModel: ObservableObject {
         }
     }
 
-    private func makeSubmissionResult(
+    private func applySubmission(
         from response: AnswerTsunTsunResponse,
         selectedMeaningId: Int
-    ) -> SubmissionResult {
-        let selectedChoice = item.choices.first(where: { $0.meaningId == selectedMeaningId })
-        let correctChoice = item.choices.first(where: { $0.meaningId == response.correctMeaningId })
-        let selectedText = response.selectedText ?? selectedChoice?.text
-        let correctText = response.correctText ?? correctChoice?.text
-
-        if response.isCorrect == true {
-            return SubmissionResult(
-                title: "정답이에요",
-                detail: response.message ?? "뜻을 정확히 맞혔어요.",
-                correctText: correctText,
-                selectedText: selectedText,
-                isCorrect: true
-            )
-        }
-
-        if selectedMeaningId == -1 {
-            return SubmissionResult(
-                title: "모르겠어요로 답했어요",
-                detail: response.message ?? "정답을 확인하고 다음 츤츤으로 넘어가세요.",
-                correctText: correctText,
-                selectedText: selectedText,
-                isCorrect: response.isCorrect
-            )
-        }
-
-        if response.isCorrect == false {
-            return SubmissionResult(
-                title: "오답이에요",
-                detail: response.message ?? "정답을 확인하고 다시 익혀보세요.",
-                correctText: correctText,
-                selectedText: selectedText,
-                isCorrect: false
-            )
-        }
-
-        return SubmissionResult(
-            title: "답변을 보냈어요",
-            detail: response.message ?? "목록으로 돌아가면 받은 츤츤이 갱신돼요.",
-            correctText: correctText,
-            selectedText: selectedText,
-            isCorrect: response.isCorrect
-        )
+    ) {
+        submittedMeaningId = response.selectedMeaningId ?? selectedMeaningId
+        correctMeaningId = response.correctMeaningId
+        isCorrect = response.isCorrect
+        submissionMessage = response.message
     }
 }
