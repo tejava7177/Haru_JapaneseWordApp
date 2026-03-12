@@ -18,6 +18,9 @@ final class BuddyDetailViewModel: ObservableObject {
     @Published private(set) var isSending: Bool = false
     @Published private(set) var targetDateText: String = ""
     @Published private(set) var sentCount: Int = 0
+    @Published private(set) var progressCount: Int = 0
+    @Published private(set) var progressGoal: Int = 10
+    @Published private(set) var pairCompletedToday: Bool = false
     @Published private(set) var totalCount: Int = 0
     @Published private(set) var receivedCount: Int = 0
     @Published var errorMessage: String?
@@ -80,6 +83,9 @@ final class BuddyDetailViewModel: ObservableObject {
             items = []
             totalCount = 0
             sentCount = 0
+            progressCount = 0
+            progressGoal = 10
+            pairCompletedToday = false
             receivedCount = 0
             targetDateText = ""
             errorMessage = "현재 로그인 사용자 ID를 확인하지 못했어요."
@@ -115,6 +121,9 @@ final class BuddyDetailViewModel: ObservableObject {
                 items = []
                 totalCount = 0
                 sentCount = 0
+                progressCount = 0
+                progressGoal = 10
+                pairCompletedToday = false
                 receivedCount = 0
                 targetDateText = ""
                 nonFatalMessage = nil
@@ -185,6 +194,7 @@ final class BuddyDetailViewModel: ObservableObject {
             let tsunTsunToday = try await service.fetchTsunTsunToday(userId: myUserId, buddyId: buddyId)
             tsunTsunTodayResponse = tsunTsunToday
             sentCount = tsunTsunToday.sentCount
+            applyProgress(from: tsunTsunToday)
             receivedCount = tsunTsunToday.receivedCount
             if targetDateText.isEmpty {
                 targetDateText = tsunTsunToday.targetDate
@@ -194,6 +204,9 @@ final class BuddyDetailViewModel: ObservableObject {
         } catch {
             logTsunTsunFailure(error, userId: myUserId, buddyId: buddyId)
             sentCount = 0
+            progressCount = 0
+            progressGoal = 10
+            pairCompletedToday = false
             receivedCount = 0
             tsunTsunTodayResponse = nil
             nonFatalMessage = "층츤 상태를 불러오지 못해 기본 상태로 표시했어요."
@@ -210,6 +223,7 @@ final class BuddyDetailViewModel: ObservableObject {
         tsunTsunTodayResponse = tsunTsunToday
         targetDateText = dailyWords.targetDate
         sentCount = tsunTsunToday.sentCount
+        applyProgress(from: tsunTsunToday)
         receivedCount = tsunTsunToday.receivedCount
         totalCount = dailyWords.items.count
         nonFatalMessage = nil
@@ -221,11 +235,31 @@ final class BuddyDetailViewModel: ObservableObject {
         tsunTsunTodayResponse = nil
         targetDateText = dailyWords.targetDate
         sentCount = 0
+        progressCount = 0
+        progressGoal = 10
+        pairCompletedToday = false
         receivedCount = 0
         totalCount = dailyWords.items.count
         nonFatalMessage = "층츤 상태를 불러오지 못해 기본 상태로 표시했어요."
         print("[BuddyDetail] tsuntsun fallback applied sentCount=0 receivedCount=0 status=NONE")
         rebuildItems()
+    }
+
+    private func applyProgress(from tsunTsunToday: TsunTsunTodayResponse) {
+        progressGoal = max(tsunTsunToday.progressGoal ?? 10, 1)
+        pairCompletedToday = tsunTsunToday.pairCompletedToday ?? false
+
+        if let serverProgressCount = tsunTsunToday.progressCount {
+            progressCount = min(max(serverProgressCount, 0), progressGoal)
+            return
+        }
+
+        // TODO: Remove this fallback when the backend always returns progressCount.
+        // Progress must represent completed ANSWERED pairs, not sends.
+        progressCount = min(
+            tsunTsunToday.items.filter { $0.status == .answered }.count,
+            progressGoal
+        )
     }
 
     private func logTsunTsunFailure(_ error: Error, userId: String, buddyId: String) {

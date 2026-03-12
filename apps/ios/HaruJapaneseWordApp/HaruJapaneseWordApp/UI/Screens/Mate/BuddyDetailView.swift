@@ -91,29 +91,59 @@ struct BuddyDetailView: View {
     }
 
     private var headerView: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(viewModel.buddyName)
-                .font(.title3.weight(.semibold))
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .lastTextBaseline) {
+                    Text("\(clampedProgressCount)/\(resolvedProgressGoal)")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(.primary)
 
-            HStack(spacing: 10) {
-                Text("오늘 츤츤 \(viewModel.sentCount)/\(viewModel.totalCount)")
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
+                    Spacer(minLength: 12)
 
-                if viewModel.targetDateText.isEmpty == false {
-                    Text(viewModel.targetDateText)
+                    if viewModel.targetDateText.isEmpty == false {
+                        Text(viewModel.targetDateText)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                TsunTsunProgressGauge(
+                    currentCount: clampedProgressCount,
+                    goal: resolvedProgressGoal
+                )
+
+                if viewModel.receivedCount > 0 {
+                    Text("받은 츤츤 \(viewModel.receivedCount)개")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color(uiColor: .secondarySystemBackground))
+            )
 
-            if viewModel.receivedCount > 0 {
-                Text("받은 츤츤 \(viewModel.receivedCount)개")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            if isPerfectCompletion {
+                HStack(spacing: 8) {
+                    Text("🎉")
+                    Text("오늘의 츤츤 완료!")
+                        .font(.subheadline.weight(.semibold))
+                }
+                .foregroundStyle(.orange)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color.orange.opacity(0.12))
+                )
+                .transition(.scale.combined(with: .opacity))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .animation(.easeInOut(duration: 0.4), value: clampedProgressCount)
+        .animation(.easeInOut(duration: 0.4), value: isPerfectCompletion)
     }
 
     private var bottomActionBar: some View {
@@ -165,6 +195,41 @@ struct BuddyDetailView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private extension BuddyDetailView {
+    var resolvedProgressGoal: Int {
+        max(viewModel.progressGoal, 1)
+    }
+
+    var clampedProgressCount: Int {
+        min(max(viewModel.progressCount, 0), resolvedProgressGoal)
+    }
+
+    var isPerfectCompletion: Bool {
+        viewModel.pairCompletedToday && clampedProgressCount == resolvedProgressGoal
+    }
+}
+
+private struct TsunTsunProgressGauge: View {
+    let currentCount: Int
+    let goal: Int
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(0..<goal, id: \.self) { index in
+                Capsule(style: .continuous)
+                    .fill(index < currentCount ? Color.black : Color(uiColor: .systemGray5))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 10)
+                    .scaleEffect(y: index < currentCount ? 1 : 0.88)
+                    .animation(.easeInOut(duration: 0.4), value: currentCount)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("오늘 츤츤 진행도")
+        .accessibilityValue("\(currentCount)/\(goal)")
     }
 }
 
@@ -318,6 +383,9 @@ private struct BuddyAPIServicePreviewStub: BuddyAPIServiceProtocol {
             targetDate: "2026-03-12",
             sentCount: 2,
             receivedCount: 0,
+            progressCount: 1,
+            progressGoal: 10,
+            pairCompletedToday: false,
             items: [
                 TsunTsunTodayItemResponse(dailyWordItemId: 41, wordId: 390, direction: .sent, status: .answered),
                 TsunTsunTodayItemResponse(dailyWordItemId: 42, wordId: 217, direction: .sent, status: .sent)

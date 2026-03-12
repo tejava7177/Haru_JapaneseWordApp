@@ -173,7 +173,17 @@ private struct TsunTsunInboxPreviewStub: BuddyAPIServiceProtocol {
     }
 
     func fetchTsunTsunToday(userId: String, buddyId: String) async throws -> TsunTsunTodayResponse {
-        TsunTsunTodayResponse(userId: 1, buddyId: 2, targetDate: "2026-03-12", sentCount: 0, receivedCount: 2, items: [])
+        TsunTsunTodayResponse(
+            userId: 1,
+            buddyId: 2,
+            targetDate: "2026-03-12",
+            sentCount: 0,
+            receivedCount: 2,
+            progressCount: 0,
+            progressGoal: 10,
+            pairCompletedToday: false,
+            items: []
+        )
     }
 
     func sendTsunTsun(senderId: String, receiverId: String, dailyWordItemId: Int) async throws -> SendTsunTsunResponse? {
