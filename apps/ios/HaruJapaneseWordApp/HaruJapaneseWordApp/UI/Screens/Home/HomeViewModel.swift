@@ -1,5 +1,4 @@
 import Foundation
-import SwiftUI
 import Combine
 
 @MainActor
@@ -12,8 +11,6 @@ final class HomeViewModel: ObservableObject {
     @Published var lyricWordId: Int?
     @Published var hasError: Bool = false
     @Published var debugError: String?
-    @Published var isShowingAlert: Bool = false
-    @Published var alertMessage: String = ""
     @Published private(set) var targetDateText: String = ""
 
     private let repository: DictionaryRepository
@@ -121,11 +118,6 @@ final class HomeViewModel: ObservableObject {
         } catch {
             debugError = String(describing: error)
         }
-    }
-
-    func sendPokePlaceholder(wordId: Int) {
-        alertMessage = "준비 중입니다."
-        isShowingAlert = true
     }
 
     private func makeWordSummary(from item: DailyWordsTodayItemResponse) throws -> WordSummary {

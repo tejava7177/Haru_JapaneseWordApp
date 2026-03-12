@@ -65,17 +65,12 @@ struct HomeView: View {
         .task {
             viewModel.loadDeck()
         }
-        .alert("준비 중", isPresented: $viewModel.isShowingAlert) {
-            Button("확인", role: .cancel) { }
-        } message: {
-            Text(viewModel.alertMessage)
-        }
     }
 
     @ViewBuilder
     private func cardView(for word: WordSummary, isLyricWord: Bool) -> some View {
         let cornerRadius: CGFloat = 18
-        let bottomSafeSpace: CGFloat = 32
+        let bottomSafeSpace: CGFloat = 20
         let isExcluded = viewModel.isExcluded(word.id)
 
         ZStack {
@@ -102,7 +97,7 @@ struct HomeView: View {
                     .padding(.top, 18)
                     .padding(.leading, 18)
                     .padding(.trailing, 16)
-                    .padding(.bottom, 2)
+                    .padding(.bottom, 8)
 
                     Spacer(minLength: 10)
                     Spacer(minLength: bottomSafeSpace)
@@ -136,25 +131,6 @@ struct HomeView: View {
         }
         .overlay(alignment: .topLeading) {
             EmptyView()
-        }
-        .overlay(alignment: .bottomTrailing) {
-            Button {
-                viewModel.sendPokePlaceholder(wordId: word.id)
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "paperplane.fill")
-                    Text("つんつん 보내기")
-                }
-                .font(.callout)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.black)
-            .controlSize(.small)
-            .frame(minWidth: 44, minHeight: 44, alignment: .center)
-            .padding(.bottom, 10)
-            .padding(.trailing, 10)
         }
     }
 
