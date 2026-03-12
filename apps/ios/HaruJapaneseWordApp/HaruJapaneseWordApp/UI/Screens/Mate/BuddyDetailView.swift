@@ -304,4 +304,22 @@ private struct BuddyAPIServicePreviewStub: BuddyAPIServiceProtocol {
     func sendTsunTsun(senderId: String, receiverId: String, dailyWordItemId: Int) async throws -> SendTsunTsunResponse? {
         SendTsunTsunResponse(success: true, message: "ok")
     }
+
+    func fetchTsunTsunInbox(userId: String) async throws -> TsunTsunInboxResponse {
+        TsunTsunInboxResponse(userId: 1, unansweredCount: 0, items: [])
+    }
+
+    func answerTsunTsun(tsuntsunId: Int, meaningId: Int) async throws -> AnswerTsunTsunResponse {
+        AnswerTsunTsunResponse(
+            tsuntsunId: tsuntsunId,
+            success: true,
+            message: "ok",
+            isCorrect: true,
+            correctMeaningId: meaningId,
+            correctText: nil,
+            selectedMeaningId: meaningId,
+            selectedText: nil,
+            remainingUnansweredCount: 0
+        )
+    }
 }

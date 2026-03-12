@@ -12,6 +12,7 @@ final class HomeViewModel: ObservableObject {
     @Published var hasError: Bool = false
     @Published var debugError: String?
     @Published private(set) var targetDateText: String = ""
+    @Published private(set) var tsunTsunInboxSummary: TsunTsunInboxSummary?
 
     private let repository: DictionaryRepository
     private let settingsStore: AppSettingsStore
@@ -42,11 +43,26 @@ final class HomeViewModel: ObservableObject {
                 self?.loadDeck()
             }
             .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: .tsunTsunInboxDidChange)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.loadInboxSummary()
+            }
+            .store(in: &cancellables)
     }
 
     func loadDeck() {
         Task {
-            await loadDeckFromPrimarySource()
+            async let deckLoad: Void = loadDeckFromPrimarySource()
+            async let inboxLoad: Void = loadInboxSummaryFromPrimarySource()
+            _ = await (deckLoad, inboxLoad)
+        }
+    }
+
+    func loadInboxSummary() {
+        Task {
+            await loadInboxSummaryFromPrimarySource()
         }
     }
 
@@ -99,6 +115,25 @@ final class HomeViewModel: ObservableObject {
                 selectedIndex = 0
                 targetDateText = ""
             }
+        }
+    }
+
+    private func loadInboxSummaryFromPrimarySource() async {
+        guard let currentUserId = settingsStore.currentBackendUserId else {
+            tsunTsunInboxSummary = nil
+            return
+        }
+
+        do {
+            let response = try await buddyAPIService.fetchTsunTsunInbox(userId: currentUserId)
+            tsunTsunInboxSummary = TsunTsunInboxSummary.fromInbox(response)
+        } catch {
+            tsunTsunInboxSummary = nil
+            #if DEBUG
+            debugError = [debugError, "TsunTsun inbox unavailable: \(error)"]
+                .compactMap { $0 }
+                .joined(separator: "\n")
+            #endif
         }
     }
 

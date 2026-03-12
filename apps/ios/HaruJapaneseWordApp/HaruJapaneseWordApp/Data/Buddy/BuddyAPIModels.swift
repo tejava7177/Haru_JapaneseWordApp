@@ -163,6 +163,217 @@ struct SendTsunTsunResponse: Decodable {
     let message: String?
 }
 
+struct TsunTsunInboxResponse: Decodable {
+    let userId: Int?
+    let unansweredCount: Int
+    let items: [TsunTsunInboxItemResponse]
+
+    private enum CodingKeys: String, CodingKey {
+        case userId
+        case unansweredCount
+        case items
+    }
+
+    init(userId: Int?, unansweredCount: Int, items: [TsunTsunInboxItemResponse]) {
+        self.userId = userId
+        self.unansweredCount = unansweredCount
+        self.items = items
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        userId = try container.decodeFlexibleIntIfPresent(forKey: .userId)
+        unansweredCount = try container.decodeFlexibleInt(forKey: .unansweredCount)
+        items = try container.decode([TsunTsunInboxItemResponse].self, forKey: .items)
+    }
+}
+
+struct TsunTsunInboxItemResponse: Decodable, Identifiable, Hashable {
+    let tsuntsunId: Int
+    let senderId: Int?
+    let senderName: String
+    let wordId: Int
+    let expression: String
+    let reading: String
+    let targetDate: String
+    let choices: [TsunTsunChoiceResponse]
+
+    var id: Int { tsuntsunId }
+
+    private enum CodingKeys: String, CodingKey {
+        case tsuntsunId
+        case senderId
+        case senderName
+        case wordId
+        case expression
+        case reading
+        case targetDate
+        case choices
+    }
+
+    init(
+        tsuntsunId: Int,
+        senderId: Int?,
+        senderName: String,
+        wordId: Int,
+        expression: String,
+        reading: String,
+        targetDate: String,
+        choices: [TsunTsunChoiceResponse]
+    ) {
+        self.tsuntsunId = tsuntsunId
+        self.senderId = senderId
+        self.senderName = senderName
+        self.wordId = wordId
+        self.expression = expression
+        self.reading = reading
+        self.targetDate = targetDate
+        self.choices = choices
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        tsuntsunId = try container.decodeFlexibleInt(forKey: .tsuntsunId)
+        senderId = try container.decodeFlexibleIntIfPresent(forKey: .senderId)
+        senderName = try container.decodeIfPresent(String.self, forKey: .senderName) ?? ""
+        wordId = try container.decodeFlexibleInt(forKey: .wordId)
+        expression = try container.decode(String.self, forKey: .expression)
+        reading = try container.decodeIfPresent(String.self, forKey: .reading) ?? ""
+        targetDate = try container.decodeIfPresent(String.self, forKey: .targetDate) ?? ""
+        choices = try container.decodeIfPresent([TsunTsunChoiceResponse].self, forKey: .choices) ?? []
+    }
+}
+
+struct TsunTsunChoiceResponse: Decodable, Identifiable, Hashable {
+    let meaningId: Int
+    let text: String
+
+    var id: Int { meaningId }
+
+    private enum CodingKeys: String, CodingKey {
+        case meaningId
+        case text
+    }
+
+    init(meaningId: Int, text: String) {
+        self.meaningId = meaningId
+        self.text = text
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        meaningId = try container.decodeFlexibleInt(forKey: .meaningId)
+        text = try container.decode(String.self, forKey: .text)
+    }
+}
+
+struct AnswerTsunTsunRequest: Encodable {
+    let tsuntsunId: Int
+    let meaningId: Int
+}
+
+struct AnswerTsunTsunResponse: Decodable {
+    let tsuntsunId: Int?
+    let success: Bool?
+    let message: String?
+    let isCorrect: Bool?
+    let correctMeaningId: Int?
+    let correctText: String?
+    let selectedMeaningId: Int?
+    let selectedText: String?
+    let remainingUnansweredCount: Int?
+
+    private enum CodingKeys: String, CodingKey {
+        case tsuntsunId
+        case success
+        case message
+        case isCorrect
+        case correctMeaningId
+        case correctText
+        case selectedMeaningId
+        case selectedText
+        case remainingUnansweredCount
+    }
+
+    init(
+        tsuntsunId: Int?,
+        success: Bool?,
+        message: String?,
+        isCorrect: Bool?,
+        correctMeaningId: Int?,
+        correctText: String?,
+        selectedMeaningId: Int?,
+        selectedText: String?,
+        remainingUnansweredCount: Int?
+    ) {
+        self.tsuntsunId = tsuntsunId
+        self.success = success
+        self.message = message
+        self.isCorrect = isCorrect
+        self.correctMeaningId = correctMeaningId
+        self.correctText = correctText
+        self.selectedMeaningId = selectedMeaningId
+        self.selectedText = selectedText
+        self.remainingUnansweredCount = remainingUnansweredCount
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        tsuntsunId = try container.decodeFlexibleIntIfPresent(forKey: .tsuntsunId)
+        success = try container.decodeFlexibleBoolIfPresent(forKey: .success)
+        message = try container.decodeIfPresent(String.self, forKey: .message)
+        isCorrect = try container.decodeFlexibleBoolIfPresent(forKey: .isCorrect)
+        correctMeaningId = try container.decodeFlexibleIntIfPresent(forKey: .correctMeaningId)
+        correctText = try container.decodeIfPresent(String.self, forKey: .correctText)
+        selectedMeaningId = try container.decodeFlexibleIntIfPresent(forKey: .selectedMeaningId)
+        selectedText = try container.decodeIfPresent(String.self, forKey: .selectedText)
+        remainingUnansweredCount = try container.decodeFlexibleIntIfPresent(forKey: .remainingUnansweredCount)
+    }
+}
+
+struct TsunTsunInboxSummary: Equatable {
+    let unansweredCount: Int
+    let senderName: String
+    let expression: String
+    let reading: String
+    let promptText: String
+
+    var arrivalText: String {
+        "지금 \(unansweredCount)개의 츤츤이 도착했어요"
+    }
+
+    var senderHeadline: String {
+        if senderName.isEmpty {
+            return "버디가 츤츤을 보냈어요"
+        }
+        return "\(senderName)이 츤츤을 보냈어요"
+    }
+
+    static func fromInbox(_ response: TsunTsunInboxResponse) -> TsunTsunInboxSummary? {
+        let sortedItems = response.items.sorted(by: TsunTsunInboxItemResponse.sortForInbox)
+        guard response.unansweredCount > 0, let firstItem = sortedItems.first else {
+            return nil
+        }
+
+        return TsunTsunInboxSummary(
+            unansweredCount: response.unansweredCount,
+            senderName: firstItem.senderName,
+            expression: firstItem.expression,
+            reading: firstItem.reading,
+            promptText: "『\(firstItem.expression)』의 뜻을 알고 있나요?"
+        )
+    }
+}
+
+extension TsunTsunInboxItemResponse {
+    nonisolated static func sortForInbox(_ lhs: TsunTsunInboxItemResponse, _ rhs: TsunTsunInboxItemResponse) -> Bool {
+        if lhs.targetDate != rhs.targetDate {
+            return lhs.targetDate > rhs.targetDate
+        }
+        return lhs.tsuntsunId > rhs.tsuntsunId
+    }
+}
+
 enum BuddyWordDirection: String, Codable {
     case none = "NONE"
     case sent = "SENT"
@@ -296,6 +507,29 @@ private extension KeyedDecodingContainer {
 
         if let stringValue = try decodeIfPresent(String.self, forKey: key) {
             return Int(stringValue.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+
+        return nil
+    }
+
+    func decodeFlexibleBoolIfPresent(forKey key: Key) throws -> Bool? {
+        if let boolValue = try decodeIfPresent(Bool.self, forKey: key) {
+            return boolValue
+        }
+
+        if let intValue = try decodeIfPresent(Int.self, forKey: key) {
+            return intValue != 0
+        }
+
+        if let stringValue = try decodeIfPresent(String.self, forKey: key) {
+            switch stringValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+            case "true", "1", "yes", "y":
+                return true
+            case "false", "0", "no", "n":
+                return false
+            default:
+                return nil
+            }
         }
 
         return nil

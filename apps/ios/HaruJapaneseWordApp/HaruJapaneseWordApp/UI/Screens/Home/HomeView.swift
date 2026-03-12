@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HomeView: View {
     @StateObject private var viewModel: HomeViewModel
+    @State private var isShowingTsunTsunInbox: Bool = false
     private let repository: DictionaryRepository
     private let settingsStore: AppSettingsStore
 
@@ -14,63 +15,82 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("오늘의 추천")
-                        .font(.title3)
-                        .fontWeight(.semibold)
-
-                    if viewModel.targetDateText.isEmpty == false {
-                        Text(viewModel.targetDateText)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if viewModel.cards.isEmpty == false {
-                        TabView(selection: $viewModel.selectedIndex) {
-                            ForEach(Array(viewModel.cards.enumerated()), id: \.element.id) { index, word in
-                                cardView(for: word, isLyricWord: viewModel.lyricWordId == word.id)
-                                    .tag(index)
-                                    .padding(.horizontal, 4)
-                            }
+                VStack(alignment: .leading, spacing: 14) {
+                    if let summary = viewModel.tsunTsunInboxSummary {
+                        TsunTsunInboxSummaryCard(summary: summary) {
+                            isShowingTsunTsunInbox = true
                         }
-                        .frame(height: 270)
-                        .tabViewStyle(.page(indexDisplayMode: .never))
-
-                        if viewModel.cards.count > 1 {
-                            indicatorView(count: viewModel.cards.count)
-                                .padding(.top, 12)
-                                .frame(maxWidth: .infinity, alignment: .center)
-                        }
-
-                    } else if viewModel.hasError {
-                        emptyStateView()
-                    } else {
-                        Text("오늘의 추천을 준비 중입니다.")
-                            .font(.body)
-                            .foregroundStyle(.secondary)
                     }
 
                     todayLyricView()
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text("오늘의 추천 단어")
+                                .font(.title3)
+                                .fontWeight(.semibold)
+
+                            Spacer(minLength: 12)
+
+                            if viewModel.targetDateText.isEmpty == false {
+                                Text(viewModel.targetDateText)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+
+                        if viewModel.cards.isEmpty == false {
+                            TabView(selection: $viewModel.selectedIndex) {
+                                ForEach(Array(viewModel.cards.enumerated()), id: \.element.id) { index, word in
+                                    cardView(for: word)
+                                        .tag(index)
+                                        .padding(.horizontal, 2)
+                                }
+                            }
+                            .frame(height: 228)
+                            .tabViewStyle(.page(indexDisplayMode: .never))
+
+                            if viewModel.cards.count > 1 {
+                                indicatorView(count: viewModel.cards.count)
+                                    .padding(.top, 6)
+                                    .frame(maxWidth: .infinity, alignment: .center)
+                            }
+
+                        } else if viewModel.hasError {
+                            emptyStateView()
+                        } else {
+                            Text("오늘의 추천을 준비 중입니다.")
+                                .font(.body)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
                 .padding(.horizontal, 16)
-                .padding(.top, 24)
+                .padding(.top, 20)
+                .padding(.bottom, 16)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .background(Color.white)
+            .background(Color(uiColor: .systemGroupedBackground))
             .navigationTitle("하루")
             .navigationDestination(for: Int.self) { wordId in
                 WordDetailView(wordId: wordId, repository: repository)
+            }
+            .navigationDestination(isPresented: $isShowingTsunTsunInbox) {
+                TsunTsunInboxView(settingsStore: settingsStore)
             }
         }
         .task {
             viewModel.loadDeck()
         }
+        .onAppear {
+            viewModel.loadInboxSummary()
+        }
     }
 
     @ViewBuilder
-    private func cardView(for word: WordSummary, isLyricWord: Bool) -> some View {
+    private func cardView(for word: WordSummary) -> some View {
         let cornerRadius: CGFloat = 18
-        let bottomSafeSpace: CGFloat = 20
+        let bottomSafeSpace: CGFloat = 14
         let isExcluded = viewModel.isExcluded(word.id)
 
         ZStack {
@@ -104,7 +124,7 @@ struct HomeView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .contentShape(RoundedRectangle(cornerRadius: cornerRadius))
-                .padding(12)
+                .padding(10)
                 .background(Color.white)
                 .overlay(
                     RoundedRectangle(cornerRadius: cornerRadius)
@@ -139,9 +159,9 @@ struct HomeView: View {
     private func todayLyricView() -> some View {
         if let lyric = viewModel.todayLyric {
             VStack(alignment: .leading, spacing: 8) {
-            Text("🎵 今日のフレーズ")
-                .font(.subheadline)
-                .fontWeight(.semibold)
+                Text("🎵 今日のフレーズ")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
 
                 if lyric.inspiredBy.isEmpty == false {
                     Text("(Inspired by \(lyric.inspiredBy))")
@@ -159,10 +179,15 @@ struct HomeView: View {
                     .foregroundStyle(.secondary)
                 }
             }
-            .padding(12)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
             .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.black.opacity(0.04))
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.white)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.black.opacity(0.06), lineWidth: 1)
             )
         } else {
             Text("今日のLyric을 준비 중입니다.")
@@ -213,6 +238,75 @@ struct HomeView: View {
         }
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.vertical, 12)
+    }
+}
+
+private struct TsunTsunInboxSummaryCard: View {
+    let summary: TsunTsunInboxSummary
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("받은 츤츤")
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                        Text(summary.senderHeadline)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.primary)
+                    }
+
+                    Spacer(minLength: 12)
+
+                    Image(systemName: "chevron.right")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(summary.promptText)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.primary)
+
+                    if summary.reading.isEmpty == false {
+                        Text(summary.reading)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                HStack(spacing: 8) {
+                    Label(summary.arrivalText, systemImage: "sparkles")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.orange.opacity(0.9))
+
+                    Spacer(minLength: 8)
+
+                    Text("미답변 \(summary.unansweredCount)개")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(16)
+            .background(
+                LinearGradient(
+                    colors: [
+                        Color.orange.opacity(0.16),
+                        Color.yellow.opacity(0.08)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18)
+                    .stroke(Color.orange.opacity(0.18), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
+        .buttonStyle(.plain)
     }
 }
 

@@ -4,6 +4,8 @@ protocol BuddyAPIServiceProtocol {
     func fetchDailyWords(userId: String) async throws -> DailyWordsTodayResponse
     func fetchTsunTsunToday(userId: String, buddyId: String) async throws -> TsunTsunTodayResponse
     func sendTsunTsun(senderId: String, receiverId: String, dailyWordItemId: Int) async throws -> SendTsunTsunResponse?
+    func fetchTsunTsunInbox(userId: String) async throws -> TsunTsunInboxResponse
+    func answerTsunTsun(tsuntsunId: Int, meaningId: Int) async throws -> AnswerTsunTsunResponse
 }
 
 struct BuddyAPIService: BuddyAPIServiceProtocol, Sendable {
@@ -47,6 +49,37 @@ struct BuddyAPIService: BuddyAPIServiceProtocol, Sendable {
         } catch APIError.decodingFailed {
             try await client.post(endpoint, body: request)
             return nil
+        }
+    }
+
+    nonisolated func fetchTsunTsunInbox(userId: String) async throws -> TsunTsunInboxResponse {
+        print("[BuddyAPI] GET /api/tsuntsun/inbox?userId=\(userId)")
+        let endpoint = APIEndpoint(
+            path: "api/tsuntsun/inbox",
+            queryItems: [URLQueryItem(name: "userId", value: userId)]
+        )
+        return try await client.get(endpoint, responseType: TsunTsunInboxResponse.self)
+    }
+
+    nonisolated func answerTsunTsun(tsuntsunId: Int, meaningId: Int) async throws -> AnswerTsunTsunResponse {
+        let endpoint = APIEndpoint(path: "api/tsuntsun/answer", method: .post)
+        let request = AnswerTsunTsunRequest(tsuntsunId: tsuntsunId, meaningId: meaningId)
+
+        do {
+            return try await client.post(endpoint, body: request, responseType: AnswerTsunTsunResponse.self)
+        } catch APIError.decodingFailed {
+            try await client.post(endpoint, body: request)
+            return AnswerTsunTsunResponse(
+                tsuntsunId: tsuntsunId,
+                success: true,
+                message: nil,
+                isCorrect: nil,
+                correctMeaningId: nil,
+                correctText: nil,
+                selectedMeaningId: meaningId,
+                selectedText: nil,
+                remainingUnansweredCount: nil
+            )
         }
     }
 }
