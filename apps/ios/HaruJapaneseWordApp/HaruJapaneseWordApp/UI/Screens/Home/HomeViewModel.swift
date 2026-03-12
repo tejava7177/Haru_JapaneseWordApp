@@ -126,7 +126,9 @@ final class HomeViewModel: ObservableObject {
 
         do {
             let response = try await buddyAPIService.fetchTsunTsunInbox(userId: currentUserId)
-            tsunTsunInboxSummary = TsunTsunInboxSummary.fromInbox(response)
+            tsunTsunInboxSummary = TsunTsunInboxSummary.fromInbox(response) { [weak self] item in
+                self?.resolveDisplayName(for: item.senderId, fallbackSenderName: item.senderName) ?? item.senderName
+            }
         } catch {
             tsunTsunInboxSummary = nil
             #if DEBUG
@@ -172,5 +174,19 @@ final class HomeViewModel: ObservableObject {
     private func loadFallbackRecommendedWords() throws -> [WordSummary] {
         let currentLevel = settingsStore.settings.homeDeckLevel
         return try repository.fetchRecommendedWords(level: currentLevel, limit: 10)
+    }
+
+    private func resolveDisplayName(for senderId: Int?, fallbackSenderName: String) -> String {
+        if let localDisplayName = settingsStore.preferredDisplayName(forBackendUserId: senderId),
+           localDisplayName.isEmpty == false {
+            return localDisplayName
+        }
+
+        let trimmedFallback = fallbackSenderName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedFallback.isEmpty == false {
+            return trimmedFallback
+        }
+
+        return "버디"
     }
 }

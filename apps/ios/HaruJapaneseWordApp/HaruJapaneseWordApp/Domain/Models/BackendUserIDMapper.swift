@@ -30,6 +30,14 @@ enum BackendUserIDMapper {
         return mappings[normalize(displayName)]
     }
 
+    static func candidateRawUserIds(forBackendUserId backendUserId: Int) -> [String] {
+        let backendValue = String(backendUserId)
+        return mappings
+            .filter { $0.value == backendValue }
+            .map(\.key)
+            .sorted()
+    }
+
     private static func normalize(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }

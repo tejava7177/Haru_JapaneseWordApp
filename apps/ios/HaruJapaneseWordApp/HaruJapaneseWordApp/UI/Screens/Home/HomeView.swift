@@ -3,6 +3,7 @@ import SwiftUI
 struct HomeView: View {
     @StateObject private var viewModel: HomeViewModel
     @State private var isShowingTsunTsunInbox: Bool = false
+    @State private var isTodayPhraseExpanded: Bool = false
     private let repository: DictionaryRepository
     private let settingsStore: AppSettingsStore
 
@@ -15,14 +16,12 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 18) {
                     if let summary = viewModel.tsunTsunInboxSummary {
                         TsunTsunInboxSummaryCard(summary: summary) {
                             isShowingTsunTsunInbox = true
                         }
                     }
-
-                    todayLyricView()
 
                     VStack(alignment: .leading, spacing: 10) {
                         HStack(alignment: .firstTextBaseline) {
@@ -64,6 +63,8 @@ struct HomeView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+
+                    todayLyricView()
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 20)
@@ -158,41 +159,127 @@ struct HomeView: View {
     @ViewBuilder
     private func todayLyricView() -> some View {
         if let lyric = viewModel.todayLyric {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("🎵 今日のフレーズ")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-
-                if lyric.inspiredBy.isEmpty == false {
-                    Text("(Inspired by \(lyric.inspiredBy))")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-
-                MarqueeView(text: lyric.jaLine, speed: 28, pause: 0.8)
-                    .font(.callout)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-            if lyric.koLine.isEmpty == false {
-                Text(lyric.koLine)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+            Group {
+                if isTodayPhraseExpanded {
+                    expandedPhraseCard(for: lyric)
+                        .transition(
+                            .asymmetric(
+                                insertion: .opacity.combined(with: .move(edge: .top)),
+                                removal: .opacity.combined(with: .scale(scale: 0.96, anchor: .top))
+                            )
+                        )
+                } else {
+                    collapsedPhraseCard
+                        .transition(
+                            .asymmetric(
+                                insertion: .opacity.combined(with: .scale(scale: 0.96)),
+                                removal: .opacity
+                            )
+                        )
                 }
             }
+        } else {
+            Text("오늘의 프레이즈를 준비 중입니다.")
+                .font(.body)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var collapsedPhraseCard: some View {
+        Button {
+            togglePhraseCard()
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "music.note")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.orange.opacity(0.95))
+                    .frame(width: 28, height: 28)
+                    .background(
+                        Circle()
+                            .fill(Color.orange.opacity(0.12))
+                    )
+
+                Text("今日のフレーズ")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+
+                Spacer(minLength: 8)
+
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
             .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .padding(.vertical, 11)
             .background(
-                RoundedRectangle(cornerRadius: 16)
+                Capsule(style: .continuous)
                     .fill(Color.white)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 16)
+                Capsule(style: .continuous)
                     .stroke(Color.black.opacity(0.06), lineWidth: 1)
             )
-        } else {
-            Text("今日のLyric을 준비 중입니다.")
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func expandedPhraseCard(for lyric: LyricEntry) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("今日のフレーズ")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+
+                    if lyric.inspiredBy.isEmpty == false {
+                        Text(lyric.inspiredBy)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Spacer(minLength: 8)
+
+                Button {
+                    togglePhraseCard()
+                } label: {
+                    HStack(spacing: 4) {
+                        Text("접기")
+                            .font(.caption.weight(.semibold))
+                        Image(systemName: "chevron.up")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+
+            Text(lyric.jaLine)
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            if lyric.koLine.isEmpty == false {
+                Text(lyric.koLine)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.white)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.black.opacity(0.06), lineWidth: 1)
+        )
+    }
+
+    private func togglePhraseCard() {
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) {
+            isTodayPhraseExpanded.toggle()
         }
     }
 

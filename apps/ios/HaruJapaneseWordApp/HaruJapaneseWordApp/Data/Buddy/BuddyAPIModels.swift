@@ -349,7 +349,10 @@ struct TsunTsunInboxSummary: Equatable {
         return "\(senderName)이 츤츤을 보냈어요"
     }
 
-    static func fromInbox(_ response: TsunTsunInboxResponse) -> TsunTsunInboxSummary? {
+    static func fromInbox(
+        _ response: TsunTsunInboxResponse,
+        resolveSenderName: (TsunTsunInboxItemResponse) -> String
+    ) -> TsunTsunInboxSummary? {
         let sortedItems = response.items.sorted(by: TsunTsunInboxItemResponse.sortForInbox)
         guard response.unansweredCount > 0, let firstItem = sortedItems.first else {
             return nil
@@ -357,7 +360,7 @@ struct TsunTsunInboxSummary: Equatable {
 
         return TsunTsunInboxSummary(
             unansweredCount: response.unansweredCount,
-            senderName: firstItem.senderName,
+            senderName: resolveSenderName(firstItem),
             expression: firstItem.expression,
             reading: firstItem.reading,
             promptText: "『\(firstItem.expression)』의 뜻을 알고 있나요?"

@@ -145,6 +145,23 @@ final class AppSettingsStore: ObservableObject {
         return profile(for: settings.mateUserId)
     }
 
+    func preferredDisplayName(forBackendUserId backendUserId: Int?) -> String? {
+        guard let backendUserId else { return nil }
+
+        let candidateUserIds = Array(
+            Set([String(backendUserId)] + BackendUserIDMapper.candidateRawUserIds(forBackendUserId: backendUserId))
+        )
+
+        for userId in candidateUserIds {
+            let profile = profile(for: userId)
+            let displayName = profile.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard displayName.isEmpty == false else { continue }
+            return displayName
+        }
+
+        return nil
+    }
+
     func updateCurrentMateDisplayName(_ name: String) {
         guard let current = currentMateProfile() else { return }
         userDefaults.set(name, forKey: mateProfileKey(userId: current.userId, field: "display_name"))
