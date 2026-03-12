@@ -127,7 +127,7 @@ struct TsunTsunAnswerView: View {
                 .disabled(viewModel.hasSubmitted)
             }
 
-            if let feedbackText = viewModel.feedbackText {
+            if let feedbackText = viewModel.feedbackText, viewModel.hasSubmitted == false {
                 Text(feedbackText)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -148,16 +148,6 @@ struct TsunTsunAnswerView: View {
                 .foregroundStyle(.white)
                 .background(Color.black)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-
-                if canNavigateToBuddyDetail {
-                    Button("받은 츤츤으로 돌아가기") {
-                        propagateAnsweredIfNeeded()
-                        dismiss()
-                    }
-                    .buttonStyle(.plain)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.secondary)
-                }
             } else {
                 Button {
                     viewModel.submitAnswer()

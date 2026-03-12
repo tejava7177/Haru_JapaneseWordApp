@@ -3,6 +3,11 @@ import Combine
 
 @MainActor
 final class BuddyDetailViewModel: ObservableObject {
+    struct UserAlert: Equatable {
+        let title: String
+        let message: String
+    }
+
     @Published private(set) var items: [BuddyWordItemUIModel] = []
     @Published private(set) var isLoading: Bool = false
     @Published private(set) var isSending: Bool = false
@@ -13,6 +18,7 @@ final class BuddyDetailViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var sendSuccessMessage: String?
     @Published var nonFatalMessage: String?
+    @Published var userAlert: UserAlert?
 
     let buddyId: String
     let buddyName: String
@@ -41,7 +47,16 @@ final class BuddyDetailViewModel: ObservableObject {
     }
 
     var canSendSelectedItem: Bool {
-        selectedItem != nil && isSending == false
+        selectedItem != nil && isSending == false && hasPendingOutgoingAnswer == false
+    }
+
+    var hasPendingOutgoingAnswer: Bool {
+        items.contains { $0.direction == .sent && $0.status == .sent }
+    }
+
+    var pendingAnswerMessage: String? {
+        guard hasPendingOutgoingAnswer else { return nil }
+        return "상대가 아직 답변 중이에요"
     }
 
     func load() {
@@ -107,6 +122,11 @@ final class BuddyDetailViewModel: ObservableObject {
     }
 
     func sendTsunTsun() {
+        if hasPendingOutgoingAnswer {
+            userAlert = waitingForBuddyAlert()
+            return
+        }
+
         guard let selectedItem else { return }
         guard isSending == false else { return }
         guard let myUserId = resolvedMyUserId else {
@@ -130,7 +150,11 @@ final class BuddyDetailViewModel: ObservableObject {
                 await refreshTsunTsunStatus()
                 isSending = false
             } catch {
-                errorMessage = error.localizedDescription
+                if let alert = userAlert(for: error) {
+                    userAlert = alert
+                } else {
+                    errorMessage = error.localizedDescription
+                }
                 isSending = false
             }
         }
@@ -200,6 +224,39 @@ final class BuddyDetailViewModel: ObservableObject {
         default:
             print("[BuddyDetail] tsuntsun today failed userId=\(userId) buddyId=\(buddyId) error=\(error.localizedDescription)")
         }
+    }
+
+    private func userAlert(for error: Error) -> UserAlert? {
+        switch error {
+        case APIError.server(let statusCode, let message):
+            let normalized = (message ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+
+            if statusCode == 400 && (
+                normalized.contains("already sent")
+                || normalized.contains("not answered")
+                || normalized.contains("waiting answer")
+                || normalized.contains("waiting for answer")
+            ) {
+                return waitingForBuddyAlert()
+            }
+
+            if statusCode == 400, normalized.isEmpty || normalized == "bad request" {
+                return waitingForBuddyAlert()
+            }
+
+            return nil
+        default:
+            return nil
+        }
+    }
+
+    private func waitingForBuddyAlert() -> UserAlert {
+        UserAlert(
+            title: "잠시 기다려주세요",
+            message: "아직 \(buddyName)이 츤츤에 답하지 않았어요.\n답변 후 다음 츤츤을 보낼 수 있어요."
+        )
     }
 
     private func rebuildItems() {

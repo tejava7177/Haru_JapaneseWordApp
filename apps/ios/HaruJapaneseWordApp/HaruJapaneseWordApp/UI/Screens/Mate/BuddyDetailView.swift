@@ -60,6 +60,13 @@ struct BuddyDetailView: View {
         .safeAreaInset(edge: .bottom) {
             bottomActionBar
         }
+        .alert(viewModel.userAlert?.title ?? "안내", isPresented: userAlertBinding) {
+            Button("확인") {
+                viewModel.userAlert = nil
+            }
+        } message: {
+            Text(viewModel.userAlert?.message ?? "")
+        }
         .alert("안내", isPresented: errorAlertBinding) {
             Button("확인") {
                 viewModel.errorMessage = nil
@@ -130,6 +137,12 @@ struct BuddyDetailView: View {
             .background(viewModel.canSendSelectedItem ? Color.black : Color(uiColor: .systemGray3))
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .disabled(viewModel.canSendSelectedItem == false)
+
+            if let pendingAnswerMessage = viewModel.pendingAnswerMessage {
+                Text(pendingAnswerMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
@@ -248,6 +261,17 @@ private struct BuddyWordRow: View {
 }
 
 private extension BuddyDetailView {
+    var userAlertBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.userAlert != nil },
+            set: { isPresented in
+                if isPresented == false {
+                    viewModel.userAlert = nil
+                }
+            }
+        )
+    }
+
     var errorAlertBinding: Binding<Bool> {
         Binding(
             get: { viewModel.errorMessage != nil && viewModel.items.isEmpty == false && viewModel.nonFatalMessage == nil },
