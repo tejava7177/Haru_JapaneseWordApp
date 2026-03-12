@@ -31,9 +31,9 @@ struct MateView: View {
                             NavigationLink {
                                 BuddyDetailView(
                                     viewModel: BuddyDetailViewModel(
-                                        myUserId: viewModel.currentUserId,
                                         buddyId: item.counterpartUserId,
-                                        buddyName: item.counterpartLabel
+                                        buddyName: item.counterpartLabel,
+                                        settingsStore: viewModel.settingsStoreForBuddyDetail
                                     )
                                 )
                             } label: {

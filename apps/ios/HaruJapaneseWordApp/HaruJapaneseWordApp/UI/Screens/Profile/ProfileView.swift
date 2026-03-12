@@ -133,6 +133,9 @@ struct ProfileView: View {
                     Button("Dev Slot C로 로그인") {
                         viewModel.signInForMateDevSlot(.C)
                     }
+                    Button("Dev Slot D로 로그인") {
+                        viewModel.signInForMateDevSlot(.D)
+                    }
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.black)

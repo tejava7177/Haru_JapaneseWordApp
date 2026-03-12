@@ -251,9 +251,9 @@ private extension BuddyDetailView {
     NavigationStack {
         BuddyDetailView(
             viewModel: BuddyDetailViewModel(
-                myUserId: "1",
                 buddyId: "2",
                 buddyName: "Buddy",
+                settingsStore: AppSettingsStore(),
                 service: BuddyAPIServicePreviewStub()
             )
         )

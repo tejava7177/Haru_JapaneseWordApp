@@ -22,6 +22,7 @@ final class AppSettingsStore: ObservableObject {
         case A
         case B
         case C
+        case D
 
         var userId: String {
             "DEV-\(rawValue)"
@@ -104,6 +105,9 @@ final class AppSettingsStore: ObservableObject {
 
     var isMateLoggedIn: Bool { settings.isMateLoggedIn }
     var mateUserId: String { settings.mateUserId }
+    var currentBackendUserId: String? {
+        BackendUserIDMapper.backendUserId(for: settings.mateUserId, displayName: currentMateProfile()?.displayName)
+    }
 
     func profileLevel(for userId: String) -> JLPTLevel {
         profile(for: userId).jlptLevel

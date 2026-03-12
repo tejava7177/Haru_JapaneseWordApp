@@ -19,6 +19,12 @@ struct HomeView: View {
                         .font(.title3)
                         .fontWeight(.semibold)
 
+                    if viewModel.targetDateText.isEmpty == false {
+                        Text(viewModel.targetDateText)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
                     if viewModel.cards.isEmpty == false {
                         TabView(selection: $viewModel.selectedIndex) {
                             ForEach(Array(viewModel.cards.enumerated()), id: \.element.id) { index, word in

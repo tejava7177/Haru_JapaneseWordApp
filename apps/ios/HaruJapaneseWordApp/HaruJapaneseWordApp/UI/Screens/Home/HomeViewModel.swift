@@ -14,19 +14,23 @@ final class HomeViewModel: ObservableObject {
     @Published var debugError: String?
     @Published var isShowingAlert: Bool = false
     @Published var alertMessage: String = ""
+    @Published private(set) var targetDateText: String = ""
 
     private let repository: DictionaryRepository
     private let settingsStore: AppSettingsStore
     private let lyricRepository: LyricRepository
+    private let buddyAPIService: BuddyAPIServiceProtocol
     private var cancellables: Set<AnyCancellable> = []
 
     init(
         repository: DictionaryRepository,
-        settingsStore: AppSettingsStore
+        settingsStore: AppSettingsStore,
+        buddyAPIService: BuddyAPIServiceProtocol = BuddyAPIService()
     ) {
         self.repository = repository
         self.settingsStore = settingsStore
         self.lyricRepository = LyricRepository()
+        self.buddyAPIService = buddyAPIService
 
         settingsStore.$settings
             .receive(on: RunLoop.main)
@@ -37,44 +41,36 @@ final class HomeViewModel: ObservableObject {
     }
 
     func loadDeck() {
+        Task {
+            await loadDeckFromPrimarySource()
+        }
+    }
+
+    private func loadDeckFromPrimarySource() async {
         hasError = false
         debugError = nil
 
         do {
             todayLyric = try lyricRepository.getTodayLyric()
+            lyricWordId = nil
 
-            var lyricWord: WordSummary?
-            if let lyric = todayLyric, lyric.targetExpression.isEmpty == false {
-                lyricWord = try repository.findByExpression(lyric.targetExpression)
-            }
+            if let currentUserId = settingsStore.currentBackendUserId {
+                let response = try await buddyAPIService.fetchDailyWords(userId: currentUserId)
+                let finalCards = try response.items
+                    .sorted { $0.orderIndex < $1.orderIndex }
+                    .map(makeWordSummary(from:))
 
-            let lyricWordIsChecked: Bool
-            if let lyricWord {
-                let checked = try repository.fetchCheckedStates(wordIds: [lyricWord.id])
-                lyricWordIsChecked = checked.contains(lyricWord.id)
+                targetDateText = response.targetDate
+                cards = finalCards
+                deckWordIds = finalCards.map { $0.id }
             } else {
-                lyricWordIsChecked = false
+                let finalCards = try loadFallbackRecommendedWords()
+                targetDateText = ""
+                cards = finalCards
+                deckWordIds = finalCards.map { $0.id }
+                debugError = "DailyWord API userId unavailable. Falling back to local recommendations."
             }
-            let shouldUseLyricWord = lyricWord != nil && lyricWordIsChecked == false
-            lyricWordId = shouldUseLyricWord ? lyricWord?.id : nil
 
-            let currentLevel = settingsStore.settings.homeDeckLevel
-            let needed = shouldUseLyricWord ? 9 : 10
-            let fetchLimit = shouldUseLyricWord ? 10 : 9
-            var recommended = try repository.fetchRecommendedWords(level: currentLevel, limit: fetchLimit)
-            if let lyricWord {
-                recommended.removeAll { $0.id == lyricWord.id }
-            }
-            let recommendedWords = Array(recommended.prefix(needed))
-
-            var finalCards: [WordSummary] = []
-            if let lyricWord, shouldUseLyricWord {
-                finalCards.append(lyricWord)
-            }
-            finalCards.append(contentsOf: recommendedWords)
-
-            cards = finalCards
-            deckWordIds = finalCards.map { $0.id }
             selectedIndex = 0
             checkedWordIds = try repository.fetchCheckedStates(wordIds: deckWordIds)
 
@@ -82,11 +78,23 @@ final class HomeViewModel: ObservableObject {
                 hasError = true
             }
         } catch {
-            hasError = true
-            debugError = String(describing: error)
-            cards = []
-            deckWordIds = []
-            selectedIndex = 0
+            do {
+                let finalCards = try loadFallbackRecommendedWords()
+                targetDateText = ""
+                cards = finalCards
+                deckWordIds = finalCards.map { $0.id }
+                selectedIndex = 0
+                checkedWordIds = try repository.fetchCheckedStates(wordIds: deckWordIds)
+                debugError = "DailyWord API failed, fallback applied: \(error)"
+                hasError = finalCards.isEmpty
+            } catch {
+                hasError = true
+                debugError = String(describing: error)
+                cards = []
+                deckWordIds = []
+                selectedIndex = 0
+                targetDateText = ""
+            }
         }
     }
 
@@ -113,4 +121,22 @@ final class HomeViewModel: ObservableObject {
         isShowingAlert = true
     }
 
+    private func makeWordSummary(from item: DailyWordsTodayItemResponse) throws -> WordSummary {
+        if let summary = try repository.fetchWordSummary(wordId: item.wordId) {
+            return summary
+        }
+
+        return WordSummary(
+            id: item.wordId,
+            level: JLPTLevel(rawValue: item.level) ?? .n5,
+            expression: item.expression,
+            reading: item.reading,
+            meanings: ""
+        )
+    }
+
+    private func loadFallbackRecommendedWords() throws -> [WordSummary] {
+        let currentLevel = settingsStore.settings.homeDeckLevel
+        return try repository.fetchRecommendedWords(level: currentLevel, limit: 10)
+    }
 }

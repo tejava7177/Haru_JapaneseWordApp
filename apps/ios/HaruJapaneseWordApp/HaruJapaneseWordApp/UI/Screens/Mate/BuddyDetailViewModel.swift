@@ -13,26 +13,26 @@ final class BuddyDetailViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var sendSuccessMessage: String?
 
-    let myUserId: String
     let buddyId: String
     let buddyName: String
 
     private let service: BuddyAPIServiceProtocol
+    private let settingsStore: AppSettingsStore
     private var selectedItemId: Int?
     private var dailyWordsResponse: DailyWordsTodayResponse?
     private var tsunTsunTodayResponse: TsunTsunTodayResponse?
 
     init(
-        myUserId: String,
         buddyId: String,
         buddyName: String,
+        settingsStore: AppSettingsStore,
         service: BuddyAPIServiceProtocol = BuddyAPIService()
     ) {
-        self.myUserId = myUserId
         self.buddyId = buddyId
         self.buddyName = buddyName
+        self.settingsStore = settingsStore
         self.service = service
-        print("[BuddyDetail] init myUserId=\(myUserId) buddyId=\(buddyId) buddyName=\(buddyName)")
+        print("[BuddyDetail] init currentLoginUser=\(settingsStore.mateUserId) myUserId=\(resolvedMyUserId ?? "<nil>") buddyId=\(buddyId) buddyName=\(buddyName)")
     }
 
     var selectedItem: BuddyWordItemUIModel? {
@@ -45,13 +45,22 @@ final class BuddyDetailViewModel: ObservableObject {
 
     func load() {
         guard isLoading == false else { return }
+        guard let myUserId = resolvedMyUserId else {
+            items = []
+            totalCount = 0
+            sentCount = 0
+            receivedCount = 0
+            targetDateText = ""
+            errorMessage = "현재 로그인 사용자 ID를 확인하지 못했어요."
+            return
+        }
         isLoading = true
         errorMessage = nil
-        print("[BuddyDetail] load myUserId=\(myUserId) buddyId=\(buddyId) buddyName=\(buddyName)")
+        print("[BuddyDetail] load currentLoginUser=\(settingsStore.mateUserId) myUserId=\(myUserId) buddyId=\(buddyId) buddyName=\(buddyName)")
 
         Task {
             do {
-                async let dailyWordsTask = service.fetchDailyWords(userId: buddyId)
+                async let dailyWordsTask = service.fetchDailyWords(userId: myUserId)
                 async let tsunTsunTask = service.fetchTsunTsunToday(userId: myUserId, buddyId: buddyId)
 
                 let (dailyWords, tsunTsunToday) = try await (dailyWordsTask, tsunTsunTask)
@@ -84,6 +93,10 @@ final class BuddyDetailViewModel: ObservableObject {
     func sendTsunTsun() {
         guard let selectedItem else { return }
         guard isSending == false else { return }
+        guard let myUserId = resolvedMyUserId else {
+            errorMessage = "현재 로그인 사용자 ID를 확인하지 못했어요."
+            return
+        }
 
         isSending = true
         errorMessage = nil
@@ -108,6 +121,11 @@ final class BuddyDetailViewModel: ObservableObject {
     }
 
     func refreshTsunTsunStatus() async {
+        guard let myUserId = resolvedMyUserId else {
+            errorMessage = "현재 로그인 사용자 ID를 확인하지 못했어요."
+            return
+        }
+
         do {
             let tsunTsunToday = try await service.fetchTsunTsunToday(userId: myUserId, buddyId: buddyId)
             tsunTsunTodayResponse = tsunTsunToday
@@ -120,6 +138,10 @@ final class BuddyDetailViewModel: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private var resolvedMyUserId: String? {
+        settingsStore.currentBackendUserId
     }
 
     private func apply(dailyWords: DailyWordsTodayResponse, tsunTsunToday: TsunTsunTodayResponse) {
