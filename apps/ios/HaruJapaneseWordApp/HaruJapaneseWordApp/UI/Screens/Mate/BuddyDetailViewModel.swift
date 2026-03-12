@@ -254,12 +254,9 @@ final class BuddyDetailViewModel: ObservableObject {
             return
         }
 
-        // TODO: Remove this fallback when the backend always returns progressCount.
-        // Progress must represent completed ANSWERED pairs, not sends.
-        progressCount = min(
-            tsunTsunToday.items.filter { $0.status == .answered }.count,
-            progressGoal
-        )
+        // TODO: Backend must provide progressCount for Buddy detail progress.
+        // Do not infer progress from sent/received/items on the client.
+        progressCount = 0
     }
 
     private func logTsunTsunFailure(_ error: Error, userId: String, buddyId: String) {
