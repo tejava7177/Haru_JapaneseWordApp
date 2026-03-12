@@ -35,13 +35,23 @@ struct ProfileView: View {
                 await viewModel.loadAvatar(from: newItem)
             }
         }
+        .onChange(of: viewModel.learningLevelNotice) { message in
+            guard let message else { return }
+            showToast(message: message)
+            viewModel.clearLearningLevelNotice()
+        }
+        .onChange(of: viewModel.dailyWordsRegenerateNotice) { message in
+            guard let message else { return }
+            showToast(message: message)
+            viewModel.clearDailyWordsRegenerateNotice()
+        }
         .alert("학습 데이터 초기화", isPresented: $viewModel.isResetAlertPresented) {
             Button("초기화", role: .destructive) {
-                viewModel.resetLearningData()
+                viewModel.regenerateTodayDailyWordsForDevelopment()
             }
             Button("취소", role: .cancel) { }
         } message: {
-            Text("오늘의 덱과 학습 체크 기록을 초기화합니다.")
+            Text("개발용으로 오늘 단어를 즉시 다시 생성합니다.")
         }
         .alert("로그인 실패", isPresented: Binding(get: {
             errorMessage != nil
@@ -51,6 +61,24 @@ struct ProfileView: View {
             Button("확인", role: .cancel) { }
         } message: {
             Text(errorMessage ?? "")
+        }
+        .alert("학습 레벨 저장 실패", isPresented: Binding(get: {
+            viewModel.learningLevelErrorMessage != nil
+        }, set: { _ in
+            viewModel.clearLearningLevelError()
+        })) {
+            Button("확인", role: .cancel) { }
+        } message: {
+            Text(viewModel.learningLevelErrorMessage ?? "학습 레벨을 저장하지 못했어요.")
+        }
+        .alert("오늘 단어 재생성 실패", isPresented: Binding(get: {
+            viewModel.dailyWordsRegenerateErrorMessage != nil
+        }, set: { _ in
+            viewModel.clearDailyWordsRegenerateError()
+        })) {
+            Button("확인", role: .cancel) { }
+        } message: {
+            Text(viewModel.dailyWordsRegenerateErrorMessage ?? "오늘 단어를 다시 생성하지 못했어요.")
         }
         .sheet(isPresented: $isGuidePresented) {
             GuideView()
@@ -228,7 +256,6 @@ struct ProfileView: View {
                                 isSelected: viewModel.selectedLearningLevel == level
                             ) {
                                 viewModel.updateProfileLevel(level)
-                                showToast(message: "학습 레벨이 \(level.title)로 설정됐어요")
                             }
                         }
                     }
@@ -236,7 +263,12 @@ struct ProfileView: View {
                     .padding(.trailing, viewModel.selectedLearningLevel == .n1 ? edgePadding + edgeCompensation : edgePadding)
                     .padding(.vertical, 4)
                 }
-                .disabled(viewModel.isMateLoggedIn == false)
+                .disabled(viewModel.isMateLoggedIn == false || viewModel.isUpdatingLearningLevel)
+
+                if viewModel.isUpdatingLearningLevel {
+                    ProgressView("학습 레벨 저장 중...")
+                        .font(.footnote)
+                }
 
                 LevelDescriptionCard(level: viewModel.selectedLearningLevel)
             }
@@ -258,8 +290,16 @@ struct ProfileView: View {
             Button(role: .destructive) {
                 viewModel.isResetAlertPresented = true
             } label: {
-                Text("학습 데이터 초기화")
+                HStack {
+                    Text("학습 데이터 초기화")
+                    if viewModel.isRegeneratingDailyWords {
+                        Spacer()
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                }
             }
+            .disabled(viewModel.isRegeneratingDailyWords || viewModel.isMateLoggedIn == false)
         }
     }
 

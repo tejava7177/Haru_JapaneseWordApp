@@ -19,6 +19,19 @@ struct BuddyDetailView: View {
                     VStack(alignment: .leading, spacing: 16) {
                         headerView
 
+                        if let nonFatalMessage = viewModel.nonFatalMessage {
+                            Text(nonFatalMessage)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .fill(Color(uiColor: .secondarySystemBackground))
+                                )
+                        }
+
                         LazyVStack(spacing: 8) {
                             ForEach(viewModel.items) { item in
                                 BuddyWordRow(
@@ -237,7 +250,7 @@ private struct BuddyWordRow: View {
 private extension BuddyDetailView {
     var errorAlertBinding: Binding<Bool> {
         Binding(
-            get: { viewModel.errorMessage != nil && viewModel.items.isEmpty == false },
+            get: { viewModel.errorMessage != nil && viewModel.items.isEmpty == false && viewModel.nonFatalMessage == nil },
             set: { isPresented in
                 if isPresented == false {
                     viewModel.errorMessage = nil

@@ -12,6 +12,7 @@ final class BuddyDetailViewModel: ObservableObject {
     @Published private(set) var receivedCount: Int = 0
     @Published var errorMessage: String?
     @Published var sendSuccessMessage: String?
+    @Published var nonFatalMessage: String?
 
     let buddyId: String
     let buddyName: String
@@ -54,17 +55,31 @@ final class BuddyDetailViewModel: ObservableObject {
             errorMessage = "현재 로그인 사용자 ID를 확인하지 못했어요."
             return
         }
+        let dailyWordsUserId = buddyId
+        let tsunTsunUserId = myUserId
+        let tsunTsunBuddyId = buddyId
+
         isLoading = true
         errorMessage = nil
-        print("[BuddyDetail] load currentLoginUser=\(settingsStore.mateUserId) myUserId=\(myUserId) buddyId=\(buddyId) buddyName=\(buddyName)")
+        nonFatalMessage = nil
+        print("[BuddyDetail] currentLoginUser=\(settingsStore.mateUserId) myUserId=\(myUserId) buddyId=\(buddyId) buddyName=\(buddyName)")
+        print("[BuddyDetail] dailyWordsRequestUserId=\(dailyWordsUserId)")
+        print("[BuddyDetail] tsuntsunTodayRequest userId=\(tsunTsunUserId) buddyId=\(tsunTsunBuddyId)")
 
         Task {
             do {
-                async let dailyWordsTask = service.fetchDailyWords(userId: myUserId)
-                async let tsunTsunTask = service.fetchTsunTsunToday(userId: myUserId, buddyId: buddyId)
+                let dailyWords = try await service.fetchDailyWords(userId: dailyWordsUserId)
 
-                let (dailyWords, tsunTsunToday) = try await (dailyWordsTask, tsunTsunTask)
-                apply(dailyWords: dailyWords, tsunTsunToday: tsunTsunToday)
+                do {
+                    let tsunTsunToday = try await service.fetchTsunTsunToday(
+                        userId: tsunTsunUserId,
+                        buddyId: tsunTsunBuddyId
+                    )
+                    apply(dailyWords: dailyWords, tsunTsunToday: tsunTsunToday)
+                } catch {
+                    logTsunTsunFailure(error, userId: tsunTsunUserId, buddyId: tsunTsunBuddyId)
+                    applyFallback(dailyWords: dailyWords)
+                }
                 isLoading = false
             } catch {
                 items = []
@@ -72,6 +87,7 @@ final class BuddyDetailViewModel: ObservableObject {
                 sentCount = 0
                 receivedCount = 0
                 targetDateText = ""
+                nonFatalMessage = nil
                 errorMessage = error.localizedDescription
                 isLoading = false
             }
@@ -134,9 +150,15 @@ final class BuddyDetailViewModel: ObservableObject {
             if targetDateText.isEmpty {
                 targetDateText = tsunTsunToday.targetDate
             }
+            nonFatalMessage = nil
             rebuildItems()
         } catch {
-            errorMessage = error.localizedDescription
+            logTsunTsunFailure(error, userId: myUserId, buddyId: buddyId)
+            sentCount = 0
+            receivedCount = 0
+            tsunTsunTodayResponse = nil
+            nonFatalMessage = "층츤 상태를 불러오지 못해 기본 상태로 표시했어요."
+            rebuildItems()
         }
     }
 
@@ -147,11 +169,37 @@ final class BuddyDetailViewModel: ObservableObject {
     private func apply(dailyWords: DailyWordsTodayResponse, tsunTsunToday: TsunTsunTodayResponse) {
         dailyWordsResponse = dailyWords
         tsunTsunTodayResponse = tsunTsunToday
-        targetDateText = tsunTsunToday.targetDate
+        targetDateText = dailyWords.targetDate
         sentCount = tsunTsunToday.sentCount
         receivedCount = tsunTsunToday.receivedCount
         totalCount = dailyWords.items.count
+        nonFatalMessage = nil
         rebuildItems()
+    }
+
+    private func applyFallback(dailyWords: DailyWordsTodayResponse) {
+        dailyWordsResponse = dailyWords
+        tsunTsunTodayResponse = nil
+        targetDateText = dailyWords.targetDate
+        sentCount = 0
+        receivedCount = 0
+        totalCount = dailyWords.items.count
+        nonFatalMessage = "층츤 상태를 불러오지 못해 기본 상태로 표시했어요."
+        print("[BuddyDetail] tsuntsun fallback applied sentCount=0 receivedCount=0 status=NONE")
+        rebuildItems()
+    }
+
+    private func logTsunTsunFailure(_ error: Error, userId: String, buddyId: String) {
+        switch error {
+        case APIError.server(let statusCode, let message):
+            print("[BuddyDetail] tsuntsun today failed userId=\(userId) buddyId=\(buddyId) status=\(statusCode) body=\(message ?? "<empty>")")
+        case APIError.decodingFailed(let underlyingError):
+            print("[BuddyDetail] tsuntsun today decoding failed userId=\(userId) buddyId=\(buddyId) error=\(underlyingError)")
+        case APIError.requestFailed(let underlyingError):
+            print("[BuddyDetail] tsuntsun today request failed userId=\(userId) buddyId=\(buddyId) error=\(underlyingError)")
+        default:
+            print("[BuddyDetail] tsuntsun today failed userId=\(userId) buddyId=\(buddyId) error=\(error.localizedDescription)")
+        }
     }
 
     private func rebuildItems() {

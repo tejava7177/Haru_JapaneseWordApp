@@ -38,6 +38,13 @@ final class HomeViewModel: ObservableObject {
                 self?.loadDeck()
             }
             .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: .dailyWordsDidRegenerate)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.loadDeck()
+            }
+            .store(in: &cancellables)
     }
 
     func loadDeck() {

@@ -92,6 +92,29 @@ final class APIClient: @unchecked Sendable {
         _ = try await perform(request)
     }
 
+    func patch<Request: Encodable, Response: Decodable>(
+        _ endpoint: APIEndpoint,
+        body: Request,
+        responseType: Response.Type
+    ) async throws -> Response {
+        let requestData = try encoder.encode(body)
+        let request = try makeRequest(for: endpoint, body: requestData)
+        let data = try await perform(request)
+        logResponseBodyIfNeeded(data, request: request)
+
+        do {
+            return try decoder.decode(Response.self, from: data)
+        } catch {
+            logDecodingFailure(
+                error,
+                data: data,
+                modelName: String(describing: Response.self),
+                request: request
+            )
+            throw APIError.decodingFailed(error)
+        }
+    }
+
     private func makeRequest(for endpoint: APIEndpoint, body: Data?) throws -> URLRequest {
         guard var components = URLComponents(
             url: baseURL.appendingPathComponent(endpoint.path),
