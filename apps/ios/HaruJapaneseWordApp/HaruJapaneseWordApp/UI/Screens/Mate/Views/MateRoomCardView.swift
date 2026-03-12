@@ -2,11 +2,9 @@ import SwiftUI
 
 struct MateRoomCardView: View {
     let item: MateRoomCardItem
-    let isBusy: Bool
-    let onSendPoke: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        HStack(alignment: .top, spacing: 16) {
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 8) {
                     Label("연결됨", systemImage: "checkmark.circle.fill")
@@ -32,29 +30,19 @@ struct MateRoomCardView: View {
                 }
             }
 
-            Divider()
-
-            HStack(spacing: 10) {
-                Button("つんつん 보내기") {
-                    onSendPoke()
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.black)
-                .disabled(item.canSendPokeToday == false || isBusy)
-            }
-
-            if let pokeStatusText = item.pokeStatusText, pokeStatusText.isEmpty == false {
-                Text(pokeStatusText)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
+            Image(systemName: "chevron.right")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.tertiary)
+                .padding(.top, 4)
         }
-        .padding(16)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(Color(uiColor: .secondarySystemBackground))
         )
+        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
 

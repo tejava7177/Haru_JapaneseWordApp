@@ -22,8 +22,6 @@ struct MateRoomCardItem: Identifiable, Equatable {
     let lastInteractionText: String
     let jlptLevel: JLPTLevel
     let extraInfoText: String
-    let canSendPokeToday: Bool
-    let pokeStatusText: String?
 }
 
 @MainActor
@@ -40,8 +38,6 @@ final class MateViewModel: ObservableObject {
     @Published var isShowingAlert: Bool = false
     @Published var matchCelebration: MatchCelebration?
     @Published private(set) var latestPokeByRoomId: [Int: MatePoke] = [:]
-    @Published private(set) var canSendPokeByRoomId: [Int: Bool] = [:]
-    @Published private(set) var pokeStatusByRoomId: [Int: String] = [:]
 
     private let service: MateService
     private let settingsStore: AppSettingsStore
@@ -107,8 +103,6 @@ final class MateViewModel: ObservableObject {
             connectedRoomCards = []
             inviteCode = ""
             latestPokeByRoomId = [:]
-            canSendPokeByRoomId = [:]
-            pokeStatusByRoomId = [:]
             stopPokePolling()
             return
         }
@@ -198,41 +192,6 @@ final class MateViewModel: ObservableObject {
         }
     }
 
-    func sendPoke(roomId: Int) {
-        guard isBusy == false else { return }
-        let currentUserId = settingsStore.mateUserId
-        guard currentUserId.isEmpty == false else { return }
-
-        print("[MatePoke] send start user=\(currentUserId) room=\(roomId)")
-
-        isBusy = true
-        Task {
-            let result = await service.sendPoke(roomId: roomId, currentUserId: currentUserId)
-            await MainActor.run {
-                isBusy = false
-                switch result {
-                case .success(let poke):
-                    print("[MatePoke] send ok pokeId=\(poke.id ?? -1) createdAt=\(Int(poke.createdAt.timeIntervalSince1970))")
-                    latestPokeByRoomId[poke.roomId] = poke
-                    canSendPokeByRoomId[poke.roomId] = false
-                    pokeStatusByRoomId[poke.roomId] = "오늘 콕 완료"
-                    updateLastInteraction(roomId: poke.roomId, at: poke.createdAt)
-                    rebuildConnectedCards(myUserId: currentUserId)
-                case .failure(let error):
-                    if isAlreadyPokedToday(error) {
-                        print("[MatePoke] send blocked alreadyPokedToday")
-                        canSendPokeByRoomId[roomId] = false
-                        pokeStatusByRoomId[roomId] = "오늘 콕 완료"
-                        rebuildConnectedCards(myUserId: currentUserId)
-                    } else {
-                        alertMessage = "콕 전송에 실패했어요."
-                        isShowingAlert = true
-                    }
-                }
-            }
-        }
-    }
-
     func counterpartLabel(for room: MateRoom) -> String {
         let otherId = counterpartUserId(for: room)
         return userMetaProvider.displayName(for: otherId)
@@ -277,8 +236,6 @@ final class MateViewModel: ObservableObject {
         guard currentUserId.isEmpty == false else { return }
 
         var refreshedLatestByRoomId: [Int: MatePoke] = [:]
-        var refreshedCanSendByRoomId: [Int: Bool] = [:]
-        var refreshedStatusByRoomId: [Int: String] = [:]
         let previousLatestByRoomId = latestPokeByRoomId
 
         for room in activeRooms where room.hasMate {
@@ -287,14 +244,9 @@ final class MateViewModel: ObservableObject {
             }
 
             let fetchedLatest = await service.fetchLatestPoke(roomId: room.id)
-            let fetchedCanSend = await service.canSendPokeToday(roomId: room.id, currentUserId: currentUserId)
 
             if let fetchedLatest {
                 refreshedLatestByRoomId[room.id] = fetchedLatest
-            }
-            refreshedCanSendByRoomId[room.id] = fetchedCanSend
-            if fetchedCanSend == false {
-                refreshedStatusByRoomId[room.id] = "오늘 콕 완료"
             }
 
             if shouldLogPollUpdate,
@@ -305,8 +257,6 @@ final class MateViewModel: ObservableObject {
         }
 
         latestPokeByRoomId = refreshedLatestByRoomId
-        canSendPokeByRoomId = refreshedCanSendByRoomId
-        pokeStatusByRoomId = refreshedStatusByRoomId
         rebuildConnectedCards(myUserId: currentUserId)
     }
 
@@ -331,7 +281,6 @@ final class MateViewModel: ObservableObject {
                 let otherId = room.userAId != myUserId ? room.userAId : room.userBId
                 let displayName = userMetaProvider.displayName(for: otherId)
                 let interactionDate = interactionDate(for: room)
-                let canSendPokeToday = canSendPokeByRoomId[room.id] ?? true
                 return MateRoomCardItem(
                     id: room.id,
                     room: room,
@@ -340,9 +289,7 @@ final class MateViewModel: ObservableObject {
                     counterpartLabel: displayName,
                     lastInteractionText: lastInteractionDescription(interactionDate: interactionDate),
                     jlptLevel: userMetaProvider.jlptLevel(for: otherId),
-                    extraInfoText: "기록 준비중",
-                    canSendPokeToday: canSendPokeToday,
-                    pokeStatusText: pokeStatusByRoomId[room.id]
+                    extraInfoText: "기록 준비중"
                 )
             }
     }
@@ -366,13 +313,6 @@ final class MateViewModel: ObservableObject {
         let days = DateKey.daysBetweenKST(from: interactionDate, to: now)
         if days <= 0 { return "오늘" }
         return "\(days)일 전"
-    }
-
-    private func isAlreadyPokedToday(_ error: Error) -> Bool {
-        if let pokeError = error as? MatePokeError, pokeError == .alreadyPokedToday {
-            return true
-        }
-        return false
     }
 
     private func scheduleMatchNotificationIfAllowed() {

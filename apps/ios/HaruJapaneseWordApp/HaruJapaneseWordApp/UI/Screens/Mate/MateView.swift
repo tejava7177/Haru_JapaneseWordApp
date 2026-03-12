@@ -4,6 +4,8 @@ import UIKit
 struct MateView: View {
     @StateObject private var viewModel: MateViewModel
     @State private var isInviteSectionExpanded: Bool = false
+    @State private var selectedBuddy: MateRoomCardItem?
+    @State private var isShowingBuddyDetail: Bool = false
 
     init(viewModel: MateViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -19,40 +21,11 @@ struct MateView: View {
                         .listRowBackground(Color.clear)
                 } else {
                     ForEach(viewModel.connectedRoomCards) { item in
-                        VStack(alignment: .leading, spacing: 8) {
-                            MateRoomCardView(
-                                item: item,
-                                isBusy: viewModel.isBusy,
-                                onSendPoke: {
-                                    viewModel.sendPoke(roomId: item.room.id)
-                                }
-                            )
-
-                            NavigationLink {
-                                BuddyDetailView(
-                                    viewModel: BuddyDetailViewModel(
-                                        buddyId: item.counterpartUserId,
-                                        buddyName: item.counterpartLabel,
-                                        settingsStore: viewModel.settingsStoreForBuddyDetail
-                                    )
-                                )
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "text.book.closed")
-                                    Text("오늘 단어 보기")
-                                        .font(.subheadline.weight(.medium))
-                                }
-                                .foregroundStyle(.primary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 10)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                        .fill(Color(uiColor: .tertiarySystemBackground))
-                                )
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(Int(item.counterpartUserId) == nil)
+                        MateRoomCardView(item: item)
+                        .onTapGesture {
+                            guard Int(item.counterpartUserId) != nil else { return }
+                            selectedBuddy = item
+                            isShowingBuddyDetail = true
                         }
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button(role: .destructive) {
@@ -95,6 +68,17 @@ struct MateView: View {
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .navigationTitle("Buddy")
+            .navigationDestination(isPresented: $isShowingBuddyDetail) {
+                if let item = selectedBuddy {
+                    BuddyDetailView(
+                        viewModel: BuddyDetailViewModel(
+                            buddyId: item.counterpartUserId,
+                            buddyName: item.counterpartLabel,
+                            settingsStore: viewModel.settingsStoreForBuddyDetail
+                        )
+                    )
+                }
+            }
         }
         .onAppear {
             viewModel.onViewAppear()
