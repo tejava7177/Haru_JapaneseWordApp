@@ -6,6 +6,7 @@ struct MateView: View {
     @State private var isInviteSectionExpanded: Bool = false
     @State private var selectedBuddy: MateRoomCardItem?
     @State private var isShowingBuddyDetail: Bool = false
+    @State private var previewBuddy: MateRoomCardItem?
 
     init(viewModel: MateViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -21,7 +22,12 @@ struct MateView: View {
                         .listRowBackground(Color.clear)
                 } else {
                     ForEach(viewModel.connectedRoomCards) { item in
-                        MateRoomCardView(item: item)
+                        MateRoomCardView(
+                            item: item,
+                            onAvatarLongPress: {
+                                presentProfilePreview(for: item)
+                            }
+                        )
                         .onTapGesture {
                             guard Int(item.counterpartUserId) != nil else { return }
                             selectedBuddy = item
@@ -111,6 +117,11 @@ struct MateView: View {
                     .padding(.top, 12)
             }
         }
+        .overlay {
+            if let previewBuddy {
+                buddyProfileOverlay(for: previewBuddy)
+            }
+        }
         .animation(.easeOut(duration: 0.2), value: viewModel.matchCelebration?.id ?? -1)
         .alert("안내", isPresented: $viewModel.isShowingAlert) {
             Button("확인", role: .cancel) { }
@@ -178,6 +189,34 @@ struct MateView: View {
                 .fill(Color(uiColor: .systemBackground))
                 .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 4)
         )
+    }
+
+    private func buddyProfileOverlay(for item: MateRoomCardItem) -> some View {
+        ZStack {
+            Color.black.opacity(0.2)
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    dismissProfilePreview()
+                }
+
+            BuddyProfilePreviewCard(item: item, onClose: dismissProfilePreview)
+                .padding(.horizontal, 16)
+                .transition(.scale(scale: 0.94).combined(with: .opacity))
+        }
+        .zIndex(10)
+    }
+
+    private func presentProfilePreview(for item: MateRoomCardItem) {
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+            previewBuddy = item
+        }
+    }
+
+    private func dismissProfilePreview() {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            previewBuddy = nil
+        }
     }
 }
 

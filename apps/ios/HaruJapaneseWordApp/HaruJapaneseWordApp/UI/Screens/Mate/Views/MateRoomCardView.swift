@@ -3,12 +3,9 @@ import UIKit
 
 struct MateRoomCardView: View {
     let item: MateRoomCardItem
-
-    @State private var isPreviewVisible: Bool = false
-    @State private var previewActivationWorkItem: DispatchWorkItem?
+    let onAvatarLongPress: (() -> Void)?
 
     private let avatarSize: CGFloat = 52
-    private let previewLongPressDuration: TimeInterval = 0.28
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -52,55 +49,13 @@ struct MateRoomCardView: View {
                 .fill(Color(uiColor: .secondarySystemBackground))
         )
         .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .onDisappear {
-            hidePreviewImmediately()
-        }
     }
 
     private var avatarView: some View {
         BuddyAvatarView(data: item.profile.avatarData, size: avatarSize)
-            .overlay(alignment: .topLeading) {
-                if isPreviewVisible {
-                    BuddyProfilePreviewCard(item: item)
-                        .offset(x: avatarSize - 6, y: -14)
-                        .transition(
-                            .asymmetric(
-                                insertion: .scale(scale: 0.96, anchor: .topLeading).combined(with: .opacity),
-                                removal: .opacity
-                            )
-                        )
-                        .zIndex(1)
-                }
+            .onLongPressGesture(minimumDuration: 0.28, maximumDistance: 24) {
+                onAvatarLongPress?()
             }
-            .onLongPressGesture(
-                minimumDuration: previewLongPressDuration,
-                maximumDistance: 24,
-                pressing: handleAvatarPressing(_:),
-                perform: {}
-            )
-    }
-
-    private func handleAvatarPressing(_ isPressing: Bool) {
-        if isPressing {
-            previewActivationWorkItem?.cancel()
-            let workItem = DispatchWorkItem {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isPreviewVisible = true
-                }
-            }
-            previewActivationWorkItem = workItem
-            DispatchQueue.main.asyncAfter(deadline: .now() + previewLongPressDuration, execute: workItem)
-        } else {
-            hidePreviewImmediately()
-        }
-    }
-
-    private func hidePreviewImmediately() {
-        previewActivationWorkItem?.cancel()
-        previewActivationWorkItem = nil
-        withAnimation(.easeInOut(duration: 0.18)) {
-            isPreviewVisible = false
-        }
     }
 }
 
@@ -130,68 +85,6 @@ private struct BuddyAvatarView: View {
             Circle()
                 .stroke(Color.white.opacity(0.85), lineWidth: 1)
         }
-    }
-}
-
-private struct BuddyProfilePreviewCard: View {
-    let item: MateRoomCardItem
-
-    private var bioText: String? {
-        let trimmed = item.profile.bio.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
-
-    private var instagramText: String? {
-        let trimmed = item.profile.instagramId.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : "@\(trimmed)"
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .center, spacing: 10) {
-                BuddyAvatarView(data: item.profile.avatarData, size: 42)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(item.counterpartLabel)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-
-                    Text("학습 레벨 \(item.jlptLevel.title)")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            if let bioText {
-                Text(bioText)
-                    .font(.caption)
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
-            }
-
-            if let instagramText {
-                Label(instagramText, systemImage: "camera")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-        }
-        .padding(12)
-        .frame(width: 210, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color(uiColor: .systemBackground))
-                .shadow(color: .black.opacity(0.12), radius: 10, x: 0, y: 6)
-        )
-        .overlay(alignment: .topLeading) {
-            Image(systemName: "arrowtriangle.down.fill")
-                .font(.caption2)
-                .foregroundStyle(Color(uiColor: .systemBackground))
-                .rotationEffect(.degrees(135))
-                .offset(x: 10, y: -5)
-        }
-        .allowsHitTesting(false)
     }
 }
 
