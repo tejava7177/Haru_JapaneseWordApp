@@ -18,10 +18,12 @@ struct MateRoomCardItem: Identifiable, Equatable {
     let room: MateRoom
     let counterpartUserId: String
     let counterpartRawUserId: String
-    let counterpartLabel: String
+    let profile: MateUserProfile
     let lastInteractionText: String
-    let jlptLevel: JLPTLevel
     let extraInfoText: String
+
+    var counterpartLabel: String { profile.displayName }
+    var jlptLevel: JLPTLevel { profile.jlptLevel }
 }
 
 @MainActor
@@ -194,7 +196,7 @@ final class MateViewModel: ObservableObject {
 
     func counterpartLabel(for room: MateRoom) -> String {
         let otherId = counterpartUserId(for: room)
-        return userMetaProvider.displayName(for: otherId)
+        return userMetaProvider.profile(for: otherId).displayName
     }
 
     private func triggerCelebrationIfNeeded(room: MateRoom, previousRoom: MateRoom?) {
@@ -279,16 +281,16 @@ final class MateViewModel: ObservableObject {
             .filter { $0.hasMate }
             .map { room in
                 let otherId = room.userAId != myUserId ? room.userAId : room.userBId
-                let displayName = userMetaProvider.displayName(for: otherId)
+                let profile = userMetaProvider.profile(for: otherId)
+                let displayName = profile.displayName
                 let interactionDate = interactionDate(for: room)
                 return MateRoomCardItem(
                     id: room.id,
                     room: room,
                     counterpartUserId: BackendUserIDMapper.backendUserId(for: otherId, displayName: displayName) ?? otherId,
                     counterpartRawUserId: otherId,
-                    counterpartLabel: displayName,
+                    profile: profile,
                     lastInteractionText: lastInteractionDescription(interactionDate: interactionDate),
-                    jlptLevel: userMetaProvider.jlptLevel(for: otherId),
                     extraInfoText: "기록 준비중"
                 )
             }

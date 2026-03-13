@@ -3,6 +3,7 @@ import Foundation
 protocol MateUserMetaProvider {
     func displayName(for userId: String) -> String
     func jlptLevel(for userId: String) -> JLPTLevel
+    func profile(for userId: String) -> MateUserProfile
 }
 
 struct DevMateUserMetaProvider: MateUserMetaProvider {
@@ -18,5 +19,9 @@ struct DevMateUserMetaProvider: MateUserMetaProvider {
 
     func jlptLevel(for userId: String) -> JLPTLevel {
         settingsStore.profileLevel(for: userId)
+    }
+
+    func profile(for userId: String) -> MateUserProfile {
+        settingsStore.profile(for: userId)
     }
 }

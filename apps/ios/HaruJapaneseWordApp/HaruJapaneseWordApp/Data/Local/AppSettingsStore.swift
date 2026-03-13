@@ -119,13 +119,14 @@ final class AppSettingsStore: ObservableObject {
 
     func profile(for userId: String) -> MateUserProfile {
         guard userId.isEmpty == false else {
-            return MateUserProfile(userId: "", displayName: "", bio: "", instagramId: "", jlptLevel: .n5)
+            return MateUserProfile(userId: "", displayName: "", bio: "", instagramId: "", jlptLevel: .n5, avatarData: nil)
         }
 
         let displayName = userDefaults.string(forKey: mateProfileKey(userId: userId, field: "display_name"))
             ?? defaultDisplayName(for: userId)
         let bio = userDefaults.string(forKey: mateProfileKey(userId: userId, field: "bio")) ?? ""
         let instagramId = userDefaults.string(forKey: mateProfileKey(userId: userId, field: "instagram_id")) ?? ""
+        let avatarData = userDefaults.data(forKey: mateProfileKey(userId: userId, field: "avatar_data"))
         let levelRaw = userDefaults.string(forKey: mateProfileKey(userId: userId, field: "jlpt_level"))
             ?? loadLegacyProfileLevelRaw(for: userId)
             ?? JLPTLevel.n5.rawValue
@@ -136,7 +137,8 @@ final class AppSettingsStore: ObservableObject {
             displayName: displayName,
             bio: bio,
             instagramId: instagramId,
-            jlptLevel: jlptLevel
+            jlptLevel: jlptLevel,
+            avatarData: avatarData
         )
     }
 
@@ -182,6 +184,11 @@ final class AppSettingsStore: ObservableObject {
         updateProfileJLPTLevel(level, for: current.userId)
     }
 
+    func updateCurrentMateAvatarData(_ avatarData: Data?) {
+        guard let current = currentMateProfile() else { return }
+        userDefaults.set(avatarData, forKey: mateProfileKey(userId: current.userId, field: "avatar_data"))
+    }
+
     private static func loadSettings(userDefaults: UserDefaults) -> AppSettings {
         let levelRaw = userDefaults.string(forKey: "settings_home_deck_level") ?? JLPTLevel.n5.rawValue
         let level = JLPTLevel(rawValue: levelRaw) ?? .n5
@@ -197,6 +204,7 @@ final class AppSettingsStore: ObservableObject {
         userDefaults.set(defaultDisplayName(for: userId), forKey: displayNameKey)
         userDefaults.set("", forKey: mateProfileKey(userId: userId, field: "bio"))
         userDefaults.set("", forKey: mateProfileKey(userId: userId, field: "instagram_id"))
+        userDefaults.removeObject(forKey: mateProfileKey(userId: userId, field: "avatar_data"))
         let levelRaw = loadLegacyProfileLevelRaw(for: userId) ?? JLPTLevel.n5.rawValue
         userDefaults.set(levelRaw, forKey: mateProfileKey(userId: userId, field: "jlpt_level"))
     }

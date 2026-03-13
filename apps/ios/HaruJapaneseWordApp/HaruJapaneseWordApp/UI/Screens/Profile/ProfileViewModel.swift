@@ -145,7 +145,11 @@ final class ProfileViewModel: ObservableObject {
         if let data = try? await item.loadTransferable(type: Data.self) {
             let compressed = compressImageData(data)
             profile.avatarData = compressed
-            profileStore.updateAvatar(compressed)
+            if settingsStore.isMateLoggedIn {
+                settingsStore.updateCurrentMateAvatarData(compressed)
+            } else {
+                profileStore.updateAvatar(compressed)
+            }
         }
     }
 
@@ -193,6 +197,7 @@ final class ProfileViewModel: ObservableObject {
             profile.nickname = mateProfile.displayName
             profile.bio = mateProfile.bio
             profile.instagramId = mateProfile.instagramId
+            profile.avatarData = mateProfile.avatarData
             selectedLearningLevel = mateProfile.jlptLevel
         } else {
             let legacyProfile = profileStore.load()
