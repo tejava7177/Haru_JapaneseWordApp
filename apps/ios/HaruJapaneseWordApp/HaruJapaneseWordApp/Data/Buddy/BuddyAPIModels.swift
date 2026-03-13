@@ -1,5 +1,49 @@
 import Foundation
 
+struct BuddySummaryResponse: Decodable, Identifiable, Equatable {
+    let id: Int
+    let userId: Int?
+    let buddyUserId: Int?
+    let buddyNickname: String?
+    let status: String?
+    let tikiTakaCount: Int?
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case userId
+        case buddyUserId
+        case buddyNickname
+        case status
+        case tikiTakaCount
+    }
+
+    init(
+        id: Int,
+        userId: Int?,
+        buddyUserId: Int?,
+        buddyNickname: String?,
+        status: String?,
+        tikiTakaCount: Int?
+    ) {
+        self.id = id
+        self.userId = userId
+        self.buddyUserId = buddyUserId
+        self.buddyNickname = buddyNickname
+        self.status = status
+        self.tikiTakaCount = tikiTakaCount
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeFlexibleInt(forKey: .id)
+        userId = try container.decodeFlexibleIntIfPresent(forKey: .userId)
+        buddyUserId = try container.decodeFlexibleIntIfPresent(forKey: .buddyUserId)
+        buddyNickname = try container.decodeIfPresent(String.self, forKey: .buddyNickname)
+        status = try container.decodeIfPresent(String.self, forKey: .status)
+        tikiTakaCount = try container.decodeFlexibleIntIfPresent(forKey: .tikiTakaCount)
+    }
+}
+
 struct DailyWordsTodayResponse: Decodable {
     let userId: Int?
     let targetDate: String
@@ -79,6 +123,7 @@ struct TsunTsunTodayResponse: Decodable {
     let targetDate: String
     let sentCount: Int
     let receivedCount: Int
+    let tikiTakaCount: Int?
     let progressCount: Int?
     let progressGoal: Int?
     let pairCompletedToday: Bool?
@@ -90,6 +135,7 @@ struct TsunTsunTodayResponse: Decodable {
         case targetDate
         case sentCount
         case receivedCount
+        case tikiTakaCount
         case progressCount
         case progressGoal
         case pairCompletedToday
@@ -102,6 +148,7 @@ struct TsunTsunTodayResponse: Decodable {
         targetDate: String,
         sentCount: Int,
         receivedCount: Int,
+        tikiTakaCount: Int? = nil,
         progressCount: Int? = nil,
         progressGoal: Int? = nil,
         pairCompletedToday: Bool? = nil,
@@ -112,6 +159,7 @@ struct TsunTsunTodayResponse: Decodable {
         self.targetDate = targetDate
         self.sentCount = sentCount
         self.receivedCount = receivedCount
+        self.tikiTakaCount = tikiTakaCount
         self.progressCount = progressCount
         self.progressGoal = progressGoal
         self.pairCompletedToday = pairCompletedToday
@@ -125,6 +173,7 @@ struct TsunTsunTodayResponse: Decodable {
         targetDate = try container.decode(String.self, forKey: .targetDate)
         sentCount = try container.decodeFlexibleInt(forKey: .sentCount)
         receivedCount = try container.decodeFlexibleInt(forKey: .receivedCount)
+        tikiTakaCount = try container.decodeFlexibleIntIfPresent(forKey: .tikiTakaCount)
         progressCount = try container.decodeFlexibleIntIfPresent(forKey: .progressCount)
         progressGoal = try container.decodeFlexibleIntIfPresent(forKey: .progressGoal)
         pairCompletedToday = try container.decodeIfPresent(Bool.self, forKey: .pairCompletedToday)

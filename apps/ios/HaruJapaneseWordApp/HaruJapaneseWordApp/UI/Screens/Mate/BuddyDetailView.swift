@@ -363,6 +363,19 @@ private extension BuddyDetailView {
 }
 
 private struct BuddyAPIServicePreviewStub: BuddyAPIServiceProtocol {
+    func fetchBuddies(userId: String) async throws -> [BuddySummaryResponse] {
+        [
+            BuddySummaryResponse(
+                id: 13,
+                userId: Int(userId),
+                buddyUserId: 2,
+                buddyNickname: "Buddy",
+                status: "ACTIVE",
+                tikiTakaCount: 2
+            )
+        ]
+    }
+
     func fetchDailyWords(userId: String) async throws -> DailyWordsTodayResponse {
         DailyWordsTodayResponse(
             userId: Int(userId),

@@ -3,7 +3,8 @@ import UIKit
 
 struct MateRoomCardView: View {
     let item: MateRoomCardItem
-    let onAvatarLongPress: (() -> Void)?
+    let onAvatarTap: (() -> Void)?
+    let onCardTap: (() -> Void)?
 
     private let avatarSize: CGFloat = 52
 
@@ -12,34 +13,43 @@ struct MateRoomCardView: View {
             avatarView
 
             HStack(alignment: .top, spacing: 16) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Label("연결됨", systemImage: "checkmark.circle.fill")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.green)
+                HStack(alignment: .top, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("연결됨", systemImage: "checkmark.circle.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.green)
 
-                    Text("상대: \(item.counterpartLabel)")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.primary)
+                        Text("상대: \(item.counterpartLabel)")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.primary)
 
-                    Text("최근 콕: \(item.lastInteractionText)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        Text("최근 콕: \(item.lastInteractionText)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    VStack(alignment: .trailing, spacing: 8) {
+                        JLPTBadgeView(level: item.jlptLevel)
+                        Text(item.buddyStatusText)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    onCardTap?()
                 }
 
-                Spacer(minLength: 8)
-
-                VStack(alignment: .trailing, spacing: 8) {
-                    JLPTBadgeView(level: item.jlptLevel)
-                    Text(item.extraInfoText)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, 4)
+                    .onTapGesture {
+                        onCardTap?()
+                    }
             }
-
-            Image(systemName: "chevron.right")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.tertiary)
-                .padding(.top, 4)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
@@ -53,8 +63,9 @@ struct MateRoomCardView: View {
 
     private var avatarView: some View {
         BuddyAvatarView(data: item.profile.avatarData, size: avatarSize)
-            .onLongPressGesture(minimumDuration: 0.28, maximumDistance: 24) {
-                onAvatarLongPress?()
+            .contentShape(Circle())
+            .onTapGesture {
+                onAvatarTap?()
             }
     }
 }

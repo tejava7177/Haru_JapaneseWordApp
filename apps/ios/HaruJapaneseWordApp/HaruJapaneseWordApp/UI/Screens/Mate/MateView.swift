@@ -24,15 +24,15 @@ struct MateView: View {
                     ForEach(viewModel.connectedRoomCards) { item in
                         MateRoomCardView(
                             item: item,
-                            onAvatarLongPress: {
+                            onAvatarTap: {
                                 presentProfilePreview(for: item)
+                            },
+                            onCardTap: {
+                                guard Int(item.counterpartUserId) != nil else { return }
+                                selectedBuddy = item
+                                isShowingBuddyDetail = true
                             }
                         )
-                        .onTapGesture {
-                            guard Int(item.counterpartUserId) != nil else { return }
-                            selectedBuddy = item
-                            isShowingBuddyDetail = true
-                        }
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button(role: .destructive) {
                                 viewModel.endRoom(roomId: item.room.id)

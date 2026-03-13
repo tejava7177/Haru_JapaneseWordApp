@@ -18,12 +18,24 @@ struct MateRoomCardItem: Identifiable, Equatable {
     let room: MateRoom
     let counterpartUserId: String
     let counterpartRawUserId: String
+    let counterpartBackendUserId: Int?
     let profile: MateUserProfile
     let lastInteractionText: String
     let extraInfoText: String
+    let tikiTakaCount: Int?
 
     var counterpartLabel: String { profile.displayName }
     var jlptLevel: JLPTLevel { profile.jlptLevel }
+    var resolvedTikiTakaCount: Int { max(tikiTakaCount ?? 0, 0) }
+    var buddyStatusText: String {
+        if resolvedTikiTakaCount > 0 {
+            return "🔥 티키타카 \(resolvedTikiTakaCount)회"
+        }
+        return "티키타카 준비중"
+    }
+    var miniProfileTikiTakaText: String {
+        "\(resolvedTikiTakaCount)회"
+    }
 }
 
 @MainActor
@@ -40,10 +52,12 @@ final class MateViewModel: ObservableObject {
     @Published var isShowingAlert: Bool = false
     @Published var matchCelebration: MatchCelebration?
     @Published private(set) var latestPokeByRoomId: [Int: MatePoke] = [:]
+    @Published private(set) var tikiTakaCountByBuddyId: [Int: Int] = [:]
 
     private let service: MateService
     private let settingsStore: AppSettingsStore
     private let userMetaProvider: MateUserMetaProvider
+    private let buddyAPIService: BuddyAPIServiceProtocol
     private var cancellables: Set<AnyCancellable> = []
     private var celebratedRoomIds: Set<Int> = []
     private var pollTask: Task<Void, Never>?
@@ -52,11 +66,13 @@ final class MateViewModel: ObservableObject {
     init(
         service: MateService,
         settingsStore: AppSettingsStore,
-        userMetaProvider: MateUserMetaProvider? = nil
+        userMetaProvider: MateUserMetaProvider? = nil,
+        buddyAPIService: BuddyAPIServiceProtocol = BuddyAPIService()
     ) {
         self.service = service
         self.settingsStore = settingsStore
         self.userMetaProvider = userMetaProvider ?? DevMateUserMetaProvider(settingsStore: settingsStore)
+        self.buddyAPIService = buddyAPIService
 
         settingsStore.$settings
             .receive(on: RunLoop.main)
@@ -105,6 +121,7 @@ final class MateViewModel: ObservableObject {
             connectedRoomCards = []
             inviteCode = ""
             latestPokeByRoomId = [:]
+            tikiTakaCountByBuddyId = [:]
             stopPokePolling()
             return
         }
@@ -121,6 +138,9 @@ final class MateViewModel: ObservableObject {
 
         Task {
             await refreshPokeState(shouldLogPollUpdate: false)
+        }
+        Task {
+            await refreshTikiTakaCounts()
         }
 
         if isViewVisible {
@@ -284,16 +304,71 @@ final class MateViewModel: ObservableObject {
                 let profile = userMetaProvider.profile(for: otherId)
                 let displayName = profile.displayName
                 let interactionDate = interactionDate(for: room)
+                let counterpartBackendUserId = resolvedBackendUserId(for: otherId, displayName: displayName)
+                let resolvedTikiTakaCount = counterpartBackendUserId.flatMap { tikiTakaCountByBuddyId[$0] }
+
+                print(
+                    "[Buddy] card displayName=\(displayName) counterpartUserId=\(otherId) " +
+                    "counterpartBackendUserId=\(counterpartBackendUserId.map(String.init) ?? "nil")"
+                )
+                print("[Buddy] resolved tikiTakaCount=\(resolvedTikiTakaCount ?? 0)")
+
                 return MateRoomCardItem(
                     id: room.id,
                     room: room,
-                    counterpartUserId: BackendUserIDMapper.backendUserId(for: otherId, displayName: displayName) ?? otherId,
+                    counterpartUserId: counterpartBackendUserId.map(String.init) ?? otherId,
                     counterpartRawUserId: otherId,
+                    counterpartBackendUserId: counterpartBackendUserId,
                     profile: profile,
                     lastInteractionText: lastInteractionDescription(interactionDate: interactionDate),
-                    extraInfoText: "기록 준비중"
+                    extraInfoText: tikiTakaStatusText(for: resolvedTikiTakaCount),
+                    tikiTakaCount: resolvedTikiTakaCount
                 )
             }
+    }
+
+    private func refreshTikiTakaCounts() async {
+        guard let myUserId = settingsStore.currentBackendUserId else {
+            tikiTakaCountByBuddyId = [:]
+            rebuildConnectedCards(myUserId: settingsStore.mateUserId)
+            return
+        }
+
+        var updatedCounts: [Int: Int] = [:]
+
+        do {
+            let buddies = try await buddyAPIService.fetchBuddies(userId: myUserId)
+
+            for buddy in buddies {
+                guard let buddyUserId = buddy.buddyUserId else { continue }
+                let count = max(buddy.tikiTakaCount ?? 0, 0)
+                updatedCounts[buddyUserId] = count
+                print("[Buddy] API summary buddyUserId=\(buddyUserId) tikiTakaCount=\(count)")
+            }
+        } catch {
+            updatedCounts = [:]
+        }
+
+        tikiTakaCountByBuddyId = updatedCounts
+        let sortedCountMap = updatedCounts.keys.sorted().map { "\($0): \(updatedCounts[$0] ?? 0)" }.joined(separator: ", ")
+        print("[Buddy] count map = [\(sortedCountMap)]")
+        rebuildConnectedCards(myUserId: settingsStore.mateUserId)
+    }
+
+    private func resolvedBackendUserId(for rawUserId: String, displayName: String) -> Int? {
+        if let backendUserId = BackendUserIDMapper.backendUserId(for: rawUserId, displayName: displayName),
+           let backendUserIdInt = Int(backendUserId) {
+            return backendUserIdInt
+        }
+        return nil
+    }
+
+    private func tikiTakaStatusText(for count: Int?) -> String {
+        let resolvedCount = max(count ?? 0, 0)
+        if resolvedCount > 0 {
+            return "🔥 티키타카 \(resolvedCount)회"
+        }
+        return "티키타카 준비중"
     }
 
     private func updateLastInteraction(roomId: Int, at date: Date) {

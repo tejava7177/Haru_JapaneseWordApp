@@ -1,6 +1,7 @@
 import Foundation
 
 protocol BuddyAPIServiceProtocol {
+    func fetchBuddies(userId: String) async throws -> [BuddySummaryResponse]
     func fetchDailyWords(userId: String) async throws -> DailyWordsTodayResponse
     func fetchTsunTsunToday(userId: String, buddyId: String) async throws -> TsunTsunTodayResponse
     func sendTsunTsun(senderId: String, receiverId: String, dailyWordItemId: Int) async throws -> SendTsunTsunResponse?
@@ -13,6 +14,15 @@ struct BuddyAPIService: BuddyAPIServiceProtocol, Sendable {
 
     nonisolated init(client: APIClient = APIClient()) {
         self.client = client
+    }
+
+    nonisolated func fetchBuddies(userId: String) async throws -> [BuddySummaryResponse] {
+        print("[BuddyAPI] GET /api/buddies?userId=\(userId)")
+        let endpoint = APIEndpoint(
+            path: "api/buddies",
+            queryItems: [URLQueryItem(name: "userId", value: userId)]
+        )
+        return try await client.get(endpoint, responseType: [BuddySummaryResponse].self)
     }
 
     nonisolated func fetchDailyWords(userId: String) async throws -> DailyWordsTodayResponse {

@@ -168,6 +168,19 @@ private struct TsunTsunInboxRow: View {
 }
 
 private struct TsunTsunInboxPreviewStub: BuddyAPIServiceProtocol {
+    func fetchBuddies(userId: String) async throws -> [BuddySummaryResponse] {
+        [
+            BuddySummaryResponse(
+                id: 13,
+                userId: 1,
+                buddyUserId: 2,
+                buddyNickname: "buddy2",
+                status: "ACTIVE",
+                tikiTakaCount: 1
+            )
+        ]
+    }
+
     func fetchDailyWords(userId: String) async throws -> DailyWordsTodayResponse {
         DailyWordsTodayResponse(userId: 1, targetDate: "2026-03-12", level: "N5", items: [])
     }

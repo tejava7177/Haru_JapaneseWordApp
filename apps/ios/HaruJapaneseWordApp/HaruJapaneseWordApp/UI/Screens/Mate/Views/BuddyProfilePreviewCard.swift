@@ -53,7 +53,11 @@ struct BuddyProfilePreviewCard: View {
                     infoRow(icon: "camera.fill", title: "Instagram", value: instagramText)
                 }
 
-                infoRow(icon: "clock.fill", title: "최근 접속", value: item.lastInteractionText)
+                infoRow(
+                    icon: "flame.fill",
+                    title: "티키타카",
+                    value: item.miniProfileTikiTakaText
+                )
 
                 if let bioText {
                     VStack(alignment: .leading, spacing: 8) {
