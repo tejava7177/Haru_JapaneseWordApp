@@ -2,8 +2,8 @@ import Foundation
 
 protocol BuddyAPIServiceProtocol {
     func fetchBuddies(userId: String) async throws -> [BuddySummaryResponse]
-    func connectBuddy(userId: String, inviteCode: String) async throws -> BuddyMutationResponse?
-    func deleteBuddy(userId: String, buddyId: Int) async throws -> BuddyMutationResponse?
+    func connectBuddy(userId: String, buddyCode: String) async throws -> BuddyMutationResponse?
+    func deleteBuddy(userId: String, buddyUserId: Int) async throws -> BuddyMutationResponse?
     func fetchDailyWords(userId: String) async throws -> DailyWordsTodayResponse
     func fetchTsunTsunToday(userId: String, buddyId: String) async throws -> TsunTsunTodayResponse
     func sendTsunTsun(senderId: String, receiverId: String, dailyWordItemId: Int) async throws -> SendTsunTsunResponse?
@@ -18,8 +18,8 @@ protocol BuddyAPIServiceProtocol {
 }
 
 extension BuddyAPIServiceProtocol {
-    func connectBuddy(userId: String, inviteCode: String) async throws -> BuddyMutationResponse? { nil }
-    func deleteBuddy(userId: String, buddyId: Int) async throws -> BuddyMutationResponse? { nil }
+    func connectBuddy(userId: String, buddyCode: String) async throws -> BuddyMutationResponse? { nil }
+    func deleteBuddy(userId: String, buddyUserId: Int) async throws -> BuddyMutationResponse? { nil }
     func fetchRandomCandidates(userId: String) async throws -> [RandomCandidateResponse] { [] }
     func fetchIncomingBuddyRequests(userId: String) async throws -> [BuddyRequestResponse] { [] }
     func fetchOutgoingBuddyRequests(userId: String) async throws -> [BuddyRequestResponse] { [] }
@@ -44,10 +44,10 @@ struct BuddyAPIService: BuddyAPIServiceProtocol, Sendable {
         return try await client.get(endpoint, responseType: [BuddySummaryResponse].self)
     }
 
-    nonisolated func connectBuddy(userId: String, inviteCode: String) async throws -> BuddyMutationResponse? {
-        print("[BuddyAPI] POST /api/buddies/connect userId=\(userId) inviteCode=\(inviteCode)")
+    nonisolated func connectBuddy(userId: String, buddyCode: String) async throws -> BuddyMutationResponse? {
         let endpoint = APIEndpoint(path: "api/buddies/connect", method: .post)
-        let request = ConnectBuddyRequest(userId: userId, inviteCode: inviteCode)
+        let request = ConnectBuddyRequest(userId: userId, buddyCode: buddyCode)
+        print("[BuddyAPI] POST /api/buddies/connect body={\"userId\":\(userId),\"buddyCode\":\"\(buddyCode)\"}")
 
         do {
             return try await client.post(endpoint, body: request, responseType: BuddyMutationResponse.self)
@@ -57,14 +57,14 @@ struct BuddyAPIService: BuddyAPIServiceProtocol, Sendable {
         }
     }
 
-    nonisolated func deleteBuddy(userId: String, buddyId: Int) async throws -> BuddyMutationResponse? {
-        print("[BuddyAPI] DELETE /api/buddies?userId=\(userId)&buddyId=\(buddyId)")
+    nonisolated func deleteBuddy(userId: String, buddyUserId: Int) async throws -> BuddyMutationResponse? {
+        print("[BuddyAPI] DELETE /api/buddies?userId=\(userId)&buddyUserId=\(buddyUserId)")
         let endpoint = APIEndpoint(
             path: "api/buddies",
             method: .delete,
             queryItems: [
                 URLQueryItem(name: "userId", value: userId),
-                URLQueryItem(name: "buddyId", value: String(buddyId))
+                URLQueryItem(name: "buddyUserId", value: String(buddyUserId))
             ]
         )
 

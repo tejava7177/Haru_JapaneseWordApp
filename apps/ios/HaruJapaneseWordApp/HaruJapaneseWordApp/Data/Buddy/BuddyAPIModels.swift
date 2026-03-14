@@ -588,11 +588,11 @@ struct CreateBuddyRequestRequest: Encodable {
 
 struct ConnectBuddyRequest: Encodable {
     let userId: FlexibleUserID
-    let inviteCode: String
+    let buddyCode: String
 
-    init(userId: String, inviteCode: String) {
+    init(userId: String, buddyCode: String) {
         self.userId = FlexibleUserID(rawValue: userId)
-        self.inviteCode = inviteCode
+        self.buddyCode = buddyCode
     }
 }
 

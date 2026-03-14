@@ -247,7 +247,7 @@ final class MateViewModel: ObservableObject {
         Task {
             defer { isBusy = false }
             do {
-                _ = try await buddyAPIService.connectBuddy(userId: userId, inviteCode: trimmed)
+                _ = try await buddyAPIService.connectBuddy(userId: userId, buddyCode: trimmed)
                 print("[Buddy] connect success -> refresh")
                 inputInviteCode = ""
                 showBanner("새 버디가 연결되었어요!")
@@ -270,7 +270,7 @@ final class MateViewModel: ObservableObject {
         Task {
             defer { isBusy = false }
             do {
-                _ = try await buddyAPIService.deleteBuddy(userId: userId, buddyId: buddyId)
+                _ = try await buddyAPIService.deleteBuddy(userId: userId, buddyUserId: buddyId)
                 print("[Buddy] delete success -> refresh")
                 showBanner("버디 연결을 종료했어요.")
                 await refreshAllData(userId: userId, shouldRefreshIncoming: false)
