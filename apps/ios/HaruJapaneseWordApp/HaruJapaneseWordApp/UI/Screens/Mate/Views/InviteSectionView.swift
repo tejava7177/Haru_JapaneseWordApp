@@ -1,10 +1,10 @@
 import SwiftUI
-import UIKit
 
 struct InviteSectionView: View {
     let myInviteCode: String
     @Binding var inviteCodeInput: String
-    let onCreateInviteCode: () -> Void
+    let onShowInviteCode: () -> Void
+    let onCopyInviteCode: () -> Void
     let onJoin: (String) -> Void
     let isBusy: Bool
     let errorMessage: String?
@@ -24,9 +24,7 @@ struct InviteSectionView: View {
                             .font(.title2)
                             .fontWeight(.bold)
                         Spacer()
-                        Button("복사") {
-                            UIPasteboard.general.string = myInviteCode
-                        }
+                        Button("복사하기") { onCopyInviteCode() }
                         .buttonStyle(.bordered)
                         .disabled(isBusy)
                     }
@@ -38,9 +36,7 @@ struct InviteSectionView: View {
                 )
             }
 
-            Button("초대코드 만들기") {
-                onCreateInviteCode()
-            }
+            Button("내 초대코드 보기") { onShowInviteCode() }
             .buttonStyle(.borderedProminent)
             .tint(.black)
             .disabled(isBusy)

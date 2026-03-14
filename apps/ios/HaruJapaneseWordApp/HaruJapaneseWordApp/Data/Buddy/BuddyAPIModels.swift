@@ -1,5 +1,26 @@
 import Foundation
 
+struct MyBuddyCodeResponse: Decodable {
+    let userId: Int
+    let buddyCode: String
+
+    private enum CodingKeys: String, CodingKey {
+        case userId
+        case buddyCode
+    }
+
+    init(userId: Int, buddyCode: String) {
+        self.userId = userId
+        self.buddyCode = buddyCode
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        userId = try container.decodeFlexibleInt(forKey: .userId)
+        buddyCode = try container.decode(String.self, forKey: .buddyCode)
+    }
+}
+
 struct BuddySummaryResponse: Decodable, Identifiable, Equatable {
     let id: Int
     let userId: Int?

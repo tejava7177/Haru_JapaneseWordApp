@@ -172,8 +172,11 @@ struct MateView: View {
             InviteSectionView(
                 myInviteCode: viewModel.inviteCode,
                 inviteCodeInput: $viewModel.inputInviteCode,
-                onCreateInviteCode: {
-                    viewModel.createInviteCode()
+                onShowInviteCode: {
+                    viewModel.fetchMyInviteCode()
+                },
+                onCopyInviteCode: {
+                    viewModel.copyInviteCode()
                 },
                 onJoin: { inviteCode in
                     viewModel.joinByInviteCode(inviteCode)

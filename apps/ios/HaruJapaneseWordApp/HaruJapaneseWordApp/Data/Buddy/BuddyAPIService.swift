@@ -2,6 +2,7 @@ import Foundation
 
 protocol BuddyAPIServiceProtocol {
     func fetchBuddies(userId: String) async throws -> [BuddySummaryResponse]
+    func fetchMyBuddyCode(userId: String) async throws -> MyBuddyCodeResponse
     func connectBuddy(userId: String, buddyCode: String) async throws -> BuddyMutationResponse?
     func deleteBuddy(userId: String, buddyUserId: Int) async throws -> BuddyMutationResponse?
     func fetchDailyWords(userId: String) async throws -> DailyWordsTodayResponse
@@ -18,6 +19,9 @@ protocol BuddyAPIServiceProtocol {
 }
 
 extension BuddyAPIServiceProtocol {
+    func fetchMyBuddyCode(userId: String) async throws -> MyBuddyCodeResponse {
+        MyBuddyCodeResponse(userId: Int(userId) ?? 0, buddyCode: "")
+    }
     func connectBuddy(userId: String, buddyCode: String) async throws -> BuddyMutationResponse? { nil }
     func deleteBuddy(userId: String, buddyUserId: Int) async throws -> BuddyMutationResponse? { nil }
     func fetchRandomCandidates(userId: String) async throws -> [RandomCandidateResponse] { [] }
@@ -42,6 +46,12 @@ struct BuddyAPIService: BuddyAPIServiceProtocol, Sendable {
             queryItems: [URLQueryItem(name: "userId", value: userId)]
         )
         return try await client.get(endpoint, responseType: [BuddySummaryResponse].self)
+    }
+
+    nonisolated func fetchMyBuddyCode(userId: String) async throws -> MyBuddyCodeResponse {
+        print("[BuddyAPI] GET /api/users/\(userId)/buddy-code")
+        let endpoint = APIEndpoint(path: "api/users/\(userId)/buddy-code")
+        return try await client.get(endpoint, responseType: MyBuddyCodeResponse.self)
     }
 
     nonisolated func connectBuddy(userId: String, buddyCode: String) async throws -> BuddyMutationResponse? {

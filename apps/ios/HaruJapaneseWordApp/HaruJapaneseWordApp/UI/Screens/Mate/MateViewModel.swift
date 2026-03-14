@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import UIKit
 
 enum MatchCelebration: Identifiable, Equatable {
     case connected(message: MatchCelebrationMessage, roomId: Int)
@@ -220,9 +221,30 @@ final class MateViewModel: ObservableObject {
         }
     }
 
-    func createInviteCode() {
-        inviteCode = ""
-        inviteSectionErrorMessage = "서버 초대코드 생성 API는 아직 연결되지 않았어요."
+    func fetchMyInviteCode() {
+        guard let userId = settingsStore.currentBackendUserId else {
+            inviteSectionErrorMessage = "현재 로그인 사용자 ID를 확인하지 못했어요."
+            return
+        }
+
+        isBusy = true
+        inviteSectionErrorMessage = nil
+
+        Task {
+            defer { isBusy = false }
+            do {
+                let response = try await buddyAPIService.fetchMyBuddyCode(userId: userId)
+                inviteCode = response.buddyCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+            } catch {
+                inviteSectionErrorMessage = "초대코드를 불러오지 못했어요"
+            }
+        }
+    }
+
+    func copyInviteCode() {
+        guard inviteCode.isEmpty == false else { return }
+        UIPasteboard.general.string = inviteCode
+        showBanner("초대코드를 복사했어요")
     }
 
     func joinByInviteCode() {
