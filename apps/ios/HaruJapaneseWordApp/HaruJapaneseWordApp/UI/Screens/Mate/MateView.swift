@@ -218,30 +218,28 @@ struct MateView: View {
     private var randomCandidatesSection: some View {
         BuddyDiscoverySectionView(title: "랜덤 매칭 후보") {
             VStack(alignment: .leading, spacing: 12) {
-                if viewModel.randomCandidates.isEmpty {
+                if let candidate = viewModel.currentRandomCandidate {
+                    BuddyDiscoveryCardView(
+                        item: candidate.cardItem,
+                        onPrimaryAction: { viewModel.sendBuddyRequest(to: candidate) },
+                        onSecondaryAction: nil,
+                        secondaryActionTitle: nil,
+                        onPreviewTap: { previewBuddy = candidate.previewItem }
+                    )
+                } else {
                     Text(viewModel.discoveryErrorMessage ?? "지금은 추천할 버디가 없어요")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                } else {
-                    VStack(spacing: 10) {
-                        ForEach(viewModel.randomCandidates) { item in
-                            BuddyDiscoveryCardView(
-                                item: item.cardItem,
-                                onPrimaryAction: { viewModel.sendBuddyRequest(to: item) },
-                                onSecondaryAction: nil,
-                                secondaryActionTitle: nil,
-                                onPreviewTap: { previewBuddy = item.previewItem }
-                            )
-                        }
-                    }
                 }
 
-                Button(viewModel.isRefreshingDiscoveryData ? "불러오는 중..." : "다른 후보 보기") {
-                    viewModel.refreshRandomCandidates()
+                if viewModel.randomCandidates.isEmpty == false {
+                    Button(viewModel.isRefreshingDiscoveryData ? "불러오는 중..." : "다른 후보 보기") {
+                        viewModel.refreshRandomCandidates()
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(viewModel.isRefreshingDiscoveryData || viewModel.isBusy)
                 }
-                .buttonStyle(.bordered)
-                .disabled(viewModel.isRefreshingDiscoveryData || viewModel.isBusy)
             }
         }
     }

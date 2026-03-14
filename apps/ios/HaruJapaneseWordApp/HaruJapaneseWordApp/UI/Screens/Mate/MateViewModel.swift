@@ -150,6 +150,7 @@ final class MateViewModel: ObservableObject {
     @Published private(set) var incomingRequests: [IncomingBuddyRequestItem] = []
     @Published private(set) var outgoingRequests: [BuddyRequestResponse] = []
     @Published private(set) var randomCandidates: [RandomCandidateItem] = []
+    @Published private(set) var currentRandomCandidateIndex: Int = 0
     @Published private(set) var isRefreshingDiscoveryData: Bool = false
     @Published var bannerMessage: MateBannerMessage?
     @Published var discoveryErrorMessage: String?
@@ -197,6 +198,13 @@ final class MateViewModel: ObservableObject {
         incomingRequests.count
     }
 
+    var currentRandomCandidate: RandomCandidateItem? {
+        guard randomCandidates.indices.contains(currentRandomCandidateIndex) else {
+            return nil
+        }
+        return randomCandidates[currentRandomCandidateIndex]
+    }
+
     func onViewAppear() {
         load()
     }
@@ -209,6 +217,7 @@ final class MateViewModel: ObservableObject {
             incomingRequests = []
             outgoingRequests = []
             randomCandidates = []
+            currentRandomCandidateIndex = 0
             inviteCode = ""
             inviteSectionErrorMessage = nil
             buddyListErrorMessage = nil
@@ -306,7 +315,9 @@ final class MateViewModel: ObservableObject {
     func refreshRandomCandidates() {
         Task {
             guard let userId = settingsStore.currentBackendUserId else { return }
-            await refreshDiscoveryData(userId: userId, shouldRefreshIncoming: false)
+            if moveToNextRandomCandidate() == false {
+                await refreshDiscoveryData(userId: userId, shouldRefreshIncoming: false)
+            }
         }
     }
 
@@ -427,6 +438,7 @@ final class MateViewModel: ObservableObject {
             }
             outgoingRequests = outgoingResponses
             randomCandidates = candidateResponses.map { makeRandomCandidateItem(from: $0, pendingOutgoingIds: pendingOutgoingIds) }
+            normalizeCurrentRandomCandidateIndex()
             discoveryErrorMessage = nil
         } catch {
             if shouldRefreshIncoming {
@@ -434,7 +446,34 @@ final class MateViewModel: ObservableObject {
             }
             outgoingRequests = []
             randomCandidates = []
+            currentRandomCandidateIndex = 0
             discoveryErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func moveToNextRandomCandidate() -> Bool {
+        guard randomCandidates.count > 1 else {
+            return false
+        }
+
+        let nextIndex = currentRandomCandidateIndex + 1
+        guard randomCandidates.indices.contains(nextIndex) else {
+            currentRandomCandidateIndex = 0
+            return false
+        }
+
+        currentRandomCandidateIndex = nextIndex
+        return true
+    }
+
+    private func normalizeCurrentRandomCandidateIndex() {
+        guard randomCandidates.isEmpty == false else {
+            currentRandomCandidateIndex = 0
+            return
+        }
+
+        if randomCandidates.indices.contains(currentRandomCandidateIndex) == false {
+            currentRandomCandidateIndex = 0
         }
     }
 
