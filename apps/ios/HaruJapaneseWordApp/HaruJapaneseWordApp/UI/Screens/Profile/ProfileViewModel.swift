@@ -17,6 +17,10 @@ final class ProfileViewModel: ObservableObject {
     @Published var dailyWordsRegenerateNotice: String?
     @Published var dailyWordsRegenerateErrorMessage: String?
     @Published var isRegeneratingDailyWords: Bool = false
+    @Published var isRandomMatchingEnabled: Bool = false
+    @Published var isUpdatingRandomMatching: Bool = false
+    @Published var randomMatchingErrorMessage: String?
+    @Published var randomMatchingNotice: String?
 
     private let profileStore: UserProfileStore
     private let settingsStore: AppSettingsStore
@@ -192,6 +196,44 @@ final class ProfileViewModel: ObservableObject {
         dailyWordsRegenerateErrorMessage = nil
     }
 
+    func updateRandomMatchingEnabled(_ enabled: Bool) {
+        guard isUpdatingRandomMatching == false else { return }
+        guard let backendUserId = settingsStore.currentBackendUserId else {
+            randomMatchingErrorMessage = "현재 로그인 사용자 ID를 확인하지 못했어요."
+            return
+        }
+
+        let previousValue = isRandomMatchingEnabled
+        isRandomMatchingEnabled = enabled
+        randomMatchingErrorMessage = nil
+        randomMatchingNotice = nil
+        isUpdatingRandomMatching = true
+
+        Task {
+            do {
+                let response = try await profileAPIService.updateRandomMatching(userId: backendUserId, enabled: enabled)
+                let resolvedEnabled = response.enabled ?? enabled
+                settingsStore.updateCurrentMateRandomMatchingEnabled(resolvedEnabled)
+                isRandomMatchingEnabled = resolvedEnabled
+                randomMatchingNotice = resolvedEnabled
+                    ? "랜덤 매칭 노출을 켰어요."
+                    : "랜덤 매칭 노출을 껐어요."
+            } catch {
+                isRandomMatchingEnabled = previousValue
+                randomMatchingErrorMessage = error.localizedDescription
+            }
+            isUpdatingRandomMatching = false
+        }
+    }
+
+    func clearRandomMatchingNotice() {
+        randomMatchingNotice = nil
+    }
+
+    func clearRandomMatchingError() {
+        randomMatchingErrorMessage = nil
+    }
+
     private func syncProfileFromCurrentUser() {
         if let mateProfile = settingsStore.currentMateProfile() {
             profile.nickname = mateProfile.displayName
@@ -199,6 +241,7 @@ final class ProfileViewModel: ObservableObject {
             profile.instagramId = mateProfile.instagramId
             profile.avatarData = mateProfile.avatarData
             selectedLearningLevel = mateProfile.jlptLevel
+            isRandomMatchingEnabled = settingsStore.currentMateRandomMatchingEnabled()
         } else {
             let legacyProfile = profileStore.load()
             profile.nickname = legacyProfile.nickname
@@ -206,6 +249,7 @@ final class ProfileViewModel: ObservableObject {
             profile.instagramId = legacyProfile.instagramId
             profile.avatarData = legacyProfile.avatarData
             selectedLearningLevel = settingsStore.settings.homeDeckLevel
+            isRandomMatchingEnabled = false
         }
     }
 

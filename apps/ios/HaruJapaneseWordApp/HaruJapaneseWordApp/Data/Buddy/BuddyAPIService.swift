@@ -2,11 +2,30 @@ import Foundation
 
 protocol BuddyAPIServiceProtocol {
     func fetchBuddies(userId: String) async throws -> [BuddySummaryResponse]
+    func connectBuddy(userId: String, inviteCode: String) async throws -> BuddyMutationResponse?
+    func deleteBuddy(userId: String, buddyId: Int) async throws -> BuddyMutationResponse?
     func fetchDailyWords(userId: String) async throws -> DailyWordsTodayResponse
     func fetchTsunTsunToday(userId: String, buddyId: String) async throws -> TsunTsunTodayResponse
     func sendTsunTsun(senderId: String, receiverId: String, dailyWordItemId: Int) async throws -> SendTsunTsunResponse?
     func fetchTsunTsunInbox(userId: String) async throws -> TsunTsunInboxResponse
     func answerTsunTsun(tsuntsunId: Int, meaningId: Int) async throws -> AnswerTsunTsunResponse
+    func fetchRandomCandidates(userId: String) async throws -> [RandomCandidateResponse]
+    func fetchIncomingBuddyRequests(userId: String) async throws -> [BuddyRequestResponse]
+    func fetchOutgoingBuddyRequests(userId: String) async throws -> [BuddyRequestResponse]
+    func createBuddyRequest(requesterId: String, receiverId: String) async throws -> BuddyRequestActionResponse?
+    func acceptBuddyRequest(requestId: Int) async throws -> BuddyRequestActionResponse?
+    func rejectBuddyRequest(requestId: Int) async throws -> BuddyRequestActionResponse?
+}
+
+extension BuddyAPIServiceProtocol {
+    func connectBuddy(userId: String, inviteCode: String) async throws -> BuddyMutationResponse? { nil }
+    func deleteBuddy(userId: String, buddyId: Int) async throws -> BuddyMutationResponse? { nil }
+    func fetchRandomCandidates(userId: String) async throws -> [RandomCandidateResponse] { [] }
+    func fetchIncomingBuddyRequests(userId: String) async throws -> [BuddyRequestResponse] { [] }
+    func fetchOutgoingBuddyRequests(userId: String) async throws -> [BuddyRequestResponse] { [] }
+    func createBuddyRequest(requesterId: String, receiverId: String) async throws -> BuddyRequestActionResponse? { nil }
+    func acceptBuddyRequest(requestId: Int) async throws -> BuddyRequestActionResponse? { nil }
+    func rejectBuddyRequest(requestId: Int) async throws -> BuddyRequestActionResponse? { nil }
 }
 
 struct BuddyAPIService: BuddyAPIServiceProtocol, Sendable {
@@ -23,6 +42,38 @@ struct BuddyAPIService: BuddyAPIServiceProtocol, Sendable {
             queryItems: [URLQueryItem(name: "userId", value: userId)]
         )
         return try await client.get(endpoint, responseType: [BuddySummaryResponse].self)
+    }
+
+    nonisolated func connectBuddy(userId: String, inviteCode: String) async throws -> BuddyMutationResponse? {
+        print("[BuddyAPI] POST /api/buddies/connect userId=\(userId) inviteCode=\(inviteCode)")
+        let endpoint = APIEndpoint(path: "api/buddies/connect", method: .post)
+        let request = ConnectBuddyRequest(userId: userId, inviteCode: inviteCode)
+
+        do {
+            return try await client.post(endpoint, body: request, responseType: BuddyMutationResponse.self)
+        } catch APIError.decodingFailed {
+            try await client.post(endpoint, body: request)
+            return nil
+        }
+    }
+
+    nonisolated func deleteBuddy(userId: String, buddyId: Int) async throws -> BuddyMutationResponse? {
+        print("[BuddyAPI] DELETE /api/buddies?userId=\(userId)&buddyId=\(buddyId)")
+        let endpoint = APIEndpoint(
+            path: "api/buddies",
+            method: .delete,
+            queryItems: [
+                URLQueryItem(name: "userId", value: userId),
+                URLQueryItem(name: "buddyId", value: String(buddyId))
+            ]
+        )
+
+        do {
+            return try await client.delete(endpoint, responseType: BuddyMutationResponse.self)
+        } catch APIError.decodingFailed {
+            try await client.delete(endpoint)
+            return nil
+        }
     }
 
     nonisolated func fetchDailyWords(userId: String) async throws -> DailyWordsTodayResponse {
@@ -92,4 +143,67 @@ struct BuddyAPIService: BuddyAPIServiceProtocol, Sendable {
             )
         }
     }
+
+    nonisolated func fetchRandomCandidates(userId: String) async throws -> [RandomCandidateResponse] {
+        print("[BuddyAPI] GET /api/buddies/random-candidates?userId=\(userId)")
+        let endpoint = APIEndpoint(
+            path: "api/buddies/random-candidates",
+            queryItems: [URLQueryItem(name: "userId", value: userId)]
+        )
+        return try await client.get(endpoint, responseType: [RandomCandidateResponse].self)
+    }
+
+    nonisolated func fetchIncomingBuddyRequests(userId: String) async throws -> [BuddyRequestResponse] {
+        print("[BuddyAPI] GET /api/buddy-requests/incoming?userId=\(userId)")
+        let endpoint = APIEndpoint(
+            path: "api/buddy-requests/incoming",
+            queryItems: [URLQueryItem(name: "userId", value: userId)]
+        )
+        return try await client.get(endpoint, responseType: [BuddyRequestResponse].self)
+    }
+
+    nonisolated func fetchOutgoingBuddyRequests(userId: String) async throws -> [BuddyRequestResponse] {
+        print("[BuddyAPI] GET /api/buddy-requests/outgoing?userId=\(userId)")
+        let endpoint = APIEndpoint(
+            path: "api/buddy-requests/outgoing",
+            queryItems: [URLQueryItem(name: "userId", value: userId)]
+        )
+        return try await client.get(endpoint, responseType: [BuddyRequestResponse].self)
+    }
+
+    nonisolated func createBuddyRequest(requesterId: String, receiverId: String) async throws -> BuddyRequestActionResponse? {
+        let endpoint = APIEndpoint(path: "api/buddy-requests", method: .post)
+        let request = CreateBuddyRequestRequest(requesterId: requesterId, receiverId: receiverId)
+
+        do {
+            return try await client.post(endpoint, body: request, responseType: BuddyRequestActionResponse.self)
+        } catch APIError.decodingFailed {
+            try await client.post(endpoint, body: request)
+            return nil
+        }
+    }
+
+    nonisolated func acceptBuddyRequest(requestId: Int) async throws -> BuddyRequestActionResponse? {
+        let endpoint = APIEndpoint(path: "api/buddy-requests/\(requestId)/accept", method: .post)
+
+        do {
+            return try await client.post(endpoint, body: EmptyBuddyRequestBody(), responseType: BuddyRequestActionResponse.self)
+        } catch APIError.decodingFailed {
+            try await client.post(endpoint, body: EmptyBuddyRequestBody())
+            return nil
+        }
+    }
+
+    nonisolated func rejectBuddyRequest(requestId: Int) async throws -> BuddyRequestActionResponse? {
+        let endpoint = APIEndpoint(path: "api/buddy-requests/\(requestId)/reject", method: .post)
+
+        do {
+            return try await client.post(endpoint, body: EmptyBuddyRequestBody(), responseType: BuddyRequestActionResponse.self)
+        } catch APIError.decodingFailed {
+            try await client.post(endpoint, body: EmptyBuddyRequestBody())
+            return nil
+        }
+    }
 }
+
+private struct EmptyBuddyRequestBody: Encodable {}

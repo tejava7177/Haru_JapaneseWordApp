@@ -19,10 +19,7 @@ struct RootView: View {
         self.repository = repository
         let settingsStore = AppSettingsStore()
         _settingsStore = StateObject(wrappedValue: settingsStore)
-
-        let mateRepository = SQLiteMateRepository()
-        let mateService = MateService(repository: mateRepository, appUserIdProvider: { settingsStore.mateUserId })
-        _mateViewModel = StateObject(wrappedValue: MateViewModel(service: mateService, settingsStore: settingsStore))
+        _mateViewModel = StateObject(wrappedValue: MateViewModel(settingsStore: settingsStore))
 
         _wordListViewModel = StateObject(wrappedValue: WordListViewModel(repository: repository))
     }

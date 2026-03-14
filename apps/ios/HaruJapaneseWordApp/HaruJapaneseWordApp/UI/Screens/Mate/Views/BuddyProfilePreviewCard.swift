@@ -1,17 +1,27 @@
 import SwiftUI
-import UIKit
+
+struct BuddyProfilePreviewItem: Equatable {
+    let displayName: String
+    let jlptLevel: JLPTLevel
+    let bio: String
+    let instagramId: String
+    let avatarData: Data?
+    let detailTitle: String
+    let detailValue: String
+    let detailIcon: String
+}
 
 struct BuddyProfilePreviewCard: View {
-    let item: MateRoomCardItem
+    let item: BuddyProfilePreviewItem
     let onClose: () -> Void
 
     private var bioText: String? {
-        let trimmed = item.profile.bio.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = item.bio.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
     }
 
     private var instagramText: String? {
-        let trimmed = item.profile.instagramId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = item.instagramId.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : "@\(trimmed)"
     }
 
@@ -31,11 +41,11 @@ struct BuddyProfilePreviewCard: View {
             }
 
             VStack(spacing: 12) {
-                BuddyAvatarView(data: item.profile.avatarData, size: 104)
+                BuddyAvatarView(data: item.avatarData, size: 104)
                     .shadow(color: Color.black.opacity(0.12), radius: 12, x: 0, y: 8)
 
                 VStack(spacing: 6) {
-                    Text(item.counterpartLabel)
+                    Text(item.displayName)
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(.primary)
                         .multilineTextAlignment(.center)
@@ -54,9 +64,9 @@ struct BuddyProfilePreviewCard: View {
                 }
 
                 infoRow(
-                    icon: "flame.fill",
-                    title: "티키타카",
-                    value: item.miniProfileTikiTakaText
+                    icon: item.detailIcon,
+                    title: item.detailTitle,
+                    value: item.detailValue
                 )
 
                 if let bioText {
@@ -110,35 +120,6 @@ struct BuddyProfilePreviewCard: View {
             }
 
             Spacer(minLength: 0)
-        }
-    }
-}
-
-private struct BuddyAvatarView: View {
-    let data: Data?
-    let size: CGFloat
-
-    var body: some View {
-        Group {
-            if let data, let image = UIImage(data: data) {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                ZStack {
-                    Circle()
-                        .fill(Color(uiColor: .systemGray5))
-                    Image(systemName: "person.fill")
-                        .font(.system(size: size * 0.42, weight: .medium))
-                        .foregroundStyle(Color(uiColor: .systemGray2))
-                }
-            }
-        }
-        .frame(width: size, height: size)
-        .clipShape(Circle())
-        .overlay {
-            Circle()
-                .stroke(Color.white.opacity(0.88), lineWidth: 1)
         }
     }
 }

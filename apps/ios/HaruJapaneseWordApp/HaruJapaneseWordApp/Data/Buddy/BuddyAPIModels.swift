@@ -7,14 +7,36 @@ struct BuddySummaryResponse: Decodable, Identifiable, Equatable {
     let buddyNickname: String?
     let status: String?
     let tikiTakaCount: Int?
+    let buddyLearningLevel: JLPTLevel?
+    let buddyBio: String?
+    let buddyInstagramId: String?
+    let lastActiveAt: String?
+    let avatarBase64: String?
 
     private enum CodingKeys: String, CodingKey {
         case id
         case userId
         case buddyUserId
+        case counterpartUserId
         case buddyNickname
+        case nickname
+        case displayName
         case status
         case tikiTakaCount
+        case learningLevel
+        case jlptLevel
+        case buddyLearningLevel
+        case buddyJlptLevel
+        case bio
+        case buddyBio
+        case instagramId
+        case buddyInstagramId
+        case lastActiveAt
+        case lastSeenAt
+        case recentAccessAt
+        case avatarBase64
+        case avatarImageBase64
+        case avatar
     }
 
     init(
@@ -23,7 +45,12 @@ struct BuddySummaryResponse: Decodable, Identifiable, Equatable {
         buddyUserId: Int?,
         buddyNickname: String?,
         status: String?,
-        tikiTakaCount: Int?
+        tikiTakaCount: Int?,
+        buddyLearningLevel: JLPTLevel? = nil,
+        buddyBio: String? = nil,
+        buddyInstagramId: String? = nil,
+        lastActiveAt: String? = nil,
+        avatarBase64: String? = nil
     ) {
         self.id = id
         self.userId = userId
@@ -31,6 +58,11 @@ struct BuddySummaryResponse: Decodable, Identifiable, Equatable {
         self.buddyNickname = buddyNickname
         self.status = status
         self.tikiTakaCount = tikiTakaCount
+        self.buddyLearningLevel = buddyLearningLevel
+        self.buddyBio = buddyBio
+        self.buddyInstagramId = buddyInstagramId
+        self.lastActiveAt = lastActiveAt
+        self.avatarBase64 = avatarBase64
     }
 
     init(from decoder: Decoder) throws {
@@ -38,9 +70,16 @@ struct BuddySummaryResponse: Decodable, Identifiable, Equatable {
         id = try container.decodeFlexibleInt(forKey: .id)
         userId = try container.decodeFlexibleIntIfPresent(forKey: .userId)
         buddyUserId = try container.decodeFlexibleIntIfPresent(forKey: .buddyUserId)
-        buddyNickname = try container.decodeIfPresent(String.self, forKey: .buddyNickname)
+            ?? container.decodeFlexibleIntIfPresent(forKey: .counterpartUserId)
+        buddyNickname = try container.decodeFirstNonEmptyString(forKeys: [.buddyNickname, .nickname, .displayName])
         status = try container.decodeIfPresent(String.self, forKey: .status)
         tikiTakaCount = try container.decodeFlexibleIntIfPresent(forKey: .tikiTakaCount)
+        let levelRaw = try container.decodeFirstNonEmptyString(forKeys: [.buddyLearningLevel, .buddyJlptLevel, .learningLevel, .jlptLevel])
+        buddyLearningLevel = levelRaw.flatMap { JLPTLevel(rawValue: $0.uppercased()) }
+        buddyBio = try container.decodeFirstNonEmptyString(forKeys: [.buddyBio, .bio])
+        buddyInstagramId = try container.decodeFirstNonEmptyString(forKeys: [.buddyInstagramId, .instagramId])
+        lastActiveAt = try container.decodeFirstNonEmptyString(forKeys: [.lastActiveAt, .lastSeenAt, .recentAccessAt])
+        avatarBase64 = try container.decodeFirstNonEmptyString(forKeys: [.avatarBase64, .avatarImageBase64, .avatar])
     }
 }
 
@@ -537,6 +576,274 @@ struct BuddyWordItemUIModel: Identifiable, Equatable {
     }
 }
 
+struct CreateBuddyRequestRequest: Encodable {
+    let requesterId: FlexibleUserID
+    let receiverId: FlexibleUserID
+
+    init(requesterId: String, receiverId: String) {
+        self.requesterId = FlexibleUserID(rawValue: requesterId)
+        self.receiverId = FlexibleUserID(rawValue: receiverId)
+    }
+}
+
+struct ConnectBuddyRequest: Encodable {
+    let userId: FlexibleUserID
+    let inviteCode: String
+
+    init(userId: String, inviteCode: String) {
+        self.userId = FlexibleUserID(rawValue: userId)
+        self.inviteCode = inviteCode
+    }
+}
+
+struct BuddyMutationResponse: Decodable {
+    let success: Bool?
+    let message: String?
+    let buddyId: Int?
+    let inviteCode: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case success
+        case message
+        case buddyId
+        case inviteCode
+    }
+
+    init(success: Bool?, message: String?, buddyId: Int?, inviteCode: String?) {
+        self.success = success
+        self.message = message
+        self.buddyId = buddyId
+        self.inviteCode = inviteCode
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        success = try container.decodeFlexibleBoolIfPresent(forKey: .success)
+        message = try container.decodeIfPresent(String.self, forKey: .message)
+        buddyId = try container.decodeFlexibleIntIfPresent(forKey: .buddyId)
+        inviteCode = try container.decodeIfPresent(String.self, forKey: .inviteCode)
+    }
+}
+
+struct BuddyRequestActionResponse: Decodable {
+    let success: Bool?
+    let message: String?
+    let buddyId: Int?
+
+    private enum CodingKeys: String, CodingKey {
+        case success
+        case message
+        case buddyId
+    }
+
+    init(success: Bool?, message: String?, buddyId: Int?) {
+        self.success = success
+        self.message = message
+        self.buddyId = buddyId
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        success = try container.decodeFlexibleBoolIfPresent(forKey: .success)
+        message = try container.decodeIfPresent(String.self, forKey: .message)
+        buddyId = try container.decodeFlexibleIntIfPresent(forKey: .buddyId)
+    }
+}
+
+struct RandomCandidateResponse: Decodable, Identifiable, Equatable {
+    let id: Int
+    let userId: Int?
+    let nickname: String
+    let jlptLevel: JLPTLevel
+    let bio: String
+    let instagramId: String
+    let lastActiveAt: String?
+    let avatarBase64: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case userId
+        case candidateUserId
+        case buddyUserId
+        case nickname
+        case displayName
+        case name
+        case jlptLevel
+        case learningLevel
+        case level
+        case bio
+        case introduction
+        case oneLineIntro
+        case instagramId
+        case instagram
+        case instagramHandle
+        case lastActiveAt
+        case lastSeenAt
+        case recentAccessAt
+        case recentLoginAt
+        case avatarBase64
+        case avatarImageBase64
+        case avatar
+    }
+
+    init(
+        id: Int,
+        userId: Int?,
+        nickname: String,
+        jlptLevel: JLPTLevel,
+        bio: String,
+        instagramId: String,
+        lastActiveAt: String?,
+        avatarBase64: String?
+    ) {
+        self.id = id
+        self.userId = userId
+        self.nickname = nickname
+        self.jlptLevel = jlptLevel
+        self.bio = bio
+        self.instagramId = instagramId
+        self.lastActiveAt = lastActiveAt
+        self.avatarBase64 = avatarBase64
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let resolvedUserId = try container.decodeFlexibleIntIfPresent(forKey: .userId)
+            ?? container.decodeFlexibleIntIfPresent(forKey: .candidateUserId)
+            ?? container.decodeFlexibleIntIfPresent(forKey: .buddyUserId)
+        userId = resolvedUserId
+        id = try container.decodeFlexibleIntIfPresent(forKey: .id) ?? resolvedUserId ?? -1
+        nickname = try container.decodeFirstNonEmptyString(forKeys: [.nickname, .displayName, .name]) ?? "이름 미정"
+        let levelRaw = try container.decodeFirstNonEmptyString(forKeys: [.jlptLevel, .learningLevel, .level]) ?? JLPTLevel.n5.rawValue
+        jlptLevel = JLPTLevel(rawValue: levelRaw.uppercased()) ?? .n5
+        bio = try container.decodeFirstNonEmptyString(forKeys: [.bio, .introduction, .oneLineIntro]) ?? ""
+        instagramId = try container.decodeFirstNonEmptyString(forKeys: [.instagramId, .instagram, .instagramHandle]) ?? ""
+        lastActiveAt = try container.decodeFirstNonEmptyString(forKeys: [.lastActiveAt, .lastSeenAt, .recentAccessAt, .recentLoginAt])
+        avatarBase64 = try container.decodeFirstNonEmptyString(forKeys: [.avatarBase64, .avatarImageBase64, .avatar])
+    }
+}
+
+struct BuddyRequestResponse: Decodable, Identifiable, Equatable {
+    let id: Int
+    let requestId: Int
+    let requesterId: Int?
+    let receiverId: Int?
+    let nickname: String
+    let jlptLevel: JLPTLevel
+    let bio: String
+    let instagramId: String
+    let lastActiveAt: String?
+    let avatarBase64: String?
+    let status: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case requestId
+        case buddyRequestId
+        case requesterId
+        case senderId
+        case fromUserId
+        case applicantUserId
+        case receiverId
+        case targetUserId
+        case userId
+        case nickname
+        case displayName
+        case name
+        case requesterName
+        case senderName
+        case applicantName
+        case jlptLevel
+        case learningLevel
+        case level
+        case requesterJlptLevel
+        case senderJlptLevel
+        case bio
+        case introduction
+        case oneLineIntro
+        case requesterBio
+        case senderBio
+        case instagramId
+        case instagram
+        case requesterInstagramId
+        case senderInstagramId
+        case lastActiveAt
+        case lastSeenAt
+        case recentAccessAt
+        case recentLoginAt
+        case requesterLastActiveAt
+        case senderLastActiveAt
+        case avatarBase64
+        case avatarImageBase64
+        case avatar
+        case requesterAvatarBase64
+        case senderAvatarBase64
+        case status
+    }
+
+    init(
+        id: Int,
+        requestId: Int,
+        requesterId: Int?,
+        receiverId: Int?,
+        nickname: String,
+        jlptLevel: JLPTLevel,
+        bio: String,
+        instagramId: String,
+        lastActiveAt: String?,
+        avatarBase64: String?,
+        status: String?
+    ) {
+        self.id = id
+        self.requestId = requestId
+        self.requesterId = requesterId
+        self.receiverId = receiverId
+        self.nickname = nickname
+        self.jlptLevel = jlptLevel
+        self.bio = bio
+        self.instagramId = instagramId
+        self.lastActiveAt = lastActiveAt
+        self.avatarBase64 = avatarBase64
+        self.status = status
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        requestId = try container.decodeFlexibleIntIfPresent(forKey: .requestId)
+            ?? container.decodeFlexibleIntIfPresent(forKey: .buddyRequestId)
+            ?? container.decodeFlexibleIntIfPresent(forKey: .id)
+            ?? -1
+        id = requestId
+        requesterId = try container.decodeFlexibleIntIfPresent(forKey: .requesterId)
+            ?? container.decodeFlexibleIntIfPresent(forKey: .senderId)
+            ?? container.decodeFlexibleIntIfPresent(forKey: .fromUserId)
+            ?? container.decodeFlexibleIntIfPresent(forKey: .applicantUserId)
+        receiverId = try container.decodeFlexibleIntIfPresent(forKey: .receiverId)
+            ?? container.decodeFlexibleIntIfPresent(forKey: .targetUserId)
+            ?? container.decodeFlexibleIntIfPresent(forKey: .userId)
+        nickname = try container.decodeFirstNonEmptyString(
+            forKeys: [.nickname, .displayName, .name, .requesterName, .senderName, .applicantName]
+        ) ?? "이름 미정"
+        let levelRaw = try container.decodeFirstNonEmptyString(
+            forKeys: [.jlptLevel, .learningLevel, .level, .requesterJlptLevel, .senderJlptLevel]
+        ) ?? JLPTLevel.n5.rawValue
+        jlptLevel = JLPTLevel(rawValue: levelRaw.uppercased()) ?? .n5
+        bio = try container.decodeFirstNonEmptyString(
+            forKeys: [.bio, .introduction, .oneLineIntro, .requesterBio, .senderBio]
+        ) ?? ""
+        instagramId = try container.decodeFirstNonEmptyString(
+            forKeys: [.instagramId, .instagram, .requesterInstagramId, .senderInstagramId]
+        ) ?? ""
+        lastActiveAt = try container.decodeFirstNonEmptyString(
+            forKeys: [.lastActiveAt, .lastSeenAt, .recentAccessAt, .recentLoginAt, .requesterLastActiveAt, .senderLastActiveAt]
+        )
+        avatarBase64 = try container.decodeFirstNonEmptyString(
+            forKeys: [.avatarBase64, .avatarImageBase64, .avatar, .requesterAvatarBase64, .senderAvatarBase64]
+        )
+        status = try container.decodeIfPresent(String.self, forKey: .status)
+    }
+}
+
 private extension KeyedDecodingContainer {
     func decodeFlexibleInt(forKey key: Key) throws -> Int {
         if let intValue = try decodeIfPresent(Int.self, forKey: key) {
@@ -599,6 +906,18 @@ private extension KeyedDecodingContainer {
             }
         }
 
+        return nil
+    }
+
+    func decodeFirstNonEmptyString(forKeys keys: [Key]) throws -> String? {
+        for key in keys {
+            guard let value = try decodeIfPresent(String.self, forKey: key)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+                  value.isEmpty == false else {
+                continue
+            }
+            return value
+        }
         return nil
     }
 }

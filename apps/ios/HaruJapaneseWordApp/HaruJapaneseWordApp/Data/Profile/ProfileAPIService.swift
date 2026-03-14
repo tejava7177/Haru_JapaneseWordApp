@@ -3,6 +3,7 @@ import Foundation
 protocol ProfileAPIServiceProtocol {
     func updateLearningLevel(userId: String, level: JLPTLevel) async throws -> UpdateLearningLevelResponse
     func regenerateTodayDailyWords(userId: String) async throws -> RegenerateDailyWordsResponse
+    func updateRandomMatching(userId: String, enabled: Bool) async throws -> ToggleRandomMatchingResponse
 }
 
 struct ProfileAPIService: ProfileAPIServiceProtocol, Sendable {
@@ -30,6 +31,16 @@ struct ProfileAPIService: ProfileAPIServiceProtocol, Sendable {
             method: .post
         )
         return try await client.post(endpoint, body: EmptyRequestBody(), responseType: RegenerateDailyWordsResponse.self)
+    }
+
+    nonisolated func updateRandomMatching(userId: String, enabled: Bool) async throws -> ToggleRandomMatchingResponse {
+        print("[ProfileAPI] PATCH /api/users/\(userId)/random-matching enabled=\(enabled)")
+        let endpoint = APIEndpoint(
+            path: "api/users/\(userId)/random-matching",
+            method: .patch
+        )
+        let request = ToggleRandomMatchingRequest(enabled: enabled)
+        return try await client.patch(endpoint, body: request, responseType: ToggleRandomMatchingResponse.self)
     }
 }
 

@@ -115,6 +115,29 @@ final class APIClient: @unchecked Sendable {
         }
     }
 
+    func delete<Response: Decodable>(_ endpoint: APIEndpoint, responseType: Response.Type) async throws -> Response {
+        let request = try makeRequest(for: endpoint, body: Optional<Data>.none)
+        let data = try await perform(request)
+        logResponseBodyIfNeeded(data, request: request)
+
+        do {
+            return try decoder.decode(Response.self, from: data)
+        } catch {
+            logDecodingFailure(
+                error,
+                data: data,
+                modelName: String(describing: Response.self),
+                request: request
+            )
+            throw APIError.decodingFailed(error)
+        }
+    }
+
+    func delete(_ endpoint: APIEndpoint) async throws {
+        let request = try makeRequest(for: endpoint, body: Optional<Data>.none)
+        _ = try await perform(request)
+    }
+
     private func makeRequest(for endpoint: APIEndpoint, body: Data?) throws -> URLRequest {
         guard var components = URLComponents(
             url: baseURL.appendingPathComponent(endpoint.path),
@@ -174,7 +197,7 @@ final class APIClient: @unchecked Sendable {
     private func logResponseBodyIfNeeded(_ data: Data, request: URLRequest) {
         guard let url = request.url else { return }
         let path = url.path
-        guard path == "/api/daily-words/today" || path == "/api/tsuntsun/today" else { return }
+        guard path == "/api/daily-words/today" || path == "/api/tsuntsun/today" || path == "/api/buddies" else { return }
 
         let bodyText = String(data: data, encoding: .utf8) ?? "<non-utf8 body>"
         print("[APIClient] Raw response path=\(path) body=\(bodyText)")

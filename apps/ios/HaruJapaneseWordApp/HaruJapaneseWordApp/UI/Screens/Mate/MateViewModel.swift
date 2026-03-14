@@ -1,6 +1,5 @@
 import Foundation
 import Combine
-import UserNotifications
 
 enum MatchCelebration: Identifiable, Equatable {
     case connected(message: MatchCelebrationMessage, roomId: Int)
@@ -13,9 +12,13 @@ enum MatchCelebration: Identifiable, Equatable {
     }
 }
 
+struct MateBannerMessage: Identifiable, Equatable {
+    let id = UUID()
+    let text: String
+}
+
 struct MateRoomCardItem: Identifiable, Equatable {
     let id: Int
-    let room: MateRoom
     let counterpartUserId: String
     let counterpartRawUserId: String
     let counterpartBackendUserId: Int?
@@ -33,16 +36,108 @@ struct MateRoomCardItem: Identifiable, Equatable {
         }
         return "티키타카 준비중"
     }
+
     var miniProfileTikiTakaText: String {
         "\(resolvedTikiTakaCount)회"
+    }
+
+    var previewItem: BuddyProfilePreviewItem {
+        BuddyProfilePreviewItem(
+            displayName: counterpartLabel,
+            jlptLevel: jlptLevel,
+            bio: profile.bio,
+            instagramId: profile.instagramId,
+            avatarData: profile.avatarData,
+            detailTitle: "티키타카",
+            detailValue: miniProfileTikiTakaText,
+            detailIcon: "flame.fill"
+        )
+    }
+}
+
+struct IncomingBuddyRequestItem: Identifiable, Equatable {
+    let id: Int
+    let requestId: Int
+    let displayName: String
+    let jlptLevel: JLPTLevel
+    let recentAccessText: String
+    let bio: String
+    let instagramId: String
+    let avatarData: Data?
+
+    var cardItem: BuddyDiscoveryCardItem {
+        BuddyDiscoveryCardItem(
+            id: "incoming-\(requestId)",
+            kind: .incoming(requestId: requestId),
+            displayName: displayName,
+            jlptLevel: jlptLevel,
+            recentAccessText: recentAccessText,
+            bio: bio,
+            instagramId: instagramId,
+            avatarData: avatarData,
+            primaryActionTitle: "수락",
+            isPrimaryActionDisabled: false
+        )
+    }
+
+    var previewItem: BuddyProfilePreviewItem {
+        BuddyProfilePreviewItem(
+            displayName: displayName,
+            jlptLevel: jlptLevel,
+            bio: bio,
+            instagramId: instagramId,
+            avatarData: avatarData,
+            detailTitle: "최근 접속일",
+            detailValue: recentAccessText,
+            detailIcon: "clock.fill"
+        )
+    }
+}
+
+struct RandomCandidateItem: Identifiable, Equatable {
+    let id: Int
+    let userId: Int?
+    let displayName: String
+    let jlptLevel: JLPTLevel
+    let recentAccessText: String
+    let bio: String
+    let instagramId: String
+    let avatarData: Data?
+    let isPending: Bool
+
+    var cardItem: BuddyDiscoveryCardItem {
+        BuddyDiscoveryCardItem(
+            id: "candidate-\(id)",
+            kind: .randomCandidate(userId: userId),
+            displayName: displayName,
+            jlptLevel: jlptLevel,
+            recentAccessText: recentAccessText,
+            bio: bio,
+            instagramId: instagramId,
+            avatarData: avatarData,
+            primaryActionTitle: isPending ? "신청 대기중" : "버디 신청",
+            isPrimaryActionDisabled: isPending || userId == nil
+        )
+    }
+
+    var previewItem: BuddyProfilePreviewItem {
+        BuddyProfilePreviewItem(
+            displayName: displayName,
+            jlptLevel: jlptLevel,
+            bio: bio,
+            instagramId: instagramId,
+            avatarData: avatarData,
+            detailTitle: "최근 접속일",
+            detailValue: recentAccessText,
+            detailIcon: "clock.fill"
+        )
     }
 }
 
 @MainActor
 final class MateViewModel: ObservableObject {
-    static let maxMateCount: Int = MateService.maxActiveMatesPerUser
+    static let maxMateCount = 3
 
-    @Published private(set) var activeRooms: [MateRoom] = []
     @Published private(set) var connectedRoomCards: [MateRoomCardItem] = []
     @Published var inviteCode: String = ""
     @Published var inputInviteCode: String = ""
@@ -51,25 +146,24 @@ final class MateViewModel: ObservableObject {
     @Published var alertMessage: String = ""
     @Published var isShowingAlert: Bool = false
     @Published var matchCelebration: MatchCelebration?
-    @Published private(set) var latestPokeByRoomId: [Int: MatePoke] = [:]
-    @Published private(set) var tikiTakaCountByBuddyId: [Int: Int] = [:]
+    @Published private(set) var incomingRequests: [IncomingBuddyRequestItem] = []
+    @Published private(set) var outgoingRequests: [BuddyRequestResponse] = []
+    @Published private(set) var randomCandidates: [RandomCandidateItem] = []
+    @Published private(set) var isRefreshingDiscoveryData: Bool = false
+    @Published var bannerMessage: MateBannerMessage?
+    @Published var discoveryErrorMessage: String?
+    @Published var buddyListErrorMessage: String?
 
-    private let service: MateService
     private let settingsStore: AppSettingsStore
     private let userMetaProvider: MateUserMetaProvider
     private let buddyAPIService: BuddyAPIServiceProtocol
     private var cancellables: Set<AnyCancellable> = []
-    private var celebratedRoomIds: Set<Int> = []
-    private var pollTask: Task<Void, Never>?
-    private var isViewVisible: Bool = false
 
     init(
-        service: MateService,
         settingsStore: AppSettingsStore,
         userMetaProvider: MateUserMetaProvider? = nil,
         buddyAPIService: BuddyAPIServiceProtocol = BuddyAPIService()
     ) {
-        self.service = service
         self.settingsStore = settingsStore
         self.userMetaProvider = userMetaProvider ?? DevMateUserMetaProvider(settingsStore: settingsStore)
         self.buddyAPIService = buddyAPIService
@@ -80,10 +174,6 @@ final class MateViewModel: ObservableObject {
                 self?.load()
             }
             .store(in: &cancellables)
-    }
-
-    deinit {
-        pollTask?.cancel()
     }
 
     var connectedMateCount: Int {
@@ -99,72 +189,40 @@ final class MateViewModel: ObservableObject {
     }
 
     var canAddNewMate: Bool {
-        activeRooms.count < Self.maxMateCount
+        connectedRoomCards.count < Self.maxMateCount
+    }
+
+    var incomingRequestCount: Int {
+        incomingRequests.count
     }
 
     func onViewAppear() {
-        isViewVisible = true
         load()
-        startPokePollingIfNeeded()
     }
 
-    func onViewDisappear() {
-        isViewVisible = false
-        stopPokePolling()
-    }
+    func onViewDisappear() { }
 
     func load() {
-        service.cleanupIfNeeded()
-        let userId = settingsStore.mateUserId
-        if userId.isEmpty {
-            activeRooms = []
+        guard let backendUserId = settingsStore.currentBackendUserId else {
             connectedRoomCards = []
+            incomingRequests = []
+            outgoingRequests = []
+            randomCandidates = []
             inviteCode = ""
-            latestPokeByRoomId = [:]
-            tikiTakaCountByBuddyId = [:]
-            stopPokePolling()
+            inviteSectionErrorMessage = nil
+            buddyListErrorMessage = nil
+            discoveryErrorMessage = nil
             return
         }
 
-        let previousActiveRooms = activeRooms
-        activeRooms = service.getActiveRooms()
-        inviteCode = activeRooms.first(where: { $0.userAId == userId && $0.userBId.isEmpty })?.inviteCode ?? ""
-        rebuildConnectedCards(myUserId: userId)
-
-        for room in activeRooms where room.hasMate {
-            let previousRoom = previousActiveRooms.first(where: { $0.id == room.id })
-            triggerCelebrationIfNeeded(room: room, previousRoom: previousRoom)
-        }
-
         Task {
-            await refreshPokeState(shouldLogPollUpdate: false)
-        }
-        Task {
-            await refreshTikiTakaCounts()
-        }
-
-        if isViewVisible {
-            startPokePollingIfNeeded()
+            await refreshAllData(userId: backendUserId)
         }
     }
 
     func createInviteCode() {
-        guard canAddNewMate else {
-            inviteSectionErrorMessage = "버디는 최대 \(Self.maxMateCount)명까지 가능해요"
-            return
-        }
-        print("MATE_ACTION_CREATE_INVITE")
-        isBusy = true
-        defer { isBusy = false }
-        inviteSectionErrorMessage = nil
-        do {
-            inviteCode = try service.createInvite()
-            load()
-        } catch let mateError as MateError {
-            inviteSectionErrorMessage = mateError.userMessage
-        } catch {
-            inviteSectionErrorMessage = "버디를 시작하지 못했어요. 다시 시도해 주세요."
-        }
+        inviteCode = ""
+        inviteSectionErrorMessage = "서버 초대코드 생성 API는 아직 연결되지 않았어요."
     }
 
     func joinByInviteCode() {
@@ -172,195 +230,267 @@ final class MateViewModel: ObservableObject {
     }
 
     func joinByInviteCode(_ inviteCode: String) {
-        guard canAddNewMate else {
-            inviteSectionErrorMessage = "버디는 최대 \(Self.maxMateCount)명까지 가능해요"
+        guard let userId = settingsStore.currentBackendUserId else {
+            inviteSectionErrorMessage = "현재 로그인 사용자 ID를 확인하지 못했어요."
             return
         }
+
         let trimmed = inviteCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         guard trimmed.isEmpty == false else {
             inviteSectionErrorMessage = "초대 코드를 입력해 주세요."
             return
         }
-        print("MATE_ACTION_JOIN_INVITE code=\(trimmed)")
+
         isBusy = true
-        defer { isBusy = false }
         inviteSectionErrorMessage = nil
-        do {
-            let room = try service.join(inviteCode: trimmed)
-            let previousRoom = activeRooms.first(where: { $0.id == room.id })
-            triggerCelebrationIfNeeded(room: room, previousRoom: previousRoom)
-            inputInviteCode = ""
-            load()
-        } catch let mateError as MateError {
-            inviteSectionErrorMessage = mateError.userMessage
-        } catch {
-            inviteSectionErrorMessage = "버디를 시작하지 못했어요. 다시 시도해 주세요."
+
+        Task {
+            defer { isBusy = false }
+            do {
+                _ = try await buddyAPIService.connectBuddy(userId: userId, inviteCode: trimmed)
+                print("[Buddy] connect success -> refresh")
+                inputInviteCode = ""
+                showBanner("새 버디가 연결되었어요!")
+                await refreshAllData(userId: userId)
+            } catch {
+                inviteSectionErrorMessage = error.localizedDescription
+            }
         }
     }
 
-    func endRoom(roomId: Int) {
-        print("MATE_ACTION_END_ROOM roomId=\(roomId)")
+    func deleteBuddy(_ item: MateRoomCardItem) {
+        guard let userId = settingsStore.currentBackendUserId,
+              let buddyId = item.counterpartBackendUserId else {
+            alertMessage = "삭제할 버디 정보를 확인하지 못했어요."
+            isShowingAlert = true
+            return
+        }
+
         isBusy = true
-        defer { isBusy = false }
-        do {
-            try service.end(roomId: roomId)
-            load()
-        } catch let mateError as MateError {
-            alertMessage = mateError.userMessage
+        Task {
+            defer { isBusy = false }
+            do {
+                _ = try await buddyAPIService.deleteBuddy(userId: userId, buddyId: buddyId)
+                print("[Buddy] delete success -> refresh")
+                showBanner("버디 연결을 종료했어요.")
+                await refreshAllData(userId: userId, shouldRefreshIncoming: false)
+            } catch {
+                alertMessage = error.localizedDescription
+                isShowingAlert = true
+            }
+        }
+    }
+
+    func refreshRandomCandidates() {
+        Task {
+            guard let userId = settingsStore.currentBackendUserId else { return }
+            await refreshDiscoveryData(userId: userId, shouldRefreshIncoming: false)
+        }
+    }
+
+    func sendBuddyRequest(to candidate: RandomCandidateItem) {
+        if outgoingRequests.count >= 3 {
+            alertMessage = "현재 대기 중인 신청이 3개예요. 응답을 기다려주세요."
             isShowingAlert = true
-        } catch {
-            alertMessage = "버디를 종료하지 못했어요."
-            isShowingAlert = true
-        }
-    }
-
-    func counterpartLabel(for room: MateRoom) -> String {
-        let otherId = counterpartUserId(for: room)
-        return userMetaProvider.profile(for: otherId).displayName
-    }
-
-    private func triggerCelebrationIfNeeded(room: MateRoom, previousRoom: MateRoom?) {
-        guard room.isActive, room.hasMate else { return }
-        guard celebratedRoomIds.contains(room.id) == false else { return }
-        if let previousRoom, previousRoom.id == room.id, previousRoom.hasMate {
-            return
-        }
-        celebratedRoomIds.insert(room.id)
-        let message = MatchCelebrationMessageProvider.random()
-        matchCelebration = .connected(message: message, roomId: room.id)
-        scheduleMatchNotificationIfAllowed()
-    }
-
-    private func counterpartUserId(for room: MateRoom) -> String {
-        let myUserId = settingsStore.mateUserId
-        return room.userAId != myUserId ? room.userAId : room.userBId
-    }
-
-    private func startPokePollingIfNeeded() {
-        guard pollTask == nil else { return }
-        guard activeRooms.contains(where: { $0.hasMate }) else { return }
-        pollTask = Task { [weak self] in
-            while Task.isCancelled == false {
-                try? await Task.sleep(nanoseconds: 2_500_000_000)
-                guard Task.isCancelled == false else { break }
-                await self?.refreshPokeState(shouldLogPollUpdate: true)
-            }
-        }
-    }
-
-    private func stopPokePolling() {
-        pollTask?.cancel()
-        pollTask = nil
-    }
-
-    private func refreshPokeState(shouldLogPollUpdate: Bool) async {
-        let currentUserId = settingsStore.mateUserId
-        guard currentUserId.isEmpty == false else { return }
-
-        var refreshedLatestByRoomId: [Int: MatePoke] = [:]
-        let previousLatestByRoomId = latestPokeByRoomId
-
-        for room in activeRooms where room.hasMate {
-            if let refreshedRoom = await service.refreshRoom(roomId: room.id) {
-                updateLastInteraction(roomId: refreshedRoom.id, at: refreshedRoom.lastInteractionAt)
-            }
-
-            let fetchedLatest = await service.fetchLatestPoke(roomId: room.id)
-
-            if let fetchedLatest {
-                refreshedLatestByRoomId[room.id] = fetchedLatest
-            }
-
-            if shouldLogPollUpdate,
-               let fetchedLatest,
-               hasPokeChanged(previous: previousLatestByRoomId[room.id], next: fetchedLatest) {
-                print("[MatePoke] poll updated room=\(room.id) latestPokeAt=\(Int(fetchedLatest.createdAt.timeIntervalSince1970))")
-            }
-        }
-
-        latestPokeByRoomId = refreshedLatestByRoomId
-        rebuildConnectedCards(myUserId: currentUserId)
-    }
-
-    private func hasPokeChanged(previous: MatePoke?, next: MatePoke) -> Bool {
-        if let previous {
-            return previous.id != next.id || previous.createdAt != next.createdAt
-        }
-        return true
-    }
-
-    private func interactionDate(for room: MateRoom) -> Date {
-        if let latestPoke = latestPokeByRoomId[room.id] {
-            return latestPoke.createdAt
-        }
-        return room.lastInteractionAt
-    }
-
-    private func rebuildConnectedCards(myUserId: String) {
-        connectedRoomCards = activeRooms
-            .filter { $0.hasMate }
-            .map { room in
-                let otherId = room.userAId != myUserId ? room.userAId : room.userBId
-                let profile = userMetaProvider.profile(for: otherId)
-                let displayName = profile.displayName
-                let interactionDate = interactionDate(for: room)
-                let counterpartBackendUserId = resolvedBackendUserId(for: otherId, displayName: displayName)
-                let resolvedTikiTakaCount = counterpartBackendUserId.flatMap { tikiTakaCountByBuddyId[$0] }
-
-                print(
-                    "[Buddy] card displayName=\(displayName) counterpartUserId=\(otherId) " +
-                    "counterpartBackendUserId=\(counterpartBackendUserId.map(String.init) ?? "nil")"
-                )
-                print("[Buddy] resolved tikiTakaCount=\(resolvedTikiTakaCount ?? 0)")
-
-                return MateRoomCardItem(
-                    id: room.id,
-                    room: room,
-                    counterpartUserId: counterpartBackendUserId.map(String.init) ?? otherId,
-                    counterpartRawUserId: otherId,
-                    counterpartBackendUserId: counterpartBackendUserId,
-                    profile: profile,
-                    lastInteractionText: lastInteractionDescription(interactionDate: interactionDate),
-                    extraInfoText: tikiTakaStatusText(for: resolvedTikiTakaCount),
-                    tikiTakaCount: resolvedTikiTakaCount
-                )
-            }
-    }
-
-    private func refreshTikiTakaCounts() async {
-        guard let myUserId = settingsStore.currentBackendUserId else {
-            tikiTakaCountByBuddyId = [:]
-            rebuildConnectedCards(myUserId: settingsStore.mateUserId)
             return
         }
 
-        var updatedCounts: [Int: Int] = [:]
-
-        do {
-            let buddies = try await buddyAPIService.fetchBuddies(userId: myUserId)
-
-            for buddy in buddies {
-                guard let buddyUserId = buddy.buddyUserId else { continue }
-                let count = max(buddy.tikiTakaCount ?? 0, 0)
-                updatedCounts[buddyUserId] = count
-                print("[Buddy] API summary buddyUserId=\(buddyUserId) tikiTakaCount=\(count)")
-            }
-        } catch {
-            updatedCounts = [:]
+        guard let myUserId = settingsStore.currentBackendUserId,
+              let receiverId = candidate.userId else {
+            alertMessage = "현재 로그인 사용자 정보를 확인하지 못했어요."
+            isShowingAlert = true
+            return
         }
 
-        tikiTakaCountByBuddyId = updatedCounts
-        let sortedCountMap = updatedCounts.keys.sorted().map { "\($0): \(updatedCounts[$0] ?? 0)" }.joined(separator: ", ")
-        print("[Buddy] count map = [\(sortedCountMap)]")
-        rebuildConnectedCards(myUserId: settingsStore.mateUserId)
+        isBusy = true
+        Task {
+            defer { isBusy = false }
+            do {
+                _ = try await buddyAPIService.createBuddyRequest(
+                    requesterId: myUserId,
+                    receiverId: String(receiverId)
+                )
+                showBanner("버디 신청을 보냈어요")
+                await refreshDiscoveryData(userId: myUserId, shouldRefreshIncoming: false)
+            } catch {
+                alertMessage = error.localizedDescription
+                isShowingAlert = true
+            }
+        }
     }
 
-    private func resolvedBackendUserId(for rawUserId: String, displayName: String) -> Int? {
-        if let backendUserId = BackendUserIDMapper.backendUserId(for: rawUserId, displayName: displayName),
-           let backendUserIdInt = Int(backendUserId) {
-            return backendUserIdInt
+    func acceptIncomingRequest(_ item: IncomingBuddyRequestItem) {
+        guard let userId = settingsStore.currentBackendUserId else {
+            alertMessage = "현재 로그인 사용자 정보를 확인하지 못했어요."
+            isShowingAlert = true
+            return
         }
-        return nil
+
+        isBusy = true
+        Task {
+            defer { isBusy = false }
+            do {
+                _ = try await buddyAPIService.acceptBuddyRequest(requestId: item.requestId)
+                showBanner("새 버디가 연결되었어요!")
+                await refreshAllData(userId: userId)
+            } catch {
+                alertMessage = error.localizedDescription
+                isShowingAlert = true
+            }
+        }
+    }
+
+    func rejectIncomingRequest(_ item: IncomingBuddyRequestItem) {
+        guard let userId = settingsStore.currentBackendUserId else {
+            alertMessage = "현재 로그인 사용자 정보를 확인하지 못했어요."
+            isShowingAlert = true
+            return
+        }
+
+        isBusy = true
+        Task {
+            defer { isBusy = false }
+            do {
+                _ = try await buddyAPIService.rejectBuddyRequest(requestId: item.requestId)
+                showBanner("버디 신청을 거절했어요")
+                await refreshDiscoveryData(userId: userId)
+            } catch {
+                alertMessage = error.localizedDescription
+                isShowingAlert = true
+            }
+        }
+    }
+
+    private func refreshAllData(userId: String, shouldRefreshIncoming: Bool = true) async {
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { [weak self] in
+                await self?.refreshBuddyList(userId: userId)
+            }
+            group.addTask { [weak self] in
+                await self?.refreshDiscoveryData(userId: userId, shouldRefreshIncoming: shouldRefreshIncoming)
+            }
+        }
+    }
+
+    private func refreshBuddyList(userId: String) async {
+        do {
+            let buddies = try await buddyAPIService.fetchBuddies(userId: userId)
+            print("[Buddy] fetched server buddies count=\(buddies.count)")
+            connectedRoomCards = buddies.map(makeMateRoomCardItem)
+            buddyListErrorMessage = nil
+        } catch {
+            connectedRoomCards = []
+            buddyListErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func refreshDiscoveryData(userId: String, shouldRefreshIncoming: Bool = true) async {
+        isRefreshingDiscoveryData = true
+        defer { isRefreshingDiscoveryData = false }
+
+        do {
+            async let incomingTask: [BuddyRequestResponse] = shouldRefreshIncoming
+                ? buddyAPIService.fetchIncomingBuddyRequests(userId: userId)
+                : []
+            async let outgoingTask = buddyAPIService.fetchOutgoingBuddyRequests(userId: userId)
+            async let candidatesTask = buddyAPIService.fetchRandomCandidates(userId: userId)
+
+            let incomingResponses = try await incomingTask
+            let outgoingResponses = try await outgoingTask
+            let candidateResponses = try await candidatesTask
+            let pendingOutgoingIds = Set(outgoingResponses.compactMap { $0.receiverId })
+
+            if shouldRefreshIncoming {
+                incomingRequests = incomingResponses.map(makeIncomingRequestItem)
+            }
+            outgoingRequests = outgoingResponses
+            randomCandidates = candidateResponses.map { makeRandomCandidateItem(from: $0, pendingOutgoingIds: pendingOutgoingIds) }
+            discoveryErrorMessage = nil
+        } catch {
+            if shouldRefreshIncoming {
+                incomingRequests = []
+            }
+            outgoingRequests = []
+            randomCandidates = []
+            discoveryErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func makeMateRoomCardItem(from summary: BuddySummaryResponse) -> MateRoomCardItem {
+        let backendBuddyId = summary.buddyUserId
+        let displayName = summary.buddyNickname?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let profileUserId = backendBuddyId.map(String.init) ?? ""
+        let fallbackProfile = userMetaProvider.profile(for: profileUserId)
+
+        let resolvedProfile = MateUserProfile(
+            userId: profileUserId,
+            displayName: (displayName?.isEmpty == false ? displayName : nil) ?? fallbackProfile.displayName,
+            bio: summary.buddyBio ?? fallbackProfile.bio,
+            instagramId: summary.buddyInstagramId ?? fallbackProfile.instagramId,
+            jlptLevel: summary.buddyLearningLevel ?? fallbackProfile.jlptLevel,
+            avatarData: decodeAvatarData(from: summary.avatarBase64) ?? fallbackProfile.avatarData
+        )
+
+        let mapped = MateRoomCardItem(
+            id: summary.id,
+            counterpartUserId: backendBuddyId.map(String.init) ?? "",
+            counterpartRawUserId: backendBuddyId.map(String.init) ?? "",
+            counterpartBackendUserId: backendBuddyId,
+            profile: resolvedProfile,
+            lastInteractionText: recentAccessText(from: summary.lastActiveAt),
+            extraInfoText: tikiTakaStatusText(for: summary.tikiTakaCount),
+            tikiTakaCount: summary.tikiTakaCount
+        )
+
+        print(
+            "[Buddy] mapped card backendBuddyUserId=\(backendBuddyId.map(String.init) ?? "nil") " +
+            "nickname=\(mapped.counterpartLabel) tikiTakaCount=\(mapped.resolvedTikiTakaCount)"
+        )
+        return mapped
+    }
+
+    private func makeIncomingRequestItem(from response: BuddyRequestResponse) -> IncomingBuddyRequestItem {
+        IncomingBuddyRequestItem(
+            id: response.id,
+            requestId: response.requestId,
+            displayName: response.nickname,
+            jlptLevel: response.jlptLevel,
+            recentAccessText: recentAccessText(from: response.lastActiveAt),
+            bio: response.bio,
+            instagramId: response.instagramId,
+            avatarData: decodeAvatarData(from: response.avatarBase64)
+        )
+    }
+
+    private func makeRandomCandidateItem(from response: RandomCandidateResponse, pendingOutgoingIds: Set<Int>) -> RandomCandidateItem {
+        RandomCandidateItem(
+            id: response.id,
+            userId: response.userId,
+            displayName: response.nickname,
+            jlptLevel: response.jlptLevel,
+            recentAccessText: recentAccessText(from: response.lastActiveAt),
+            bio: response.bio,
+            instagramId: response.instagramId,
+            avatarData: decodeAvatarData(from: response.avatarBase64),
+            isPending: response.userId.map(pendingOutgoingIds.contains) ?? false
+        )
+    }
+
+    private func recentAccessText(from rawValue: String?) -> String {
+        guard let rawValue = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+              rawValue.isEmpty == false else {
+            return "최근 접속일 정보 없음"
+        }
+
+        if let date = ISO8601DateFormatter.fractionalOrInternet.date(from: rawValue) {
+            let days = DateKey.daysBetweenKST(from: date, to: Date())
+            if days <= 0 {
+                return "최근 접속 오늘"
+            }
+            return "최근 접속 \(days)일 전"
+        }
+
+        return "최근 접속 \(rawValue)"
     }
 
     private func tikiTakaStatusText(for count: Int?) -> String {
@@ -371,43 +501,23 @@ final class MateViewModel: ObservableObject {
         return "티키타카 준비중"
     }
 
-    private func updateLastInteraction(roomId: Int, at date: Date) {
-        activeRooms = activeRooms.map { room in
-            guard room.id == roomId else { return room }
-            return MateRoom(
-                id: room.id,
-                userAId: room.userAId,
-                userBId: room.userBId,
-                inviteCode: room.inviteCode,
-                createdAt: room.createdAt,
-                lastInteractionAt: date,
-                isActive: room.isActive
-            )
+    private func decodeAvatarData(from base64: String?) -> Data? {
+        guard let base64 = base64?.trimmingCharacters(in: .whitespacesAndNewlines),
+              base64.isEmpty == false else {
+            return nil
         }
+        return Data(base64Encoded: base64)
     }
 
-    private func lastInteractionDescription(interactionDate: Date, now: Date = Date()) -> String {
-        let days = DateKey.daysBetweenKST(from: interactionDate, to: now)
-        if days <= 0 { return "오늘" }
-        return "\(days)일 전"
+    private func showBanner(_ message: String) {
+        bannerMessage = MateBannerMessage(text: message)
     }
+}
 
-    private func scheduleMatchNotificationIfAllowed() {
-        let center = UNUserNotificationCenter.current()
-        center.getNotificationSettings { settings in
-            guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else {
-                return
-            }
-            let content = UNMutableNotificationContent()
-            content.title = "Buddy 연결됨"
-            content.body = "이제 서로 つんつん 보낼 수 있어요."
-            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
-            let request = UNNotificationRequest(
-                identifier: "mate.connected.\(UUID().uuidString)",
-                content: content,
-                trigger: trigger
-            )
-            center.add(request)
-        }
-    }
+private extension ISO8601DateFormatter {
+    static let fractionalOrInternet: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
 }

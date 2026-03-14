@@ -23,7 +23,7 @@ struct MateRoomCardView: View {
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.primary)
 
-                        Text("최근 콕: \(item.lastInteractionText)")
+                        Text(item.lastInteractionText)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -70,7 +70,7 @@ struct MateRoomCardView: View {
     }
 }
 
-private struct BuddyAvatarView: View {
+struct BuddyAvatarView: View {
     let data: Data?
     let size: CGFloat
 
@@ -99,7 +99,7 @@ private struct BuddyAvatarView: View {
     }
 }
 
-private struct JLPTBadgeView: View {
+struct JLPTBadgeView: View {
     let level: JLPTLevel
 
     private var fillColor: Color {

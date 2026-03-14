@@ -13,9 +13,6 @@ struct InviteSectionView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("초대코드 매칭")
                 .font(.headline)
-            Text("초대코드로만 버디를 시작할 수 있어요.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
 
             if myInviteCode.isEmpty == false {
                 VStack(alignment: .leading, spacing: 8) {

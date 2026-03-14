@@ -45,6 +45,11 @@ struct ProfileView: View {
             showToast(message: message)
             viewModel.clearDailyWordsRegenerateNotice()
         }
+        .onChange(of: viewModel.randomMatchingNotice) { message in
+            guard let message else { return }
+            showToast(message: message)
+            viewModel.clearRandomMatchingNotice()
+        }
         .alert("학습 데이터 초기화", isPresented: $viewModel.isResetAlertPresented) {
             Button("초기화", role: .destructive) {
                 viewModel.regenerateTodayDailyWordsForDevelopment()
@@ -80,6 +85,15 @@ struct ProfileView: View {
         } message: {
             Text(viewModel.dailyWordsRegenerateErrorMessage ?? "오늘 단어를 다시 생성하지 못했어요.")
         }
+        .alert("랜덤 매칭 설정 실패", isPresented: Binding(get: {
+            viewModel.randomMatchingErrorMessage != nil
+        }, set: { _ in
+            viewModel.clearRandomMatchingError()
+        })) {
+            Button("확인", role: .cancel) { }
+        } message: {
+            Text(viewModel.randomMatchingErrorMessage ?? "랜덤 매칭 설정을 저장하지 못했어요.")
+        }
         .sheet(isPresented: $isGuidePresented) {
             GuideView()
         }
@@ -103,6 +117,7 @@ struct ProfileView: View {
         profileHeaderSection
         loggedInStatusSection
         profileEditSection
+        randomMatchingSection
         learningSettingsSection
     }
 
@@ -271,6 +286,28 @@ struct ProfileView: View {
                 }
 
                 LevelDescriptionCard(level: viewModel.selectedLearningLevel)
+            }
+        }
+    }
+
+    private var randomMatchingSection: some View {
+        Section("버디 매칭") {
+            Toggle(isOn: Binding(
+                get: { viewModel.isRandomMatchingEnabled },
+                set: { viewModel.updateRandomMatchingEnabled($0) }
+            )) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("랜덤 매칭에 노출하기")
+                    Text("켜두면 비슷한 레벨의 사용자에게 랜덤 후보로 보여져요.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .disabled(viewModel.isUpdatingRandomMatching)
+
+            if viewModel.isUpdatingRandomMatching {
+                ProgressView("설정 저장 중...")
+                    .font(.footnote)
             }
         }
     }

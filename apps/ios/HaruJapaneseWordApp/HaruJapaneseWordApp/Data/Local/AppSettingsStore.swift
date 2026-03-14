@@ -17,6 +17,7 @@ final class AppSettingsStore: ObservableObject {
 
     private let legacyProfileLevelsByUserIdKey = "settings_profile_levels_by_user_id"
     private let mateProfilePrefix = "mate_profile"
+    private let randomMatchingEnabledField = "random_matching_enabled"
 
     enum MateDevSlot: String {
         case A
@@ -189,6 +190,21 @@ final class AppSettingsStore: ObservableObject {
         userDefaults.set(avatarData, forKey: mateProfileKey(userId: current.userId, field: "avatar_data"))
     }
 
+    func isRandomMatchingEnabled(for userId: String) -> Bool {
+        guard userId.isEmpty == false else { return false }
+        return userDefaults.bool(forKey: mateProfileKey(userId: userId, field: randomMatchingEnabledField))
+    }
+
+    func currentMateRandomMatchingEnabled() -> Bool {
+        guard let current = currentMateProfile() else { return false }
+        return isRandomMatchingEnabled(for: current.userId)
+    }
+
+    func updateCurrentMateRandomMatchingEnabled(_ enabled: Bool) {
+        guard let current = currentMateProfile() else { return }
+        userDefaults.set(enabled, forKey: mateProfileKey(userId: current.userId, field: randomMatchingEnabledField))
+    }
+
     private static func loadSettings(userDefaults: UserDefaults) -> AppSettings {
         let levelRaw = userDefaults.string(forKey: "settings_home_deck_level") ?? JLPTLevel.n5.rawValue
         let level = JLPTLevel(rawValue: levelRaw) ?? .n5
@@ -205,6 +221,7 @@ final class AppSettingsStore: ObservableObject {
         userDefaults.set("", forKey: mateProfileKey(userId: userId, field: "bio"))
         userDefaults.set("", forKey: mateProfileKey(userId: userId, field: "instagram_id"))
         userDefaults.removeObject(forKey: mateProfileKey(userId: userId, field: "avatar_data"))
+        userDefaults.set(false, forKey: mateProfileKey(userId: userId, field: randomMatchingEnabledField))
         let levelRaw = loadLegacyProfileLevelRaw(for: userId) ?? JLPTLevel.n5.rawValue
         userDefaults.set(levelRaw, forKey: mateProfileKey(userId: userId, field: "jlpt_level"))
     }
