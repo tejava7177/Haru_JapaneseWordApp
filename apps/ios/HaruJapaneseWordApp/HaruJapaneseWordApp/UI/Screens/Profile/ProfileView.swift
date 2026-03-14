@@ -30,6 +30,9 @@ struct ProfileView: View {
             }
             .navigationTitle("프로필")
         }
+        .onAppear {
+            viewModel.onViewAppear()
+        }
         .onChange(of: viewModel.selectedPhotoItem) { newItem in
             Task {
                 await viewModel.loadAvatar(from: newItem)
@@ -50,6 +53,11 @@ struct ProfileView: View {
             showToast(message: message)
             viewModel.clearRandomMatchingNotice()
         }
+        .onChange(of: viewModel.localResetNotice) { message in
+            guard let message else { return }
+            showToast(message: message)
+            viewModel.clearLocalResetNotice()
+        }
         .alert("학습 데이터 초기화", isPresented: $viewModel.isResetAlertPresented) {
             Button("초기화", role: .destructive) {
                 viewModel.regenerateTodayDailyWordsForDevelopment()
@@ -57,6 +65,14 @@ struct ProfileView: View {
             Button("취소", role: .cancel) { }
         } message: {
             Text("개발용으로 오늘 단어를 즉시 다시 생성합니다.")
+        }
+        .alert("로컬 상태 초기화", isPresented: $viewModel.isLocalResetAlertPresented) {
+            Button("초기화", role: .destructive) {
+                viewModel.resetLocalStateForDevelopment()
+            }
+            Button("취소", role: .cancel) { }
+        } message: {
+            Text("UserDefaults, 로컬 SQLite, legacy Mate 값, 캐시된 프로필 표시값, 로그인 상태를 초기화합니다.")
         }
         .alert("로그인 실패", isPresented: Binding(get: {
             errorMessage != nil
@@ -93,6 +109,15 @@ struct ProfileView: View {
             Button("확인", role: .cancel) { }
         } message: {
             Text(viewModel.randomMatchingErrorMessage ?? "랜덤 매칭 설정을 저장하지 못했어요.")
+        }
+        .alert("로컬 상태 초기화 실패", isPresented: Binding(get: {
+            viewModel.localResetErrorMessage != nil
+        }, set: { _ in
+            viewModel.clearLocalResetError()
+        })) {
+            Button("확인", role: .cancel) { }
+        } message: {
+            Text(viewModel.localResetErrorMessage ?? "로컬 상태를 초기화하지 못했어요.")
         }
         .sheet(isPresented: $isGuidePresented) {
             GuideView()
@@ -140,9 +165,14 @@ struct ProfileView: View {
                     Text(nickname.isEmpty ? "하루" : nickname)
                         .font(.title3)
                         .fontWeight(.semibold)
-                    Text("프로필을 저장하고 있어요")
+                    Text(viewModel.isMateLoggedIn ? "서버 프로필을 기준으로 표시 중이에요" : "로컬 프로필을 저장하고 있어요")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                    if viewModel.isMateLoggedIn {
+                        Text(viewModel.profileSourceText)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             .padding(.vertical, 8)
@@ -235,8 +265,10 @@ struct ProfileView: View {
             )
 
             TextField("닉네임", text: nicknameBinding)
+                .disabled(viewModel.isMateLoggedIn)
 
             TextField("한 줄 소개", text: bioBinding)
+                .disabled(viewModel.isMateLoggedIn)
 
             HStack {
                 Text("@")
@@ -244,6 +276,13 @@ struct ProfileView: View {
                 TextField("인스타 아이디", text: instagramBinding)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
+                    .disabled(viewModel.isMateLoggedIn)
+            }
+
+            if viewModel.isMateLoggedIn {
+                Text("닉네임, 소개, 인스타는 현재 서버 값을 읽기 전용으로 표시해요.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -337,6 +376,12 @@ struct ProfileView: View {
                 }
             }
             .disabled(viewModel.isRegeneratingDailyWords || viewModel.isMateLoggedIn == false)
+
+            Button(role: .destructive) {
+                viewModel.isLocalResetAlertPresented = true
+            } label: {
+                Text("로컬 상태 초기화")
+            }
         }
     }
 

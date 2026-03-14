@@ -1,5 +1,71 @@
 import Foundation
 
+struct ServerUserProfileResponse: Decodable {
+    let userId: Int?
+    let nickname: String?
+    let learningLevel: JLPTLevel?
+    let bio: String?
+    let instagramId: String?
+    let avatarBase64: String?
+    let randomMatchingEnabled: Bool?
+
+    private enum CodingKeys: String, CodingKey {
+        case userId
+        case id
+        case nickname
+        case displayName
+        case name
+        case learningLevel
+        case jlptLevel
+        case level
+        case bio
+        case introduction
+        case oneLineIntro
+        case instagramId
+        case instagram
+        case instagramHandle
+        case avatarBase64
+        case avatarImageBase64
+        case avatar
+        case randomMatchingEnabled
+        case enabled
+        case isEnabled
+    }
+
+    init(
+        userId: Int?,
+        nickname: String?,
+        learningLevel: JLPTLevel?,
+        bio: String?,
+        instagramId: String?,
+        avatarBase64: String?,
+        randomMatchingEnabled: Bool?
+    ) {
+        self.userId = userId
+        self.nickname = nickname
+        self.learningLevel = learningLevel
+        self.bio = bio
+        self.instagramId = instagramId
+        self.avatarBase64 = avatarBase64
+        self.randomMatchingEnabled = randomMatchingEnabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        userId = try container.decodeFlexibleIntIfPresent(forKey: .userId)
+            ?? container.decodeFlexibleIntIfPresent(forKey: .id)
+        nickname = try container.decodeFirstNonEmptyString(forKeys: [.nickname, .displayName, .name])
+        let levelRaw = try container.decodeFirstNonEmptyString(forKeys: [.learningLevel, .jlptLevel, .level])
+        learningLevel = levelRaw.flatMap { JLPTLevel(rawValue: $0.uppercased()) }
+        bio = try container.decodeFirstNonEmptyString(forKeys: [.bio, .introduction, .oneLineIntro])
+        instagramId = try container.decodeFirstNonEmptyString(forKeys: [.instagramId, .instagram, .instagramHandle])
+        avatarBase64 = try container.decodeFirstNonEmptyString(forKeys: [.avatarBase64, .avatarImageBase64, .avatar])
+        randomMatchingEnabled = try container.decodeFlexibleBoolIfPresent(forKey: .randomMatchingEnabled)
+            ?? container.decodeFlexibleBoolIfPresent(forKey: .enabled)
+            ?? container.decodeFlexibleBoolIfPresent(forKey: .isEnabled)
+    }
+}
+
 struct UpdateLearningLevelRequest: Encodable {
     let learningLevel: String
 
@@ -83,6 +149,17 @@ private extension KeyedDecodingContainer {
             }
         }
 
+        return nil
+    }
+
+    func decodeFirstNonEmptyString(forKeys keys: [Key]) throws -> String? {
+        for key in keys {
+            if let value = try decodeIfPresent(String.self, forKey: key)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+               value.isEmpty == false {
+                return value
+            }
+        }
         return nil
     }
 }

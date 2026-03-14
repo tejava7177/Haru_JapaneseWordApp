@@ -11,6 +11,7 @@ final class ProfileViewModel: ObservableObject {
     @Published var selectedLearningLevel: JLPTLevel
     @Published var selectedPhotoItem: PhotosPickerItem?
     @Published var isResetAlertPresented: Bool = false
+    @Published var isLocalResetAlertPresented: Bool = false
     @Published var learningLevelNotice: String?
     @Published var learningLevelErrorMessage: String?
     @Published var isUpdatingLearningLevel: Bool = false
@@ -21,6 +22,10 @@ final class ProfileViewModel: ObservableObject {
     @Published var isUpdatingRandomMatching: Bool = false
     @Published var randomMatchingErrorMessage: String?
     @Published var randomMatchingNotice: String?
+    @Published var localResetNotice: String?
+    @Published var localResetErrorMessage: String?
+    @Published var isRefreshingServerProfile: Bool = false
+    @Published var profileSourceText: String = "source: local fallback"
 
     private let profileStore: UserProfileStore
     private let settingsStore: AppSettingsStore
@@ -46,6 +51,7 @@ final class ProfileViewModel: ObservableObject {
             .sink { [weak self] value in
                 self?.settings = value
                 self?.syncProfileFromCurrentUser()
+                self?.refreshCurrentUserProfileFromServer()
             }
             .store(in: &cancellables)
 
@@ -57,33 +63,29 @@ final class ProfileViewModel: ObservableObject {
             .store(in: &cancellables)
 
         syncProfileFromCurrentUser()
+        refreshCurrentUserProfileFromServer()
+    }
+
+    func onViewAppear() {
+        refreshCurrentUserProfileFromServer(force: true)
     }
 
     func updateNickname(_ nickname: String) {
+        guard settingsStore.isMateLoggedIn == false else { return }
         profile.nickname = nickname
-        if settingsStore.isMateLoggedIn {
-            settingsStore.updateCurrentMateDisplayName(nickname)
-        } else {
-            profileStore.updateNickname(nickname)
-        }
+        profileStore.updateNickname(nickname)
     }
 
     func updateBio(_ bio: String) {
+        guard settingsStore.isMateLoggedIn == false else { return }
         profile.bio = bio
-        if settingsStore.isMateLoggedIn {
-            settingsStore.updateCurrentMateBio(bio)
-        } else {
-            profileStore.updateBio(bio)
-        }
+        profileStore.updateBio(bio)
     }
 
     func updateInstagram(_ instagramId: String) {
+        guard settingsStore.isMateLoggedIn == false else { return }
         profile.instagramId = instagramId
-        if settingsStore.isMateLoggedIn {
-            settingsStore.updateCurrentMateInstagramId(instagramId)
-        } else {
-            profileStore.updateInstagram(instagramId)
-        }
+        profileStore.updateInstagram(instagramId)
     }
 
     func updateProfileLevel(_ level: JLPTLevel) {
@@ -234,8 +236,27 @@ final class ProfileViewModel: ObservableObject {
         randomMatchingErrorMessage = nil
     }
 
+    func clearLocalResetNotice() {
+        localResetNotice = nil
+    }
+
+    func clearLocalResetError() {
+        localResetErrorMessage = nil
+    }
+
+    func resetLocalStateForDevelopment() {
+        localResetErrorMessage = nil
+        settingsStore.clearLocalStateForDevelopment()
+        profile = profileStore.load()
+        settings = settingsStore.settings
+        selectedLearningLevel = settingsStore.settings.homeDeckLevel
+        isRandomMatchingEnabled = false
+        localResetNotice = "로컬 상태를 초기화했어요."
+    }
+
     private func syncProfileFromCurrentUser() {
         if let mateProfile = settingsStore.currentMateProfile() {
+            profileSourceText = "source: local fallback"
             profile.nickname = mateProfile.displayName
             profile.bio = mateProfile.bio
             profile.instagramId = mateProfile.instagramId
@@ -244,6 +265,8 @@ final class ProfileViewModel: ObservableObject {
             isRandomMatchingEnabled = settingsStore.currentMateRandomMatchingEnabled()
         } else {
             let legacyProfile = profileStore.load()
+            print("[Profile] fallback to legacy local profile store")
+            profileSourceText = "source: local fallback"
             profile.nickname = legacyProfile.nickname
             profile.bio = legacyProfile.bio
             profile.instagramId = legacyProfile.instagramId
@@ -251,6 +274,142 @@ final class ProfileViewModel: ObservableObject {
             selectedLearningLevel = settingsStore.settings.homeDeckLevel
             isRandomMatchingEnabled = false
         }
+    }
+
+    private func refreshCurrentUserProfileFromServer(force: Bool = false) {
+        let mateUserId = settingsStore.mateUserId
+        guard mateUserId.isEmpty == false else {
+            print("[Profile] currentBackendUserId=nil reason=mateUserId empty")
+            profileSourceText = "source: local fallback"
+            return
+        }
+
+        guard let backendUserId = settingsStore.currentBackendUserId else {
+            print("[Profile] currentBackendUserId=nil reason=unmapped mateUserId=\(mateUserId)")
+            profileSourceText = "source: local fallback"
+            return
+        }
+
+        if isRefreshingServerProfile, force == false {
+            print("[Profile] skip duplicate fetch currentBackendUserId=\(backendUserId)")
+            return
+        }
+
+        print("[Profile] currentBackendUserId=\(backendUserId)")
+        isRefreshingServerProfile = true
+
+        Task {
+            defer { isRefreshingServerProfile = false }
+
+            do {
+                let response = try await profileAPIService.fetchUserProfile(userId: backendUserId)
+                applyServerProfile(response)
+            } catch {
+                profileSourceText = "source: local fallback"
+                print("[Profile] fetch failed error=\(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func applyServerProfile(_ response: ServerUserProfileResponse) {
+        let currentUserId = settingsStore.mateUserId
+        let cachedProfile = settingsStore.currentMateProfile()
+
+        if let nickname = trimmedNonEmpty(response.nickname) {
+            print("[Profile] server nickname=\(nickname)")
+        }
+        if let bio = trimmedNonEmpty(response.bio) {
+            print("[Profile] server bio=\(bio)")
+        }
+        if let instagramId = trimmedNonEmpty(response.instagramId) {
+            print("[Profile] server instagramId=\(instagramId)")
+        }
+        if let learningLevel = response.learningLevel {
+            print("[Profile] server learningLevel=\(learningLevel.rawValue)")
+        }
+        print("[Profile] decoded nickname=\(response.nickname ?? "nil")")
+        print("[Profile] decoded bio=\(response.bio ?? "nil")")
+        print("[Profile] decoded instagram=\(response.instagramId ?? "nil")")
+        print("[Profile] decoded learningLevel=\(response.learningLevel?.rawValue ?? "nil")")
+
+        let resolvedNickname = resolveServerText(
+            serverValue: response.nickname,
+            fallbackValue: cachedProfile?.displayName,
+            fieldName: "nickname"
+        ) ?? "하루"
+        let resolvedBio = resolveServerText(
+            serverValue: response.bio,
+            fallbackValue: cachedProfile?.bio,
+            fieldName: "bio"
+        ) ?? ""
+        let resolvedInstagramId = resolveServerText(
+            serverValue: response.instagramId,
+            fallbackValue: cachedProfile?.instagramId,
+            fieldName: "instagramId"
+        ) ?? ""
+        let resolvedLevel = resolveLearningLevel(
+            serverValue: response.learningLevel,
+            fallbackValue: cachedProfile?.jlptLevel
+        ) ?? .n5
+        let avatarData = decodeAvatarData(from: response.avatarBase64) ?? cachedProfile?.avatarData
+        let resolvedRandomMatchingEnabled = response.randomMatchingEnabled ?? settingsStore.currentMateRandomMatchingEnabled()
+
+        settingsStore.applyServerProfile(
+            userId: currentUserId,
+            nickname: resolvedNickname,
+            bio: resolvedBio,
+            instagramId: resolvedInstagramId,
+            jlptLevel: resolvedLevel,
+            avatarData: avatarData,
+            randomMatchingEnabled: resolvedRandomMatchingEnabled
+        )
+        profileSourceText = "source: server"
+        print("[Profile] using server profile values")
+        syncProfileFromCurrentUser()
+        profileSourceText = "source: server"
+    }
+
+    private func resolveServerText(serverValue: String?, fallbackValue: String?, fieldName: String) -> String? {
+        if let serverValue = trimmedNonEmpty(serverValue) {
+            print("[Profile] using server \(fieldName)=\(serverValue)")
+            return serverValue
+        }
+
+        if let fallbackValue = trimmedNonEmpty(fallbackValue) {
+            print("[Profile] fallback to local \(fieldName)")
+            return fallbackValue
+        }
+
+        print("[Profile] using placeholder \(fieldName)")
+        return nil
+    }
+
+    private func resolveLearningLevel(serverValue: JLPTLevel?, fallbackValue: JLPTLevel?) -> JLPTLevel? {
+        if let serverValue {
+            print("[Profile] using server learningLevel=\(serverValue.rawValue)")
+            return serverValue
+        }
+
+        if let fallbackValue {
+            print("[Profile] fallback to local learningLevel")
+            return fallbackValue
+        }
+
+        print("[Profile] using placeholder learningLevel")
+        return nil
+    }
+
+    private func trimmedNonEmpty(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              value.isEmpty == false else {
+            return nil
+        }
+        return value
+    }
+
+    private func decodeAvatarData(from base64: String?) -> Data? {
+        guard let base64 = trimmedNonEmpty(base64) else { return nil }
+        return Data(base64Encoded: base64)
     }
 
     private func compressImageData(_ data: Data) -> Data? {

@@ -197,7 +197,12 @@ final class APIClient: @unchecked Sendable {
     private func logResponseBodyIfNeeded(_ data: Data, request: URLRequest) {
         guard let url = request.url else { return }
         let path = url.path
-        guard path == "/api/daily-words/today" || path == "/api/tsuntsun/today" || path == "/api/buddies" else { return }
+        let shouldLogRawBody =
+            path == "/api/daily-words/today" ||
+            path == "/api/tsuntsun/today" ||
+            path == "/api/buddies" ||
+            path.hasPrefix("/api/users/")
+        guard shouldLogRawBody else { return }
 
         let bodyText = String(data: data, encoding: .utf8) ?? "<non-utf8 body>"
         print("[APIClient] Raw response path=\(path) body=\(bodyText)")

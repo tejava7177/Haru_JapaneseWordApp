@@ -1,9 +1,24 @@
 import Foundation
 
 protocol ProfileAPIServiceProtocol {
+    func fetchUserProfile(userId: String) async throws -> ServerUserProfileResponse
     func updateLearningLevel(userId: String, level: JLPTLevel) async throws -> UpdateLearningLevelResponse
     func regenerateTodayDailyWords(userId: String) async throws -> RegenerateDailyWordsResponse
     func updateRandomMatching(userId: String, enabled: Bool) async throws -> ToggleRandomMatchingResponse
+}
+
+extension ProfileAPIServiceProtocol {
+    func fetchUserProfile(userId: String) async throws -> ServerUserProfileResponse {
+        ServerUserProfileResponse(
+            userId: Int(userId),
+            nickname: nil,
+            learningLevel: nil,
+            bio: nil,
+            instagramId: nil,
+            avatarBase64: nil,
+            randomMatchingEnabled: nil
+        )
+    }
 }
 
 struct ProfileAPIService: ProfileAPIServiceProtocol, Sendable {
@@ -11,6 +26,12 @@ struct ProfileAPIService: ProfileAPIServiceProtocol, Sendable {
 
     nonisolated init(client: APIClient = APIClient()) {
         self.client = client
+    }
+
+    nonisolated func fetchUserProfile(userId: String) async throws -> ServerUserProfileResponse {
+        print("[ProfileAPI] GET /api/users/\(userId)")
+        let endpoint = APIEndpoint(path: "api/users/\(userId)")
+        return try await client.get(endpoint, responseType: ServerUserProfileResponse.self)
     }
 
     nonisolated func updateLearningLevel(userId: String, level: JLPTLevel) async throws -> UpdateLearningLevelResponse {

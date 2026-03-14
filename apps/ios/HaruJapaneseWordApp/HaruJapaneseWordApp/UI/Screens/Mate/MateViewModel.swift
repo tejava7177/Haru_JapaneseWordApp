@@ -440,16 +440,42 @@ final class MateViewModel: ObservableObject {
 
     private func makeMateRoomCardItem(from summary: BuddySummaryResponse) -> MateRoomCardItem {
         let backendBuddyId = summary.buddyUserId
-        let displayName = summary.buddyNickname?.trimmingCharacters(in: .whitespacesAndNewlines)
         let profileUserId = backendBuddyId.map(String.init) ?? ""
         let fallbackProfile = userMetaProvider.profile(for: profileUserId)
 
+        let resolvedDisplayName = resolvedBuddyText(
+            serverValue: summary.buddyNickname,
+            fallbackValue: fallbackProfile.displayName,
+            placeholder: "이름 미정",
+            fieldName: "nickname",
+            buddyUserId: backendBuddyId
+        )
+        let resolvedBio = resolvedBuddyText(
+            serverValue: summary.buddyBio,
+            fallbackValue: fallbackProfile.bio,
+            placeholder: "",
+            fieldName: "bio",
+            buddyUserId: backendBuddyId
+        )
+        let resolvedInstagramId = resolvedBuddyText(
+            serverValue: summary.buddyInstagramId,
+            fallbackValue: fallbackProfile.instagramId,
+            placeholder: "",
+            fieldName: "instagramId",
+            buddyUserId: backendBuddyId
+        )
+        let resolvedLevel = resolvedBuddyLevel(
+            serverValue: summary.buddyLearningLevel,
+            fallbackValue: fallbackProfile.jlptLevel,
+            buddyUserId: backendBuddyId
+        ) ?? .n5
+
         let resolvedProfile = MateUserProfile(
             userId: profileUserId,
-            displayName: (displayName?.isEmpty == false ? displayName : nil) ?? fallbackProfile.displayName,
-            bio: summary.buddyBio ?? fallbackProfile.bio,
-            instagramId: summary.buddyInstagramId ?? fallbackProfile.instagramId,
-            jlptLevel: summary.buddyLearningLevel ?? fallbackProfile.jlptLevel,
+            displayName: resolvedDisplayName,
+            bio: resolvedBio,
+            instagramId: resolvedInstagramId,
+            jlptLevel: resolvedLevel,
             avatarData: decodeAvatarData(from: summary.avatarBase64) ?? fallbackProfile.avatarData
         )
 
@@ -472,7 +498,8 @@ final class MateViewModel: ObservableObject {
     }
 
     private func makeIncomingRequestItem(from response: BuddyRequestResponse) -> IncomingBuddyRequestItem {
-        IncomingBuddyRequestItem(
+        print("[Buddy] using server request profile requestId=\(response.requestId) nickname=\(response.nickname)")
+        return IncomingBuddyRequestItem(
             id: response.id,
             requestId: response.requestId,
             displayName: response.nickname,
@@ -485,7 +512,8 @@ final class MateViewModel: ObservableObject {
     }
 
     private func makeRandomCandidateItem(from response: RandomCandidateResponse, pendingOutgoingIds: Set<Int>) -> RandomCandidateItem {
-        RandomCandidateItem(
+        print("[Buddy] using server candidate profile userId=\(response.userId.map(String.init) ?? "nil") nickname=\(response.nickname)")
+        return RandomCandidateItem(
             id: response.id,
             userId: response.userId,
             displayName: response.nickname,
@@ -533,6 +561,49 @@ final class MateViewModel: ObservableObject {
 
     private func showBanner(_ message: String) {
         bannerMessage = MateBannerMessage(text: message)
+    }
+
+    private func resolvedBuddyText(
+        serverValue: String?,
+        fallbackValue: String,
+        placeholder: String,
+        fieldName: String,
+        buddyUserId: Int?
+    ) -> String {
+        if let serverValue = trimmedNonEmpty(serverValue) {
+            print("[Buddy] using server \(fieldName) for buddyUserId=\(buddyUserId.map(String.init) ?? "nil") value=\(serverValue)")
+            return serverValue
+        }
+
+        if let fallbackValue = trimmedNonEmpty(fallbackValue) {
+            print("[Buddy] fallback to local \(fieldName) for buddyUserId=\(buddyUserId.map(String.init) ?? "nil")")
+            return fallbackValue
+        }
+
+        print("[Buddy] using placeholder \(fieldName) for buddyUserId=\(buddyUserId.map(String.init) ?? "nil")")
+        return placeholder
+    }
+
+    private func resolvedBuddyLevel(
+        serverValue: JLPTLevel?,
+        fallbackValue: JLPTLevel,
+        buddyUserId: Int?
+    ) -> JLPTLevel? {
+        if let serverValue {
+            print("[Buddy] using server learningLevel for buddyUserId=\(buddyUserId.map(String.init) ?? "nil")")
+            return serverValue
+        }
+
+        print("[Buddy] fallback to local learningLevel for buddyUserId=\(buddyUserId.map(String.init) ?? "nil")")
+        return fallbackValue
+    }
+
+    private func trimmedNonEmpty(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              value.isEmpty == false else {
+            return nil
+        }
+        return value
     }
 }
 

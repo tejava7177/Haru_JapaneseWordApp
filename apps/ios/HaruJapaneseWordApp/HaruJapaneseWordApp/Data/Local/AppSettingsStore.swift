@@ -18,6 +18,7 @@ final class AppSettingsStore: ObservableObject {
     private let legacyProfileLevelsByUserIdKey = "settings_profile_levels_by_user_id"
     private let mateProfilePrefix = "mate_profile"
     private let randomMatchingEnabledField = "random_matching_enabled"
+    private let bundleIdentifier = Bundle.main.bundleIdentifier ?? "io.github.simjuheun.HaruJapaneseWordApp"
 
     enum MateDevSlot: String {
         case A
@@ -123,13 +124,13 @@ final class AppSettingsStore: ObservableObject {
             return MateUserProfile(userId: "", displayName: "", bio: "", instagramId: "", jlptLevel: .n5, avatarData: nil)
         }
 
-        let displayName = userDefaults.string(forKey: mateProfileKey(userId: userId, field: "display_name"))
-            ?? defaultDisplayName(for: userId)
-        let bio = userDefaults.string(forKey: mateProfileKey(userId: userId, field: "bio")) ?? ""
-        let instagramId = userDefaults.string(forKey: mateProfileKey(userId: userId, field: "instagram_id")) ?? ""
-        let avatarData = userDefaults.data(forKey: mateProfileKey(userId: userId, field: "avatar_data"))
-        let levelRaw = userDefaults.string(forKey: mateProfileKey(userId: userId, field: "jlpt_level"))
-            ?? loadLegacyProfileLevelRaw(for: userId)
+        let candidateUserIds = candidateProfileUserIds(for: userId)
+        let displayName = firstStoredString(for: candidateUserIds, field: "display_name") ?? defaultDisplayName(for: userId)
+        let bio = firstStoredString(for: candidateUserIds, field: "bio") ?? ""
+        let instagramId = firstStoredString(for: candidateUserIds, field: "instagram_id") ?? ""
+        let avatarData = firstStoredData(for: candidateUserIds, field: "avatar_data")
+        let levelRaw = firstStoredString(for: candidateUserIds, field: "jlpt_level")
+            ?? candidateUserIds.lazy.compactMap(loadLegacyProfileLevelRaw(for:)).first
             ?? JLPTLevel.n5.rawValue
         let jlptLevel = JLPTLevel(rawValue: levelRaw) ?? .n5
 
@@ -205,6 +206,58 @@ final class AppSettingsStore: ObservableObject {
         userDefaults.set(enabled, forKey: mateProfileKey(userId: current.userId, field: randomMatchingEnabledField))
     }
 
+    func applyServerProfile(
+        userId: String,
+        nickname: String?,
+        bio: String?,
+        instagramId: String?,
+        jlptLevel: JLPTLevel?,
+        avatarData: Data?,
+        randomMatchingEnabled: Bool?
+    ) {
+        guard userId.isEmpty == false else { return }
+
+        if let nickname {
+            userDefaults.set(nickname, forKey: mateProfileKey(userId: userId, field: "display_name"))
+        }
+        if let bio {
+            userDefaults.set(bio, forKey: mateProfileKey(userId: userId, field: "bio"))
+        }
+        if let instagramId {
+            userDefaults.set(instagramId, forKey: mateProfileKey(userId: userId, field: "instagram_id"))
+        }
+        if let jlptLevel {
+            userDefaults.set(jlptLevel.rawValue, forKey: mateProfileKey(userId: userId, field: "jlpt_level"))
+        }
+        if let avatarData {
+            userDefaults.set(avatarData, forKey: mateProfileKey(userId: userId, field: "avatar_data"))
+        }
+        if let randomMatchingEnabled {
+            userDefaults.set(randomMatchingEnabled, forKey: mateProfileKey(userId: userId, field: randomMatchingEnabledField))
+        }
+
+        if settings.mateUserId == userId, let jlptLevel {
+            var updated = settings
+            updated.homeDeckLevel = jlptLevel
+            settings = updated
+            save(settings: updated)
+        }
+    }
+
+    func clearLocalStateForDevelopment() {
+        let preservedBaseURL = userDefaults.string(forKey: "haru_api_base_url")
+        userDefaults.removePersistentDomain(forName: bundleIdentifier)
+        if let preservedBaseURL {
+            userDefaults.set(preservedBaseURL, forKey: "haru_api_base_url")
+        }
+        Self.deleteWritableSQLiteIfNeeded()
+
+        settings = AppSettingsStore.loadSettings(userDefaults: userDefaults)
+        hasSeenOnboarding = userDefaults.bool(forKey: onboardingKey)
+        isSignedIn = userDefaults.bool(forKey: isSignedInKey)
+        appleUserId = userDefaults.string(forKey: appleUserIdKey)
+    }
+
     private static func loadSettings(userDefaults: UserDefaults) -> AppSettings {
         let levelRaw = userDefaults.string(forKey: "settings_home_deck_level") ?? JLPTLevel.n5.rawValue
         let level = JLPTLevel(rawValue: levelRaw) ?? .n5
@@ -245,6 +298,35 @@ final class AppSettingsStore: ObservableObject {
         return userId
     }
 
+    private func candidateProfileUserIds(for userId: String) -> [String] {
+        let normalized = userId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard normalized.isEmpty == false else { return [] }
+
+        if let backendUserId = BackendUserIDMapper.backendUserId(for: normalized).flatMap(Int.init) {
+            return Array(Set([normalized] + BackendUserIDMapper.candidateRawUserIds(forBackendUserId: backendUserId)))
+        }
+
+        return [normalized]
+    }
+
+    private func firstStoredString(for userIds: [String], field: String) -> String? {
+        for userId in userIds {
+            if let value = userDefaults.string(forKey: mateProfileKey(userId: userId, field: field)) {
+                return value
+            }
+        }
+        return nil
+    }
+
+    private func firstStoredData(for userIds: [String], field: String) -> Data? {
+        for userId in userIds {
+            if let value = userDefaults.data(forKey: mateProfileKey(userId: userId, field: field)) {
+                return value
+            }
+        }
+        return nil
+    }
+
     private func loadLegacyProfileLevelRaw(for userId: String) -> String? {
         guard let values = userDefaults.dictionary(forKey: legacyProfileLevelsByUserIdKey) as? [String: String] else {
             return nil
@@ -254,5 +336,27 @@ final class AppSettingsStore: ObservableObject {
 
     private func mateProfileKey(userId: String, field: String) -> String {
         "\(mateProfilePrefix).\(userId).\(field)"
+    }
+
+    private static func deleteWritableSQLiteIfNeeded() {
+        let fileManager = FileManager.default
+        let baseURL = try? fileManager.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        guard let dirURL = baseURL?.appendingPathComponent("DictionaryDB", isDirectory: true) else { return }
+
+        let databaseURL = dirURL.appendingPathComponent("jlpt_starter.sqlite", isDirectory: false)
+        let sidecarURLs = [
+            databaseURL,
+            databaseURL.appendingPathExtension("shm"),
+            databaseURL.appendingPathExtension("wal")
+        ]
+
+        for url in sidecarURLs where fileManager.fileExists(atPath: url.path) {
+            try? fileManager.removeItem(at: url)
+        }
     }
 }
