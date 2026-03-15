@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct InviteSectionView: View {
+    @Binding var isExpanded: Bool
     let myInviteCode: String
     @Binding var inviteCodeInput: String
     let onShowInviteCode: () -> Void
@@ -11,10 +12,31 @@ struct InviteSectionView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("초대코드 매칭")
-                .font(.headline)
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("초대코드")
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                        Text("필요할 때만 펼쳐서 초대코드로 버디를 연결해요.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
 
-            if myInviteCode.isEmpty == false {
+                    Spacer()
+
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded, myInviteCode.isEmpty == false {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("내 초대코드")
                         .font(.caption)
@@ -36,35 +58,36 @@ struct InviteSectionView: View {
                 )
             }
 
-            Button("내 초대코드 보기") { onShowInviteCode() }
-            .buttonStyle(.borderedProminent)
-            .tint(.black)
-            .disabled(isBusy)
-
-            VStack(alignment: .leading, spacing: 8) {
-                TextField("초대 코드 입력", text: $inviteCodeInput)
-                    .textInputAutocapitalization(.characters)
-                    .textFieldStyle(.roundedBorder)
+            if isExpanded {
+                Button("내 초대코드 보기") { onShowInviteCode() }
+                    .buttonStyle(.bordered)
                     .disabled(isBusy)
 
-                Button("버디 시작") {
-                    onJoin(inviteCodeInput)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.black)
-                .disabled(isBusy)
+                VStack(alignment: .leading, spacing: 8) {
+                    TextField("초대 코드 입력", text: $inviteCodeInput)
+                        .textInputAutocapitalization(.characters)
+                        .textFieldStyle(.roundedBorder)
+                        .disabled(isBusy)
 
-                if let errorMessage, errorMessage.isEmpty == false {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red)
+                    Button("버디 시작") {
+                        onJoin(inviteCodeInput)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.black)
+                    .disabled(isBusy)
+
+                    if let errorMessage, errorMessage.isEmpty == false {
+                        Text(errorMessage)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
                 }
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color(uiColor: .secondarySystemBackground))
+                )
             }
-            .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(uiColor: .secondarySystemBackground))
-            )
         }
         .padding(16)
         .background(

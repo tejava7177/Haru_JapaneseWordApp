@@ -59,6 +59,7 @@ struct MateRoomCardItem: Identifiable, Equatable {
 struct IncomingBuddyRequestItem: Identifiable, Equatable {
     let id: Int
     let requestId: Int
+    let requesterId: Int?
     let displayName: String
     let jlptLevel: JLPTLevel
     let recentAccessText: String
@@ -454,12 +455,28 @@ final class MateViewModel: ObservableObject {
             let outgoingResponses = try await outgoingTask
             let candidateResponses = try await candidatesTask
             let pendingOutgoingIds = Set(outgoingResponses.compactMap { $0.receiverId })
+            let incomingRequesterIds = Set(
+                incomingResponses.compactMap { response -> Int? in
+                    response.requesterId ?? (response.id >= 0 ? response.id : nil)
+                }
+            )
+            let filteredCandidateResponses = candidateResponses.filter { response in
+                let candidateId = response.userId ?? (response.id >= 0 ? response.id : nil)
+                guard let candidateId else { return true }
+                return incomingRequesterIds.contains(candidateId) == false
+            }
+
+            if filteredCandidateResponses.count != candidateResponses.count {
+                print("[Buddy] filtered duplicate candidates count=\(candidateResponses.count - filteredCandidateResponses.count)")
+            }
 
             if shouldRefreshIncoming {
                 incomingRequests = incomingResponses.map(makeIncomingRequestItem)
             }
             outgoingRequests = outgoingResponses
-            randomCandidates = candidateResponses.map { makeRandomCandidateItem(from: $0, pendingOutgoingIds: pendingOutgoingIds) }
+            randomCandidates = filteredCandidateResponses.map {
+                makeRandomCandidateItem(from: $0, pendingOutgoingIds: pendingOutgoingIds)
+            }
             normalizeCurrentRandomCandidateIndex()
             discoveryErrorMessage = nil
         } catch {
@@ -563,6 +580,7 @@ final class MateViewModel: ObservableObject {
         return IncomingBuddyRequestItem(
             id: response.id,
             requestId: response.requestId,
+            requesterId: response.requesterId,
             displayName: response.nickname,
             jlptLevel: response.jlptLevel,
             recentAccessText: recentAccessText(from: response.lastActiveAt),

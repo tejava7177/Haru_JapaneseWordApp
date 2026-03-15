@@ -64,64 +64,37 @@ struct BuddyDiscoveryCardView: View {
     let onPreviewTap: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            BuddyAvatarView(data: item.avatarData, size: 56)
-                .contentShape(Circle())
-                .onTapGesture(perform: onPreviewTap)
+        HStack(alignment: .center, spacing: 14) {
+            Button(action: onPreviewTap) {
+                BuddyAvatarView(data: item.avatarData, size: 56)
+            }
+            .buttonStyle(.plain)
 
-            VStack(alignment: .leading, spacing: 12) {
-                Button(action: onPreviewTap) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(alignment: .top) {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(item.displayName)
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(.primary)
-                                    .multilineTextAlignment(.leading)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(item.displayName)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.leading)
 
-                                Text(item.recentAccessText)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
+                JLPTBadgeView(level: item.jlptLevel)
+            }
 
-                            Spacer(minLength: 8)
+            Spacer(minLength: 8)
 
-                            JLPTBadgeView(level: item.jlptLevel)
-                        }
-
-                        if item.bio.isEmpty == false {
-                            Text(item.bio)
-                                .font(.subheadline)
-                                .foregroundStyle(.primary)
-                                .multilineTextAlignment(.leading)
-                                .lineLimit(2)
-                        }
-
-                        if item.instagramId.isEmpty == false {
-                            Label("@\(item.instagramId)", systemImage: "camera")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 8) {
+                if let secondaryActionTitle, let onSecondaryAction {
+                    Button(secondaryActionTitle, action: onSecondaryAction)
+                        .buttonStyle(.bordered)
                 }
-                .buttonStyle(.plain)
 
-                HStack(spacing: 8) {
-                    Button(item.primaryActionTitle, action: onPrimaryAction)
-                        .buttonStyle(.borderedProminent)
-                        .tint(.black)
-                        .disabled(item.isPrimaryActionDisabled)
-
-                    if let secondaryActionTitle, let onSecondaryAction {
-                        Button(secondaryActionTitle, action: onSecondaryAction)
-                            .buttonStyle(.bordered)
-                    }
-                }
+                Button(item.primaryActionTitle, action: onPrimaryAction)
+                    .buttonStyle(.borderedProminent)
+                    .tint(.black)
+                    .disabled(item.isPrimaryActionDisabled)
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.vertical, 12)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(Color(uiColor: .secondarySystemBackground))

@@ -52,13 +52,20 @@ struct MateView: View {
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
 
-                if isInviteSectionExpanded {
-                    expandedBuddyDiscoverySection
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                incomingRequestsSection
+                    .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 6, trailing: 16))
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+
+                randomCandidatesSection
+                    .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 6, trailing: 16))
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+
+                inviteCodeSection
                     .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 12, trailing: 16))
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
-                }
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
@@ -128,64 +135,25 @@ struct MateView: View {
     }
 
     private var emptyMateSection: some View {
-        Text(viewModel.buddyListErrorMessage ?? "아직 버디가 없어요. 초대코드로 시작해보세요.")
+        Text(viewModel.buddyListErrorMessage ?? "아직 버디가 없어요.")
             .font(.subheadline)
             .foregroundStyle(.secondary)
     }
 
     private var addMateButtonSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isInviteSectionExpanded.toggle()
-                }
-            } label: {
-                HStack {
-                    Image(systemName: isInviteSectionExpanded ? "chevron.up" : "plus")
-                    Text(isInviteSectionExpanded ? "새 버디 추가 접기" : "새 버디 추가")
-                    Spacer()
-                    if viewModel.incomingRequestCount > 0 {
-                        Text("\(viewModel.incomingRequestCount)")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Capsule(style: .continuous).fill(.black))
-                    }
-                }
-                .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-
+        VStack(alignment: .leading, spacing: 6) {
+            Text("새 버디 찾기")
+                .font(.headline)
             if viewModel.canAddNewMate == false {
                 Text("버디는 최대 3명까지 가능해요.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-        }
-    }
-
-    private var expandedBuddyDiscoverySection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            incomingRequestsSection
-
-            InviteSectionView(
-                myInviteCode: viewModel.inviteCode,
-                inviteCodeInput: $viewModel.inputInviteCode,
-                onShowInviteCode: {
-                    viewModel.fetchMyInviteCode()
-                },
-                onCopyInviteCode: {
-                    viewModel.copyInviteCode()
-                },
-                onJoin: { inviteCode in
-                    viewModel.joinByInviteCode(inviteCode)
-                },
-                isBusy: viewModel.isBusy,
-                errorMessage: viewModel.inviteSectionErrorMessage
-            )
-
-            randomCandidatesSection
+            if viewModel.incomingRequestCount > 0 {
+                Text("새 신청 \(viewModel.incomingRequestCount)건이 도착했어요.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -213,6 +181,25 @@ struct MateView: View {
                 }
             }
         }
+    }
+
+    private var inviteCodeSection: some View {
+        InviteSectionView(
+            isExpanded: $isInviteSectionExpanded,
+            myInviteCode: viewModel.inviteCode,
+            inviteCodeInput: $viewModel.inputInviteCode,
+            onShowInviteCode: {
+                viewModel.fetchMyInviteCode()
+            },
+            onCopyInviteCode: {
+                viewModel.copyInviteCode()
+            },
+            onJoin: { inviteCode in
+                viewModel.joinByInviteCode(inviteCode)
+            },
+            isBusy: viewModel.isBusy,
+            errorMessage: viewModel.inviteSectionErrorMessage
+        )
     }
 
     private var randomCandidatesSection: some View {
