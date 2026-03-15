@@ -31,6 +31,8 @@ final class ProfileViewModel: ObservableObject {
     private let settingsStore: AppSettingsStore
     private let profileAPIService: ProfileAPIServiceProtocol
     private var cancellables: Set<AnyCancellable> = []
+    private var hasLoadedProfile: Bool = false
+    private var lastLoadedBackendUserId: String?
 
     init(
         settingsStore: AppSettingsStore,
@@ -51,7 +53,7 @@ final class ProfileViewModel: ObservableObject {
             .sink { [weak self] value in
                 self?.settings = value
                 self?.syncProfileFromCurrentUser()
-                self?.refreshCurrentUserProfileFromServer()
+                self?.refreshCurrentUserProfileFromServer(triggerSource: "onChange")
             }
             .store(in: &cancellables)
 
@@ -63,11 +65,11 @@ final class ProfileViewModel: ObservableObject {
             .store(in: &cancellables)
 
         syncProfileFromCurrentUser()
-        refreshCurrentUserProfileFromServer()
+        refreshCurrentUserProfileFromServer(triggerSource: "init")
     }
 
     func onViewAppear() {
-        refreshCurrentUserProfileFromServer(force: true)
+        refreshCurrentUserProfileFromServer(triggerSource: "onAppear")
     }
 
     func updateNickname(_ nickname: String) {
@@ -276,17 +278,22 @@ final class ProfileViewModel: ObservableObject {
         }
     }
 
-    private func refreshCurrentUserProfileFromServer(force: Bool = false) {
+    private func refreshCurrentUserProfileFromServer(triggerSource: String, force: Bool = false) {
+        print("[Profile] trigger source=\(triggerSource)")
         let mateUserId = settingsStore.mateUserId
         guard mateUserId.isEmpty == false else {
             print("[Profile] currentBackendUserId=nil reason=mateUserId empty")
             profileSourceText = "source: local fallback"
+            hasLoadedProfile = false
+            lastLoadedBackendUserId = nil
             return
         }
 
         guard let backendUserId = settingsStore.currentBackendUserId else {
             print("[Profile] currentBackendUserId=nil reason=unmapped mateUserId=\(mateUserId)")
             profileSourceText = "source: local fallback"
+            hasLoadedProfile = false
+            lastLoadedBackendUserId = nil
             return
         }
 
@@ -295,16 +302,24 @@ final class ProfileViewModel: ObservableObject {
             return
         }
 
+        if force == false, hasLoadedProfile, lastLoadedBackendUserId == backendUserId {
+            print("[Profile] fetch skipped already loaded")
+            return
+        }
+
         print("[Profile] currentBackendUserId=\(backendUserId)")
         isRefreshingServerProfile = true
+        lastLoadedBackendUserId = backendUserId
 
         Task {
             defer { isRefreshingServerProfile = false }
 
             do {
                 let response = try await profileAPIService.fetchUserProfile(userId: backendUserId)
+                hasLoadedProfile = true
                 applyServerProfile(response)
             } catch {
+                hasLoadedProfile = false
                 profileSourceText = "source: local fallback"
                 print("[Profile] fetch failed error=\(error.localizedDescription)")
             }
@@ -354,7 +369,7 @@ final class ProfileViewModel: ObservableObject {
         let avatarData = decodeAvatarData(from: response.avatarBase64) ?? cachedProfile?.avatarData
         let resolvedRandomMatchingEnabled = response.randomMatchingEnabled ?? settingsStore.currentMateRandomMatchingEnabled()
 
-        settingsStore.applyServerProfile(
+        let didUpdateStore = settingsStore.applyServerProfile(
             userId: currentUserId,
             nickname: resolvedNickname,
             bio: resolvedBio,
@@ -363,8 +378,12 @@ final class ProfileViewModel: ObservableObject {
             avatarData: avatarData,
             randomMatchingEnabled: resolvedRandomMatchingEnabled
         )
+        if didUpdateStore {
+            print("[Profile] using server profile values")
+        } else {
+            print("[Profile] store update skipped no changes")
+        }
         profileSourceText = "source: server"
-        print("[Profile] using server profile values")
         syncProfileFromCurrentUser()
         profileSourceText = "source: server"
     }

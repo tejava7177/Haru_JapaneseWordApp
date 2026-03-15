@@ -160,6 +160,9 @@ final class MateViewModel: ObservableObject {
     private let userMetaProvider: MateUserMetaProvider
     private let buddyAPIService: BuddyAPIServiceProtocol
     private var cancellables: Set<AnyCancellable> = []
+    private var hasLoadedBuddyData: Bool = false
+    private var lastLoadedBackendUserId: String?
+    private var isLoadingBuddyData: Bool = false
 
     init(
         settingsStore: AppSettingsStore,
@@ -171,9 +174,10 @@ final class MateViewModel: ObservableObject {
         self.buddyAPIService = buddyAPIService
 
         settingsStore.$settings
+            .removeDuplicates()
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
-                self?.load()
+                self?.load(triggerSource: "onChange")
             }
             .store(in: &cancellables)
     }
@@ -206,12 +210,13 @@ final class MateViewModel: ObservableObject {
     }
 
     func onViewAppear() {
-        load()
+        load(triggerSource: "onAppear")
     }
 
     func onViewDisappear() { }
 
-    func load() {
+    func load(triggerSource: String = "manual", force: Bool = false) {
+        print("[Buddy] trigger source=\(triggerSource)")
         guard let backendUserId = settingsStore.currentBackendUserId else {
             connectedRoomCards = []
             incomingRequests = []
@@ -222,11 +227,28 @@ final class MateViewModel: ObservableObject {
             inviteSectionErrorMessage = nil
             buddyListErrorMessage = nil
             discoveryErrorMessage = nil
+            hasLoadedBuddyData = false
+            lastLoadedBackendUserId = nil
+            isLoadingBuddyData = false
             return
         }
 
+        if isLoadingBuddyData, force == false {
+            print("[Buddy] fetch skipped already loaded")
+            return
+        }
+
+        if force == false, hasLoadedBuddyData, lastLoadedBackendUserId == backendUserId {
+            print("[Buddy] fetch skipped already loaded")
+            return
+        }
+
+        isLoadingBuddyData = true
+        lastLoadedBackendUserId = backendUserId
         Task {
             await refreshAllData(userId: backendUserId)
+            self.isLoadingBuddyData = false
+            self.hasLoadedBuddyData = true
         }
     }
 

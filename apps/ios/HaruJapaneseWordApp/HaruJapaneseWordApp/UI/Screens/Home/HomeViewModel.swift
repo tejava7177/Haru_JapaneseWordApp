@@ -19,6 +19,12 @@ final class HomeViewModel: ObservableObject {
     private let lyricRepository: LyricRepository
     private let buddyAPIService: BuddyAPIServiceProtocol
     private var cancellables: Set<AnyCancellable> = []
+    private var hasLoadedDeck: Bool = false
+    private var lastDeckLoadKey: String?
+    private var isLoadingDeck: Bool = false
+    private var hasLoadedInbox: Bool = false
+    private var lastInboxLoadUserId: String?
+    private var isLoadingInbox: Bool = false
 
     init(
         repository: DictionaryRepository,
@@ -31,38 +37,68 @@ final class HomeViewModel: ObservableObject {
         self.buddyAPIService = buddyAPIService
 
         settingsStore.$settings
+            .removeDuplicates()
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
-                self?.loadDeck()
+                self?.loadDeck(triggerSource: "onChange")
             }
             .store(in: &cancellables)
 
         NotificationCenter.default.publisher(for: .dailyWordsDidRegenerate)
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
-                self?.loadDeck()
+                self?.loadDeck(triggerSource: "notification", force: true)
             }
             .store(in: &cancellables)
 
         NotificationCenter.default.publisher(for: .tsunTsunInboxDidChange)
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
-                self?.loadInboxSummary()
+                self?.loadInboxSummary(triggerSource: "notification", force: true)
             }
             .store(in: &cancellables)
     }
 
-    func loadDeck() {
+    func loadDeck(triggerSource: String = "manual", force: Bool = false) {
+        print("[Home] trigger source=\(triggerSource)")
+        let loadKey = makeDeckLoadKey()
+        if isLoadingDeck, force == false {
+            print("[Home] fetch skipped already loaded")
+            return
+        }
+        if force == false, hasLoadedDeck, lastDeckLoadKey == loadKey {
+            print("[Home] fetch skipped already loaded")
+            return
+        }
+
+        isLoadingDeck = true
+        lastDeckLoadKey = loadKey
         Task {
             async let deckLoad: Void = loadDeckFromPrimarySource()
-            async let inboxLoad: Void = loadInboxSummaryFromPrimarySource()
+            async let inboxLoad: Void = loadInboxSummaryFromPrimarySource(force: force)
             _ = await (deckLoad, inboxLoad)
+            self.isLoadingDeck = false
+            self.hasLoadedDeck = true
         }
     }
 
-    func loadInboxSummary() {
+    func loadInboxSummary(triggerSource: String = "manual", force: Bool = false) {
+        print("[Home] trigger source=\(triggerSource)")
+        let userId = settingsStore.currentBackendUserId
+        if isLoadingInbox, force == false {
+            print("[Home] fetch skipped already loaded")
+            return
+        }
+        if force == false, hasLoadedInbox, lastInboxLoadUserId == userId {
+            print("[Home] fetch skipped already loaded")
+            return
+        }
+
+        isLoadingInbox = true
         Task {
-            await loadInboxSummaryFromPrimarySource()
+            await loadInboxSummaryFromPrimarySource(force: force)
+            self.isLoadingInbox = false
+            self.hasLoadedInbox = true
         }
     }
 
@@ -118,11 +154,19 @@ final class HomeViewModel: ObservableObject {
         }
     }
 
-    private func loadInboxSummaryFromPrimarySource() async {
+    private func loadInboxSummaryFromPrimarySource(force: Bool = false) async {
         guard let currentUserId = settingsStore.currentBackendUserId else {
             tsunTsunInboxSummary = nil
+            lastInboxLoadUserId = nil
+            hasLoadedInbox = false
             return
         }
+
+        if force == false, hasLoadedInbox, lastInboxLoadUserId == currentUserId {
+            return
+        }
+
+        lastInboxLoadUserId = currentUserId
 
         do {
             let response = try await buddyAPIService.fetchTsunTsunInbox(userId: currentUserId)
@@ -188,5 +232,12 @@ final class HomeViewModel: ObservableObject {
         }
 
         return "버디"
+    }
+
+    private func makeDeckLoadKey() -> String {
+        if let backendUserId = settingsStore.currentBackendUserId {
+            return "server:\(backendUserId)"
+        }
+        return "local:\(settingsStore.settings.homeDeckLevel.rawValue)"
     }
 }

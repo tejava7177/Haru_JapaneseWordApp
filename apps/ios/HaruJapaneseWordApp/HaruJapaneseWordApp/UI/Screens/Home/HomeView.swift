@@ -81,10 +81,7 @@ struct HomeView: View {
             }
         }
         .task {
-            viewModel.loadDeck()
-        }
-        .onAppear {
-            viewModel.loadInboxSummary()
+            viewModel.loadDeck(triggerSource: "task")
         }
     }
 

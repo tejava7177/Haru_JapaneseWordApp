@@ -48,6 +48,7 @@ final class AppSettingsStore: ObservableObject {
     }
 
     func updateHomeDeckLevel(_ level: JLPTLevel) {
+        guard settings.homeDeckLevel != level else { return }
         var updated = settings
         updated.homeDeckLevel = level
         settings = updated
@@ -86,9 +87,9 @@ final class AppSettingsStore: ObservableObject {
 
     func signInForMate(userId: String) {
         ensureProfileExists(for: userId)
-        var updated = settings
-        updated.mateUserId = userId
-        updated.homeDeckLevel = profileLevel(for: userId)
+        let resolvedLevel = profileLevel(for: userId)
+        let updated = AppSettings(homeDeckLevel: resolvedLevel, mateUserId: userId)
+        guard updated != settings else { return }
         settings = updated
         save(settings: updated)
     }
@@ -101,6 +102,7 @@ final class AppSettingsStore: ObservableObject {
         guard settings.mateUserId.isEmpty == false else { return }
         var updated = settings
         updated.mateUserId = ""
+        guard updated != settings else { return }
         settings = updated
         save(settings: updated)
     }
@@ -214,34 +216,40 @@ final class AppSettingsStore: ObservableObject {
         jlptLevel: JLPTLevel?,
         avatarData: Data?,
         randomMatchingEnabled: Bool?
-    ) {
-        guard userId.isEmpty == false else { return }
+    ) -> Bool {
+        guard userId.isEmpty == false else { return false }
+
+        var didChange = false
 
         if let nickname {
-            userDefaults.set(nickname, forKey: mateProfileKey(userId: userId, field: "display_name"))
+            didChange = setStringIfNeeded(nickname, forKey: mateProfileKey(userId: userId, field: "display_name")) || didChange
         }
         if let bio {
-            userDefaults.set(bio, forKey: mateProfileKey(userId: userId, field: "bio"))
+            didChange = setStringIfNeeded(bio, forKey: mateProfileKey(userId: userId, field: "bio")) || didChange
         }
         if let instagramId {
-            userDefaults.set(instagramId, forKey: mateProfileKey(userId: userId, field: "instagram_id"))
+            didChange = setStringIfNeeded(instagramId, forKey: mateProfileKey(userId: userId, field: "instagram_id")) || didChange
         }
         if let jlptLevel {
-            userDefaults.set(jlptLevel.rawValue, forKey: mateProfileKey(userId: userId, field: "jlpt_level"))
+            didChange = setStringIfNeeded(jlptLevel.rawValue, forKey: mateProfileKey(userId: userId, field: "jlpt_level")) || didChange
         }
         if let avatarData {
-            userDefaults.set(avatarData, forKey: mateProfileKey(userId: userId, field: "avatar_data"))
+            didChange = setDataIfNeeded(avatarData, forKey: mateProfileKey(userId: userId, field: "avatar_data")) || didChange
         }
         if let randomMatchingEnabled {
-            userDefaults.set(randomMatchingEnabled, forKey: mateProfileKey(userId: userId, field: randomMatchingEnabledField))
+            didChange = setBoolIfNeeded(randomMatchingEnabled, forKey: mateProfileKey(userId: userId, field: randomMatchingEnabledField)) || didChange
         }
 
         if settings.mateUserId == userId, let jlptLevel {
-            var updated = settings
-            updated.homeDeckLevel = jlptLevel
-            settings = updated
-            save(settings: updated)
+            let updated = AppSettings(homeDeckLevel: jlptLevel, mateUserId: settings.mateUserId)
+            if updated != settings {
+                settings = updated
+                save(settings: updated)
+                didChange = true
+            }
         }
+
+        return didChange
     }
 
     func clearLocalStateForDevelopment() {
@@ -281,14 +289,36 @@ final class AppSettingsStore: ObservableObject {
 
     private func updateProfileJLPTLevel(_ level: JLPTLevel, for userId: String) {
         guard userId.isEmpty == false else { return }
-        userDefaults.set(level.rawValue, forKey: mateProfileKey(userId: userId, field: "jlpt_level"))
+        let didChange = setStringIfNeeded(level.rawValue, forKey: mateProfileKey(userId: userId, field: "jlpt_level"))
 
         if settings.mateUserId == userId {
-            var updated = settings
-            updated.homeDeckLevel = level
-            settings = updated
-            save(settings: updated)
+            let updated = AppSettings(homeDeckLevel: level, mateUserId: settings.mateUserId)
+            if updated != settings {
+                settings = updated
+                save(settings: updated)
+            } else if didChange == false {
+                return
+            }
         }
+    }
+
+    private func setStringIfNeeded(_ value: String, forKey key: String) -> Bool {
+        guard userDefaults.string(forKey: key) != value else { return false }
+        userDefaults.set(value, forKey: key)
+        return true
+    }
+
+    private func setDataIfNeeded(_ value: Data, forKey key: String) -> Bool {
+        guard userDefaults.data(forKey: key) != value else { return false }
+        userDefaults.set(value, forKey: key)
+        return true
+    }
+
+    private func setBoolIfNeeded(_ value: Bool, forKey key: String) -> Bool {
+        let object = userDefaults.object(forKey: key) as? Bool
+        guard object != value else { return false }
+        userDefaults.set(value, forKey: key)
+        return true
     }
 
     private func defaultDisplayName(for userId: String) -> String {
