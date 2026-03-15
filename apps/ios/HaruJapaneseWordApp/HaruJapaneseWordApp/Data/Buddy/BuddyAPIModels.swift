@@ -598,12 +598,12 @@ struct BuddyWordItemUIModel: Identifiable, Equatable {
 }
 
 struct CreateBuddyRequestRequest: Encodable {
-    let requesterId: FlexibleUserID
-    let receiverId: FlexibleUserID
+    let requesterId: Int
+    let targetUserId: Int
 
-    init(requesterId: String, receiverId: String) {
-        self.requesterId = FlexibleUserID(rawValue: requesterId)
-        self.receiverId = FlexibleUserID(rawValue: receiverId)
+    init(requesterId: Int, targetUserId: Int) {
+        self.requesterId = requesterId
+        self.targetUserId = targetUserId
     }
 }
 

@@ -13,7 +13,7 @@ protocol BuddyAPIServiceProtocol {
     func fetchRandomCandidates(userId: String) async throws -> [RandomCandidateResponse]
     func fetchIncomingBuddyRequests(userId: String) async throws -> [BuddyRequestResponse]
     func fetchOutgoingBuddyRequests(userId: String) async throws -> [BuddyRequestResponse]
-    func createBuddyRequest(requesterId: String, receiverId: String) async throws -> BuddyRequestActionResponse?
+    func createBuddyRequest(requesterId: Int, targetUserId: Int) async throws -> BuddyRequestActionResponse?
     func acceptBuddyRequest(requestId: Int) async throws -> BuddyRequestActionResponse?
     func rejectBuddyRequest(requestId: Int) async throws -> BuddyRequestActionResponse?
 }
@@ -27,7 +27,7 @@ extension BuddyAPIServiceProtocol {
     func fetchRandomCandidates(userId: String) async throws -> [RandomCandidateResponse] { [] }
     func fetchIncomingBuddyRequests(userId: String) async throws -> [BuddyRequestResponse] { [] }
     func fetchOutgoingBuddyRequests(userId: String) async throws -> [BuddyRequestResponse] { [] }
-    func createBuddyRequest(requesterId: String, receiverId: String) async throws -> BuddyRequestActionResponse? { nil }
+    func createBuddyRequest(requesterId: Int, targetUserId: Int) async throws -> BuddyRequestActionResponse? { nil }
     func acceptBuddyRequest(requestId: Int) async throws -> BuddyRequestActionResponse? { nil }
     func rejectBuddyRequest(requestId: Int) async throws -> BuddyRequestActionResponse? { nil }
 }
@@ -181,9 +181,11 @@ struct BuddyAPIService: BuddyAPIServiceProtocol, Sendable {
         return try await client.get(endpoint, responseType: [BuddyRequestResponse].self)
     }
 
-    nonisolated func createBuddyRequest(requesterId: String, receiverId: String) async throws -> BuddyRequestActionResponse? {
+    nonisolated func createBuddyRequest(requesterId: Int, targetUserId: Int) async throws -> BuddyRequestActionResponse? {
         let endpoint = APIEndpoint(path: "api/buddy-requests", method: .post)
-        let request = CreateBuddyRequestRequest(requesterId: requesterId, receiverId: receiverId)
+        let request = CreateBuddyRequestRequest(requesterId: requesterId, targetUserId: targetUserId)
+        let requestBody = "{\"requesterId\":\(requesterId),\"targetUserId\":\(targetUserId)}"
+        print("[BuddyAPI] POST /api/buddy-requests body=\(requestBody)")
 
         do {
             return try await client.post(endpoint, body: request, responseType: BuddyRequestActionResponse.self)

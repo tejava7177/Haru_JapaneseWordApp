@@ -18,6 +18,15 @@ struct MateBannerMessage: Identifiable, Equatable {
     let text: String
 }
 
+private struct BuddyServerProfile: Equatable {
+    let userId: Int
+    let nickname: String?
+    let jlptLevel: JLPTLevel?
+    let bio: String?
+    let instagramId: String?
+    let avatarData: Data?
+}
+
 struct MateRoomCardItem: Identifiable, Equatable {
     let id: Int
     let counterpartUserId: String
@@ -160,19 +169,23 @@ final class MateViewModel: ObservableObject {
     private let settingsStore: AppSettingsStore
     private let userMetaProvider: MateUserMetaProvider
     private let buddyAPIService: BuddyAPIServiceProtocol
+    private let profileAPIService: ProfileAPIServiceProtocol
     private var cancellables: Set<AnyCancellable> = []
     private var hasLoadedBuddyData: Bool = false
     private var lastLoadedBackendUserId: String?
     private var isLoadingBuddyData: Bool = false
+    private var serverProfileByUserId: [Int: BuddyServerProfile] = [:]
 
     init(
         settingsStore: AppSettingsStore,
         userMetaProvider: MateUserMetaProvider? = nil,
-        buddyAPIService: BuddyAPIServiceProtocol = BuddyAPIService()
+        buddyAPIService: BuddyAPIServiceProtocol = BuddyAPIService(),
+        profileAPIService: ProfileAPIServiceProtocol = ProfileAPIService()
     ) {
         self.settingsStore = settingsStore
         self.userMetaProvider = userMetaProvider ?? DevMateUserMetaProvider(settingsStore: settingsStore)
         self.buddyAPIService = buddyAPIService
+        self.profileAPIService = profileAPIService
 
         settingsStore.$settings
             .removeDuplicates()
@@ -231,6 +244,7 @@ final class MateViewModel: ObservableObject {
             hasLoadedBuddyData = false
             lastLoadedBackendUserId = nil
             isLoadingBuddyData = false
+            serverProfileByUserId = [:]
             return
         }
 
@@ -362,13 +376,24 @@ final class MateViewModel: ObservableObject {
         Task {
             defer { isBusy = false }
             do {
+                guard let requesterId = Int(myUserId) else {
+                    alertMessage = "현재 로그인 사용자 ID 형식이 올바르지 않아요."
+                    isShowingAlert = true
+                    return
+                }
+                print("[Buddy] send buddy request requesterId=\(requesterId) targetUserId=\(receiverId)")
                 _ = try await buddyAPIService.createBuddyRequest(
-                    requesterId: myUserId,
-                    receiverId: String(receiverId)
+                    requesterId: requesterId,
+                    targetUserId: receiverId
                 )
                 showBanner("버디 신청을 보냈어요")
                 await refreshDiscoveryData(userId: myUserId, shouldRefreshIncoming: false)
             } catch {
+                if case let APIError.server(statusCode, message) = error {
+                    print("[Buddy] buddy request failed status=\(statusCode) body=\(message ?? "")")
+                } else {
+                    print("[Buddy] buddy request failed status=unknown body=\(error.localizedDescription)")
+                }
                 alertMessage = error.localizedDescription
                 isShowingAlert = true
             }
@@ -387,6 +412,9 @@ final class MateViewModel: ObservableObject {
             defer { isBusy = false }
             do {
                 _ = try await buddyAPIService.acceptBuddyRequest(requestId: item.requestId)
+                incomingRequests.removeAll { $0.requestId == item.requestId }
+                print("[Buddy] accept success requestId=\(item.requestId) remove incoming item")
+                print("[Buddy] incoming requests count after accept=\(incomingRequests.count)")
                 showBanner("새 버디가 연결되었어요!")
                 await refreshAllData(userId: userId)
             } catch {
@@ -432,6 +460,7 @@ final class MateViewModel: ObservableObject {
         do {
             let buddies = try await buddyAPIService.fetchBuddies(userId: userId)
             print("[Buddy] fetched server buddies count=\(buddies.count)")
+            await cacheServerProfiles(for: buddies.compactMap(\.buddyUserId))
             connectedRoomCards = buddies.map(makeMateRoomCardItem)
             buddyListErrorMessage = nil
         } catch {
@@ -455,6 +484,9 @@ final class MateViewModel: ObservableObject {
             let outgoingResponses = try await outgoingTask
             let candidateResponses = try await candidatesTask
             let pendingOutgoingIds = Set(outgoingResponses.compactMap { $0.receiverId })
+            let incomingUserIds = incomingResponses.compactMap(\.requesterId)
+            let candidateUserIds = candidateResponses.compactMap(\.userId)
+            await cacheServerProfiles(for: incomingUserIds + candidateUserIds)
             let incomingRequesterIds = Set(
                 incomingResponses.compactMap { response -> Int? in
                     response.requesterId ?? (response.id >= 0 ? response.id : nil)
@@ -520,30 +552,31 @@ final class MateViewModel: ObservableObject {
         let backendBuddyId = summary.buddyUserId
         let profileUserId = backendBuddyId.map(String.init) ?? ""
         let fallbackProfile = userMetaProvider.profile(for: profileUserId)
+        let serverProfile = backendBuddyId.flatMap { serverProfileByUserId[$0] }
 
         let resolvedDisplayName = resolvedBuddyText(
-            serverValue: summary.buddyNickname,
+            serverValue: serverProfile?.nickname ?? summary.buddyNickname,
             fallbackValue: fallbackProfile.displayName,
             placeholder: "이름 미정",
             fieldName: "nickname",
             buddyUserId: backendBuddyId
         )
         let resolvedBio = resolvedBuddyText(
-            serverValue: summary.buddyBio,
+            serverValue: serverProfile?.bio ?? summary.buddyBio,
             fallbackValue: fallbackProfile.bio,
             placeholder: "",
             fieldName: "bio",
             buddyUserId: backendBuddyId
         )
         let resolvedInstagramId = resolvedBuddyText(
-            serverValue: summary.buddyInstagramId,
+            serverValue: serverProfile?.instagramId ?? summary.buddyInstagramId,
             fallbackValue: fallbackProfile.instagramId,
             placeholder: "",
             fieldName: "instagramId",
             buddyUserId: backendBuddyId
         )
         let resolvedLevel = resolvedBuddyLevel(
-            serverValue: summary.buddyLearningLevel,
+            serverValue: serverProfile?.jlptLevel ?? summary.buddyLearningLevel,
             fallbackValue: fallbackProfile.jlptLevel,
             buddyUserId: backendBuddyId
         ) ?? .n5
@@ -554,8 +587,19 @@ final class MateViewModel: ObservableObject {
             bio: resolvedBio,
             instagramId: resolvedInstagramId,
             jlptLevel: resolvedLevel,
-            avatarData: decodeAvatarData(from: summary.avatarBase64) ?? fallbackProfile.avatarData
+            avatarData: serverProfile?.avatarData ?? decodeAvatarData(from: summary.avatarBase64) ?? fallbackProfile.avatarData
         )
+
+        if let backendBuddyId {
+            if serverProfile != nil {
+                print(
+                    "[Buddy] using server profile for buddyUserId=\(backendBuddyId) " +
+                    "nickname=\(resolvedDisplayName) level=\(resolvedLevel.rawValue) image=\(resolvedProfile.avatarData != nil)"
+                )
+            } else {
+                print("[Buddy] fallback to local profile for buddyUserId=\(backendBuddyId)")
+            }
+        }
 
         let mapped = MateRoomCardItem(
             id: summary.id,
@@ -569,40 +613,90 @@ final class MateViewModel: ObservableObject {
         )
 
         print(
-            "[Buddy] mapped card backendBuddyUserId=\(backendBuddyId.map(String.init) ?? "nil") " +
-            "nickname=\(mapped.counterpartLabel) tikiTakaCount=\(mapped.resolvedTikiTakaCount)"
+            "[Buddy] mapped card buddyUserId=\(backendBuddyId.map(String.init) ?? "nil") " +
+            "nickname=\(mapped.counterpartLabel) level=\(mapped.jlptLevel.rawValue) " +
+            "tikiTakaCount=\(mapped.resolvedTikiTakaCount)"
         )
         return mapped
     }
 
     private func makeIncomingRequestItem(from response: BuddyRequestResponse) -> IncomingBuddyRequestItem {
-        print("[Buddy] using server request profile requestId=\(response.requestId) nickname=\(response.nickname)")
+        let serverProfile = response.requesterId.flatMap { serverProfileByUserId[$0] }
+        let displayName = serverProfile?.nickname ?? response.nickname
+        let level = serverProfile?.jlptLevel ?? response.jlptLevel
+        let bio = serverProfile?.bio ?? response.bio
+        let instagramId = serverProfile?.instagramId ?? response.instagramId
+        let avatarData = serverProfile?.avatarData ?? decodeAvatarData(from: response.avatarBase64)
+
+        print("[Buddy] using server request profile requestId=\(response.requestId) nickname=\(displayName)")
         return IncomingBuddyRequestItem(
             id: response.id,
             requestId: response.requestId,
             requesterId: response.requesterId,
-            displayName: response.nickname,
-            jlptLevel: response.jlptLevel,
+            displayName: displayName,
+            jlptLevel: level,
             recentAccessText: recentAccessText(from: response.lastActiveAt),
-            bio: response.bio,
-            instagramId: response.instagramId,
-            avatarData: decodeAvatarData(from: response.avatarBase64)
+            bio: bio,
+            instagramId: instagramId,
+            avatarData: avatarData
         )
     }
 
     private func makeRandomCandidateItem(from response: RandomCandidateResponse, pendingOutgoingIds: Set<Int>) -> RandomCandidateItem {
-        print("[Buddy] using server candidate profile userId=\(response.userId.map(String.init) ?? "nil") nickname=\(response.nickname)")
+        let serverProfile = response.userId.flatMap { serverProfileByUserId[$0] }
+        let displayName = serverProfile?.nickname ?? response.nickname
+        let level = serverProfile?.jlptLevel ?? response.jlptLevel
+        let bio = serverProfile?.bio ?? response.bio
+        let instagramId = serverProfile?.instagramId ?? response.instagramId
+        let avatarData = serverProfile?.avatarData ?? decodeAvatarData(from: response.avatarBase64)
+
+        print("[Buddy] using server candidate profile userId=\(response.userId.map(String.init) ?? "nil") nickname=\(displayName)")
         return RandomCandidateItem(
             id: response.id,
             userId: response.userId,
-            displayName: response.nickname,
-            jlptLevel: response.jlptLevel,
+            displayName: displayName,
+            jlptLevel: level,
             recentAccessText: recentAccessText(from: response.lastActiveAt),
-            bio: response.bio,
-            instagramId: response.instagramId,
-            avatarData: decodeAvatarData(from: response.avatarBase64),
+            bio: bio,
+            instagramId: instagramId,
+            avatarData: avatarData,
             isPending: response.userId.map(pendingOutgoingIds.contains) ?? false
         )
+    }
+
+    private func cacheServerProfiles(for userIds: [Int]) async {
+        let uncachedUserIds = Array(Set(userIds)).filter { serverProfileByUserId[$0] == nil }
+        guard uncachedUserIds.isEmpty == false else { return }
+
+        await withTaskGroup(of: BuddyServerProfile?.self) { group in
+            for userId in uncachedUserIds {
+                group.addTask { [profileAPIService] in
+                    do {
+                        let response = try await profileAPIService.fetchUserProfile(userId: String(userId))
+                        return BuddyServerProfile(
+                            userId: userId,
+                            nickname: response.nickname,
+                            jlptLevel: response.learningLevel,
+                            bio: response.bio,
+                            instagramId: response.instagramId,
+                            avatarData: response.avatarBase64.flatMap { rawValue in
+                                let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                                guard trimmed.isEmpty == false else { return nil }
+                                return Data(base64Encoded: trimmed)
+                            }
+                        )
+                    } catch {
+                        print("[Buddy] profile fetch failed userId=\(userId) error=\(error.localizedDescription)")
+                        return nil
+                    }
+                }
+            }
+
+            for await profile in group {
+                guard let profile else { continue }
+                serverProfileByUserId[profile.userId] = profile
+            }
+        }
     }
 
     private func recentAccessText(from rawValue: String?) -> String {
