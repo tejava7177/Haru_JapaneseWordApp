@@ -18,28 +18,48 @@ struct BuddyDiscoveryCardItem: Identifiable, Equatable {
     let isPrimaryActionDisabled: Bool
 }
 
-struct BuddyDiscoverySectionView<Content: View>: View {
+struct BuddyDiscoverySectionView<Content: View, HeaderAccessory: View>: View {
     let title: String
     let subtitle: String?
     let content: Content
+    let headerAccessory: HeaderAccessory
 
-    init(title: String, subtitle: String? = nil, @ViewBuilder content: () -> Content) {
+    init(
+        title: String,
+        subtitle: String? = nil,
+        @ViewBuilder headerAccessory: () -> HeaderAccessory,
+        @ViewBuilder content: () -> Content
+    ) {
         self.title = title
         self.subtitle = subtitle
+        self.headerAccessory = headerAccessory()
+        self.content = content()
+    }
+
+    init(title: String, subtitle: String? = nil, @ViewBuilder content: () -> Content) where HeaderAccessory == EmptyView {
+        self.title = title
+        self.subtitle = subtitle
+        self.headerAccessory = EmptyView()
         self.content = content()
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.headline)
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.headline)
 
-                if let subtitle, subtitle.isEmpty == false {
-                    Text(subtitle)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    if let subtitle, subtitle.isEmpty == false {
+                        Text(subtitle)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
+
+                Spacer(minLength: 0)
+
+                headerAccessory
             }
 
             content

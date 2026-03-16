@@ -162,6 +162,7 @@ final class MateViewModel: ObservableObject {
     @Published private(set) var randomCandidates: [RandomCandidateItem] = []
     @Published private(set) var currentRandomCandidateIndex: Int = 0
     @Published private(set) var isRefreshingDiscoveryData: Bool = false
+    @Published private(set) var isRefreshingCandidate: Bool = false
     @Published var bannerMessage: MateBannerMessage?
     @Published var discoveryErrorMessage: String?
     @Published var buddyListErrorMessage: String?
@@ -172,6 +173,7 @@ final class MateViewModel: ObservableObject {
     private let profileAPIService: ProfileAPIServiceProtocol
     private var cancellables: Set<AnyCancellable> = []
     private var hasLoadedBuddyData: Bool = false
+    private var hasLoadedRandomCandidates: Bool = false
     private var lastLoadedBackendUserId: String?
     private var isLoadingBuddyData: Bool = false
     private var serverProfileByUserId: [Int: BuddyServerProfile] = [:]
@@ -237,15 +239,23 @@ final class MateViewModel: ObservableObject {
             outgoingRequests = []
             randomCandidates = []
             currentRandomCandidateIndex = 0
+            isRefreshingCandidate = false
             inviteCode = ""
             inviteSectionErrorMessage = nil
             buddyListErrorMessage = nil
             discoveryErrorMessage = nil
             hasLoadedBuddyData = false
+            hasLoadedRandomCandidates = false
             lastLoadedBackendUserId = nil
             isLoadingBuddyData = false
             serverProfileByUserId = [:]
             return
+        }
+
+        if lastLoadedBackendUserId != backendUserId {
+            hasLoadedRandomCandidates = false
+            randomCandidates = []
+            currentRandomCandidateIndex = 0
         }
 
         if isLoadingBuddyData, force == false {
@@ -255,6 +265,9 @@ final class MateViewModel: ObservableObject {
 
         if force == false, hasLoadedBuddyData, lastLoadedBackendUserId == backendUserId {
             print("[Buddy] fetch skipped already loaded")
+            Task {
+                await loadRandomCandidatesIfNeeded(userId: backendUserId)
+            }
             return
         }
 
@@ -262,6 +275,7 @@ final class MateViewModel: ObservableObject {
         lastLoadedBackendUserId = backendUserId
         Task {
             await refreshAllData(userId: backendUserId)
+            await loadRandomCandidatesIfNeeded(userId: backendUserId)
             self.isLoadingBuddyData = false
             self.hasLoadedBuddyData = true
         }
@@ -349,12 +363,19 @@ final class MateViewModel: ObservableObject {
         }
     }
 
-    func refreshRandomCandidates() {
-        Task {
-            guard let userId = settingsStore.currentBackendUserId else { return }
-            if moveToNextRandomCandidate() == false {
-                await refreshDiscoveryData(userId: userId, shouldRefreshIncoming: false)
-            }
+    func refreshRandomCandidates() async {
+        guard let userId = settingsStore.currentBackendUserId else { return }
+        guard isRefreshingCandidate == false else { return }
+
+        if randomCandidates.count <= 1 {
+            print("[Buddy] refresh animation finished -> start API")
+            await reloadRandomCandidates(userId: userId, triggerSource: "manual")
+            return
+        }
+
+        if showNextCandidate() == false {
+            print("[Buddy] refresh animation finished -> start API")
+            await reloadRandomCandidates(userId: userId, triggerSource: "indexExhausted")
         }
     }
 
@@ -387,7 +408,8 @@ final class MateViewModel: ObservableObject {
                     targetUserId: receiverId
                 )
                 showBanner("버디 신청을 보냈어요")
-                await refreshDiscoveryData(userId: myUserId, shouldRefreshIncoming: false)
+                await refreshRequestData(userId: myUserId, shouldRefreshIncoming: false)
+                applyPendingStateToRandomCandidates()
             } catch {
                 if case let APIError.server(statusCode, message) = error {
                     print("[Buddy] buddy request failed status=\(statusCode) body=\(message ?? "")")
@@ -437,7 +459,7 @@ final class MateViewModel: ObservableObject {
             do {
                 _ = try await buddyAPIService.rejectBuddyRequest(requestId: item.requestId)
                 showBanner("버디 신청을 거절했어요")
-                await refreshDiscoveryData(userId: userId)
+                await refreshRequestData(userId: userId)
             } catch {
                 alertMessage = error.localizedDescription
                 isShowingAlert = true
@@ -451,7 +473,7 @@ final class MateViewModel: ObservableObject {
                 await self?.refreshBuddyList(userId: userId)
             }
             group.addTask { [weak self] in
-                await self?.refreshDiscoveryData(userId: userId, shouldRefreshIncoming: shouldRefreshIncoming)
+                await self?.refreshRequestData(userId: userId, shouldRefreshIncoming: shouldRefreshIncoming)
             }
         }
     }
@@ -469,7 +491,7 @@ final class MateViewModel: ObservableObject {
         }
     }
 
-    private func refreshDiscoveryData(userId: String, shouldRefreshIncoming: Bool = true) async {
+    private func refreshRequestData(userId: String, shouldRefreshIncoming: Bool = true) async {
         isRefreshingDiscoveryData = true
         defer { isRefreshingDiscoveryData = false }
 
@@ -478,63 +500,119 @@ final class MateViewModel: ObservableObject {
                 ? buddyAPIService.fetchIncomingBuddyRequests(userId: userId)
                 : []
             async let outgoingTask = buddyAPIService.fetchOutgoingBuddyRequests(userId: userId)
-            async let candidatesTask = buddyAPIService.fetchRandomCandidates(userId: userId)
 
             let incomingResponses = try await incomingTask
             let outgoingResponses = try await outgoingTask
-            let candidateResponses = try await candidatesTask
-            let pendingOutgoingIds = Set(outgoingResponses.compactMap { $0.receiverId })
             let incomingUserIds = incomingResponses.compactMap(\.requesterId)
-            let candidateUserIds = candidateResponses.compactMap(\.userId)
-            await cacheServerProfiles(for: incomingUserIds + candidateUserIds)
-            let incomingRequesterIds = Set(
-                incomingResponses.compactMap { response -> Int? in
-                    response.requesterId ?? (response.id >= 0 ? response.id : nil)
-                }
-            )
-            let filteredCandidateResponses = candidateResponses.filter { response in
-                let candidateId = response.userId ?? (response.id >= 0 ? response.id : nil)
-                guard let candidateId else { return true }
-                return incomingRequesterIds.contains(candidateId) == false
-            }
-
-            if filteredCandidateResponses.count != candidateResponses.count {
-                print("[Buddy] filtered duplicate candidates count=\(candidateResponses.count - filteredCandidateResponses.count)")
-            }
+            await cacheServerProfiles(for: incomingUserIds)
 
             if shouldRefreshIncoming {
                 incomingRequests = incomingResponses.map(makeIncomingRequestItem)
             }
             outgoingRequests = outgoingResponses
-            randomCandidates = filteredCandidateResponses.map {
-                makeRandomCandidateItem(from: $0, pendingOutgoingIds: pendingOutgoingIds)
-            }
-            normalizeCurrentRandomCandidateIndex()
+            applyPendingStateToRandomCandidates()
             discoveryErrorMessage = nil
         } catch {
             if shouldRefreshIncoming {
                 incomingRequests = []
             }
             outgoingRequests = []
-            randomCandidates = []
-            currentRandomCandidateIndex = 0
             discoveryErrorMessage = error.localizedDescription
         }
     }
 
-    private func moveToNextRandomCandidate() -> Bool {
+    private func loadRandomCandidatesIfNeeded(userId: String) async {
+        if hasLoadedRandomCandidates {
+            print("[Buddy] random candidates initial load skipped/already loaded")
+            return
+        }
+
+        print("[Buddy] random candidates initial load start")
+        await reloadRandomCandidates(userId: userId, triggerSource: "initial")
+    }
+
+    private func reloadRandomCandidates(userId: String, triggerSource: String) async {
+        guard isRefreshingCandidate == false else { return }
+
+        print("[Buddy] random candidate refresh trigger source=\(triggerSource)")
+        print("[Buddy] random candidates reload start")
+
+        isRefreshingCandidate = true
+        defer { isRefreshingCandidate = false }
+
+        do {
+            let candidateResponses = try await buddyAPIService.fetchRandomCandidates(userId: userId)
+            let candidateUserIds = candidateResponses.compactMap(\.userId)
+            await cacheServerProfiles(for: candidateUserIds)
+            applyRandomCandidateResponses(candidateResponses)
+            hasLoadedRandomCandidates = true
+            print("[Buddy] random candidates reload success count=\(randomCandidates.count)")
+            discoveryErrorMessage = nil
+        } catch {
+            randomCandidates = []
+            currentRandomCandidateIndex = 0
+            hasLoadedRandomCandidates = false
+            discoveryErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func showNextCandidate() -> Bool {
         guard randomCandidates.count > 1 else {
             return false
         }
 
         let nextIndex = currentRandomCandidateIndex + 1
         guard randomCandidates.indices.contains(nextIndex) else {
-            currentRandomCandidateIndex = 0
+            print("[Buddy] show next candidate reached end -> reload")
             return false
         }
 
         currentRandomCandidateIndex = nextIndex
+        print("[Buddy] show next candidate local index=\(currentRandomCandidateIndex) without network")
         return true
+    }
+
+    private func applyRandomCandidateResponses(_ candidateResponses: [RandomCandidateResponse]) {
+        let pendingOutgoingIds = Set(outgoingRequests.compactMap { $0.receiverId })
+        let incomingRequesterIds = Set(
+            incomingRequests.compactMap { item in
+                item.requesterId ?? (item.id >= 0 ? item.id : nil)
+            }
+        )
+        let filteredCandidateResponses = candidateResponses.filter { response in
+            let candidateId = response.userId ?? (response.id >= 0 ? response.id : nil)
+            guard let candidateId else { return true }
+            return incomingRequesterIds.contains(candidateId) == false
+        }
+
+        if filteredCandidateResponses.count != candidateResponses.count {
+            print("[Buddy] filtered duplicate candidates count=\(candidateResponses.count - filteredCandidateResponses.count)")
+        }
+
+        randomCandidates = filteredCandidateResponses.map {
+            makeRandomCandidateItem(from: $0, pendingOutgoingIds: pendingOutgoingIds)
+        }
+        currentRandomCandidateIndex = 0
+        normalizeCurrentRandomCandidateIndex()
+    }
+
+    private func applyPendingStateToRandomCandidates() {
+        let pendingOutgoingIds = Set(outgoingRequests.compactMap(\.receiverId))
+        randomCandidates = randomCandidates.map { item in
+            guard let userId = item.userId else { return item }
+            return RandomCandidateItem(
+                id: item.id,
+                userId: item.userId,
+                displayName: item.displayName,
+                jlptLevel: item.jlptLevel,
+                recentAccessText: item.recentAccessText,
+                bio: item.bio,
+                instagramId: item.instagramId,
+                avatarData: item.avatarData,
+                isPending: pendingOutgoingIds.contains(userId)
+            )
+        }
+        normalizeCurrentRandomCandidateIndex()
     }
 
     private func normalizeCurrentRandomCandidateIndex() {

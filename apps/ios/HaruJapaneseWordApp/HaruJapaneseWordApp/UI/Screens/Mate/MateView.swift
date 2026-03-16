@@ -2,11 +2,15 @@ import SwiftUI
 import UIKit
 
 struct MateView: View {
+    private let refreshIconAnimationDuration: Double = 0.8
+
     @StateObject private var viewModel: MateViewModel
     @State private var isInviteSectionExpanded: Bool = false
     @State private var selectedBuddy: MateRoomCardItem?
     @State private var isShowingBuddyDetail: Bool = false
     @State private var previewBuddy: BuddyProfilePreviewItem?
+    @State private var candidateRefreshIconRotation: Double = 0
+    @State private var isAnimatingRefreshIcon: Bool = false
 
     init(viewModel: MateViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -198,7 +202,29 @@ struct MateView: View {
     }
 
     private var randomCandidatesSection: some View {
-        BuddyDiscoverySectionView(title: "랜덤 매칭 후보") {
+        BuddyDiscoverySectionView(
+            title: "랜덤 매칭 후보",
+            headerAccessory: {
+                if viewModel.randomCandidates.isEmpty == false {
+                    Button {
+                        handleRandomCandidateRefreshTap()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Color.accentColor)
+                            .rotationEffect(.degrees(candidateRefreshIconRotation))
+                            .frame(width: 32, height: 32)
+                            .background(Color(uiColor: .secondarySystemBackground))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .contentShape(Circle())
+                    .disabled(isAnimatingRefreshIcon || viewModel.isRefreshingCandidate || viewModel.isBusy)
+                    .opacity(isAnimatingRefreshIcon || viewModel.isRefreshingCandidate || viewModel.isBusy ? 0.5 : 1)
+                    .accessibilityLabel(isAnimatingRefreshIcon || viewModel.isRefreshingCandidate ? "후보 불러오는 중" : "다른 후보 보기")
+                }
+            }
+        ) {
             VStack(alignment: .leading, spacing: 12) {
                 if let candidate = viewModel.currentRandomCandidate {
                     BuddyDiscoveryCardView(
@@ -214,16 +240,40 @@ struct MateView: View {
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-
-                if viewModel.randomCandidates.isEmpty == false {
-                    Button(viewModel.isRefreshingDiscoveryData ? "불러오는 중..." : "다른 후보 보기") {
-                        viewModel.refreshRandomCandidates()
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(viewModel.isRefreshingDiscoveryData || viewModel.isBusy)
-                }
             }
         }
+    }
+
+    private func handleRandomCandidateRefreshTap() {
+        guard isAnimatingRefreshIcon == false,
+              viewModel.isRefreshingCandidate == false,
+              viewModel.isBusy == false else {
+            return
+        }
+
+        print("[Buddy] refresh icon tapped")
+
+        Task {
+            await animateRefreshIconOnce()
+            print("[Buddy] refresh animation finished")
+            await viewModel.refreshRandomCandidates()
+        }
+    }
+
+    @MainActor
+    private func animateRefreshIconOnce() async {
+        print("[Buddy] refresh animation start")
+        isAnimatingRefreshIcon = true
+        candidateRefreshIconRotation = 0
+
+        withAnimation(.linear(duration: refreshIconAnimationDuration)) {
+            candidateRefreshIconRotation = 360
+        }
+
+        try? await Task.sleep(nanoseconds: UInt64(refreshIconAnimationDuration * 1_000_000_000))
+
+        candidateRefreshIconRotation = 0
+        isAnimatingRefreshIcon = false
     }
 
     private func toastView(for celebration: MatchCelebration) -> some View {
