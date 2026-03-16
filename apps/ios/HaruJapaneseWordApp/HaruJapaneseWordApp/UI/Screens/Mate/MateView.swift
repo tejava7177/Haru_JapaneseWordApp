@@ -52,10 +52,12 @@ struct MateView: View {
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
 
-                incomingRequestsSection
-                    .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 6, trailing: 16))
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
+                if viewModel.incomingRequests.isEmpty == false {
+                    incomingRequestsSection
+                        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 6, trailing: 16))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                }
 
                 randomCandidatesSection
                     .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 6, trailing: 16))
@@ -162,22 +164,15 @@ struct MateView: View {
             title: "받은 버디 신청",
             subtitle: viewModel.incomingRequestCount > 0 ? "도착한 신청에 바로 응답할 수 있어요." : nil
         ) {
-            if viewModel.incomingRequests.isEmpty {
-                Text(viewModel.discoveryErrorMessage ?? "받은 버디 신청이 없어요")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            } else {
-                VStack(spacing: 10) {
-                    ForEach(viewModel.incomingRequests) { item in
-                        BuddyDiscoveryCardView(
-                            item: item.cardItem,
-                            onPrimaryAction: { viewModel.acceptIncomingRequest(item) },
-                            onSecondaryAction: { viewModel.rejectIncomingRequest(item) },
-                            secondaryActionTitle: "거절",
-                            onPreviewTap: { previewBuddy = item.previewItem }
-                        )
-                    }
+            VStack(spacing: 10) {
+                ForEach(viewModel.incomingRequests) { item in
+                    BuddyDiscoveryCardView(
+                        item: item.cardItem,
+                        onPrimaryAction: { viewModel.acceptIncomingRequest(item) },
+                        onSecondaryAction: { viewModel.rejectIncomingRequest(item) },
+                        secondaryActionTitle: "거절",
+                        onPreviewTap: { previewBuddy = item.previewItem }
+                    )
                 }
             }
         }
