@@ -110,6 +110,15 @@ struct ProfileView: View {
         } message: {
             Text(viewModel.randomMatchingErrorMessage ?? "랜덤 매칭 설정을 저장하지 못했어요.")
         }
+        .alert("사진 불러오기 실패", isPresented: Binding(get: {
+            viewModel.avatarLoadErrorMessage != nil
+        }, set: { _ in
+            viewModel.clearAvatarLoadError()
+        })) {
+            Button("확인", role: .cancel) { }
+        } message: {
+            Text(viewModel.avatarLoadErrorMessage ?? "선택한 사진을 불러오지 못했어요. 다른 사진으로 다시 시도해 주세요.")
+        }
         .alert("로컬 상태 초기화 실패", isPresented: Binding(get: {
             viewModel.localResetErrorMessage != nil
         }, set: { _ in

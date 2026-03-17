@@ -190,7 +190,6 @@ final class MateViewModel: ObservableObject {
         self.profileAPIService = profileAPIService
 
         settingsStore.$settings
-            .removeDuplicates()
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 self?.load(triggerSource: "onChange")
@@ -482,7 +481,8 @@ final class MateViewModel: ObservableObject {
         do {
             let buddies = try await buddyAPIService.fetchBuddies(userId: userId)
             print("[Buddy] fetched server buddies count=\(buddies.count)")
-            await cacheServerProfiles(for: buddies.compactMap(\.buddyUserId))
+            let counterpartUserIds = buddies.compactMap { resolvedBuddyUserId(from: $0) }
+            await cacheServerProfiles(for: counterpartUserIds)
             connectedRoomCards = buddies.map(makeMateRoomCardItem)
             buddyListErrorMessage = nil
         } catch {
@@ -627,7 +627,7 @@ final class MateViewModel: ObservableObject {
     }
 
     private func makeMateRoomCardItem(from summary: BuddySummaryResponse) -> MateRoomCardItem {
-        let backendBuddyId = summary.buddyUserId
+        let backendBuddyId = resolvedBuddyUserId(from: summary)
         let profileUserId = backendBuddyId.map(String.init) ?? ""
         let fallbackProfile = userMetaProvider.profile(for: profileUserId)
         let serverProfile = backendBuddyId.flatMap { serverProfileByUserId[$0] }
@@ -659,24 +659,30 @@ final class MateViewModel: ObservableObject {
             buddyUserId: backendBuddyId
         ) ?? .n5
 
+        let resolvedAvatar = resolvedBuddyAvatarData(
+            buddyUserId: backendBuddyId,
+            serverProfile: serverProfile,
+            summaryAvatarBase64: summary.avatarBase64,
+            fallbackAvatarData: fallbackProfile.avatarData
+        )
+
         let resolvedProfile = MateUserProfile(
             userId: profileUserId,
             displayName: resolvedDisplayName,
             bio: resolvedBio,
             instagramId: resolvedInstagramId,
             jlptLevel: resolvedLevel,
-            avatarData: serverProfile?.avatarData ?? decodeAvatarData(from: summary.avatarBase64) ?? fallbackProfile.avatarData
+            avatarData: resolvedAvatar.data
         )
 
         if let backendBuddyId {
-            if serverProfile != nil {
-                print(
-                    "[Buddy] using server profile for buddyUserId=\(backendBuddyId) " +
-                    "nickname=\(resolvedDisplayName) level=\(resolvedLevel.rawValue) image=\(resolvedProfile.avatarData != nil)"
-                )
-            } else {
-                print("[Buddy] fallback to local profile for buddyUserId=\(backendBuddyId)")
-            }
+            print(
+                "[Buddy] mapped card buddyUserId=\(backendBuddyId) " +
+                "nickname=\(resolvedDisplayName) level=\(resolvedLevel.rawValue) " +
+                "imageSource=\(resolvedAvatar.source) avatarDataIsNil=\(resolvedAvatar.data == nil)"
+            )
+        } else {
+            print("[Buddy] mapped card buddyUserId=nil nickname=\(resolvedDisplayName) level=\(resolvedLevel.rawValue) imageSource=\(resolvedAvatar.source) avatarDataIsNil=\(resolvedAvatar.data == nil)")
         }
 
         let mapped = MateRoomCardItem(
@@ -690,11 +696,7 @@ final class MateViewModel: ObservableObject {
             tikiTakaCount: summary.tikiTakaCount
         )
 
-        print(
-            "[Buddy] mapped card buddyUserId=\(backendBuddyId.map(String.init) ?? "nil") " +
-            "nickname=\(mapped.counterpartLabel) level=\(mapped.jlptLevel.rawValue) " +
-            "tikiTakaCount=\(mapped.resolvedTikiTakaCount)"
-        )
+        print("[Buddy] card tikiTakaCount buddyUserId=\(backendBuddyId.map(String.init) ?? "nil") count=\(mapped.resolvedTikiTakaCount)")
         return mapped
     }
 
@@ -704,7 +706,11 @@ final class MateViewModel: ObservableObject {
         let level = serverProfile?.jlptLevel ?? response.jlptLevel
         let bio = serverProfile?.bio ?? response.bio
         let instagramId = serverProfile?.instagramId ?? response.instagramId
-        let avatarData = serverProfile?.avatarData ?? decodeAvatarData(from: response.avatarBase64)
+        let avatarData = resolvedRequestAvatarData(
+            buddyUserId: response.requesterId,
+            serverProfile: serverProfile,
+            responseAvatarBase64: response.avatarBase64
+        )
 
         print("[Buddy] using server request profile requestId=\(response.requestId) nickname=\(displayName)")
         return IncomingBuddyRequestItem(
@@ -726,7 +732,11 @@ final class MateViewModel: ObservableObject {
         let level = serverProfile?.jlptLevel ?? response.jlptLevel
         let bio = serverProfile?.bio ?? response.bio
         let instagramId = serverProfile?.instagramId ?? response.instagramId
-        let avatarData = serverProfile?.avatarData ?? decodeAvatarData(from: response.avatarBase64)
+        let avatarData = resolvedCandidateAvatarData(
+            buddyUserId: response.userId,
+            serverProfile: serverProfile,
+            responseAvatarBase64: response.avatarBase64
+        )
 
         print("[Buddy] using server candidate profile userId=\(response.userId.map(String.init) ?? "nil") nickname=\(displayName)")
         return RandomCandidateItem(
@@ -751,17 +761,33 @@ final class MateViewModel: ObservableObject {
                 group.addTask { [profileAPIService] in
                     do {
                         let response = try await profileAPIService.fetchUserProfile(userId: String(userId))
+                        let avatarBase64Exists: Bool
+                        let avatarData: Data?
+                        if let rawValue = response.avatarBase64 {
+                            avatarBase64Exists = true
+                            let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if trimmed.isEmpty {
+                                avatarData = nil
+                            } else {
+                                avatarData = Data(base64Encoded: trimmed)
+                            }
+                        } else if let profileImageUrl = response.profileImageUrl,
+                                  let downloadedData = await self.downloadImageData(from: profileImageUrl) {
+                            avatarBase64Exists = false
+                            avatarData = downloadedData
+                        } else {
+                            avatarBase64Exists = false
+                            avatarData = nil
+                        }
+                        print("[Buddy] fetched server profile userId=\(userId) avatarBase64Exists=\(avatarBase64Exists)")
+                        print("[Buddy] decoded avatarData isNil=\(avatarData == nil)")
                         return BuddyServerProfile(
                             userId: userId,
                             nickname: response.nickname,
                             jlptLevel: response.learningLevel,
                             bio: response.bio,
                             instagramId: response.instagramId,
-                            avatarData: response.avatarBase64.flatMap { rawValue in
-                                let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
-                                guard trimmed.isEmpty == false else { return nil }
-                                return Data(base64Encoded: trimmed)
-                            }
+                            avatarData: avatarData
                         )
                     } catch {
                         print("[Buddy] profile fetch failed userId=\(userId) error=\(error.localizedDescription)")
@@ -808,6 +834,92 @@ final class MateViewModel: ObservableObject {
             return nil
         }
         return Data(base64Encoded: base64)
+    }
+
+    private func resolvedBuddyUserId(from summary: BuddySummaryResponse) -> Int? {
+        summary.buddyUserId ?? summary.userId
+    }
+
+    private func resolvedBuddyAvatarData(
+        buddyUserId: Int?,
+        serverProfile: BuddyServerProfile?,
+        summaryAvatarBase64: String?,
+        fallbackAvatarData: Data?
+    ) -> (data: Data?, source: String) {
+        if let buddyUserId, let avatarData = serverProfile?.avatarData {
+            print("[Buddy] using server profile image for buddyUserId=\(buddyUserId) image=true")
+            return (avatarData, "serverProfile")
+        }
+
+        if let avatarData = decodeAvatarData(from: summaryAvatarBase64) {
+            return (avatarData, "buddySummary")
+        }
+
+        if let buddyUserId {
+            print("[Buddy] buddy summary image missing for buddyUserId=\(buddyUserId)")
+        }
+
+        if let buddyUserId, let fallbackAvatarData {
+            print("[Buddy] fallback to local profile image for buddyUserId=\(buddyUserId)")
+            return (fallbackAvatarData, "localFallback")
+        }
+
+        if let buddyUserId {
+            print("[Buddy] fallback to default avatar for buddyUserId=\(buddyUserId)")
+        } else {
+            print("[Buddy] fallback to default avatar for buddyUserId=nil")
+        }
+        return (nil, "default")
+    }
+
+    private func resolvedRequestAvatarData(
+        buddyUserId: Int?,
+        serverProfile: BuddyServerProfile?,
+        responseAvatarBase64: String?
+    ) -> Data? {
+        if let buddyUserId, let avatarData = serverProfile?.avatarData {
+            print("[Buddy] using server profile image for buddyUserId=\(buddyUserId) image=true")
+            return avatarData
+        }
+
+        return decodeAvatarData(from: responseAvatarBase64)
+    }
+
+    private func resolvedCandidateAvatarData(
+        buddyUserId: Int?,
+        serverProfile: BuddyServerProfile?,
+        responseAvatarBase64: String?
+    ) -> Data? {
+        if let buddyUserId, let avatarData = serverProfile?.avatarData {
+            print("[Buddy] using server profile image for buddyUserId=\(buddyUserId) image=true")
+            return avatarData
+        }
+
+        return decodeAvatarData(from: responseAvatarBase64)
+    }
+
+    private func downloadImageData(from path: String) async -> Data? {
+        guard let url = resolvedImageURL(from: path) else { return nil }
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            guard let httpResponse = response as? HTTPURLResponse,
+                  (200..<300).contains(httpResponse.statusCode) else {
+                return nil
+            }
+            return data
+        } catch {
+            print("[Buddy] image download failed url=\(path) error=\(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    private func resolvedImageURL(from path: String) -> URL? {
+        if let url = URL(string: path), url.scheme != nil {
+            return url
+        }
+
+        let trimmedPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return APIConfiguration.baseURL.appendingPathComponent(trimmedPath)
     }
 
     private func showBanner(_ message: String) {

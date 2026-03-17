@@ -92,6 +92,39 @@ final class APIClient: @unchecked Sendable {
         _ = try await perform(request)
     }
 
+    func postMultipart<Response: Decodable>(
+        _ endpoint: APIEndpoint,
+        fileData: Data,
+        fieldName: String,
+        fileName: String,
+        mimeType: String,
+        responseType: Response.Type
+    ) async throws -> Response {
+        let boundary = "Boundary-\(UUID().uuidString)"
+        let body = makeMultipartBody(
+            boundary: boundary,
+            fileData: fileData,
+            fieldName: fieldName,
+            fileName: fileName,
+            mimeType: mimeType
+        )
+        let request = try makeMultipartRequest(for: endpoint, body: body, boundary: boundary)
+        let data = try await perform(request)
+        logResponseBodyIfNeeded(data, request: request)
+
+        do {
+            return try decoder.decode(Response.self, from: data)
+        } catch {
+            logDecodingFailure(
+                error,
+                data: data,
+                modelName: String(describing: Response.self),
+                request: request
+            )
+            throw APIError.decodingFailed(error)
+        }
+    }
+
     func patch<Request: Encodable, Response: Decodable>(
         _ endpoint: APIEndpoint,
         body: Request,
@@ -139,6 +172,18 @@ final class APIClient: @unchecked Sendable {
     }
 
     private func makeRequest(for endpoint: APIEndpoint, body: Data?) throws -> URLRequest {
+        try makeRequest(for: endpoint, body: body, contentType: body == nil ? nil : "application/json")
+    }
+
+    private func makeMultipartRequest(for endpoint: APIEndpoint, body: Data, boundary: String) throws -> URLRequest {
+        try makeRequest(
+            for: endpoint,
+            body: body,
+            contentType: "multipart/form-data; boundary=\(boundary)"
+        )
+    }
+
+    private func makeRequest(for endpoint: APIEndpoint, body: Data?, contentType: String?) throws -> URLRequest {
         guard var components = URLComponents(
             url: baseURL.appendingPathComponent(endpoint.path),
             resolvingAgainstBaseURL: false
@@ -159,9 +204,35 @@ final class APIClient: @unchecked Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let body {
             request.httpBody = body
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            if let contentType {
+                request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+            }
         }
         return request
+    }
+
+    private func makeMultipartBody(
+        boundary: String,
+        fileData: Data,
+        fieldName: String,
+        fileName: String,
+        mimeType: String
+    ) -> Data {
+        var body = Data()
+        let lineBreak = "\r\n"
+
+        body.append(Data("--\(boundary)\(lineBreak)".utf8))
+        body.append(
+            Data(
+                "Content-Disposition: form-data; name=\"\(fieldName)\"; filename=\"\(fileName)\"\(lineBreak)".utf8
+            )
+        )
+        body.append(Data("Content-Type: \(mimeType)\(lineBreak)\(lineBreak)".utf8))
+        body.append(fileData)
+        body.append(Data(lineBreak.utf8))
+        body.append(Data("--\(boundary)--\(lineBreak)".utf8))
+
+        return body
     }
 
     private func perform(_ request: URLRequest) async throws -> Data {

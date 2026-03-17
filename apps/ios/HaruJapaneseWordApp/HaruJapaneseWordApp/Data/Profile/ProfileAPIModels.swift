@@ -6,6 +6,7 @@ struct ServerUserProfileResponse: Decodable {
     let learningLevel: JLPTLevel?
     let bio: String?
     let instagramId: String?
+    let profileImageUrl: String?
     let avatarBase64: String?
     let randomMatchingEnabled: Bool?
 
@@ -24,6 +25,11 @@ struct ServerUserProfileResponse: Decodable {
         case instagramId
         case instagram
         case instagramHandle
+        case profileImageUrl
+        case profileImageURL
+        case profileImage
+        case imageUrl
+        case imageURL
         case avatarBase64
         case avatarImageBase64
         case avatar
@@ -38,6 +44,7 @@ struct ServerUserProfileResponse: Decodable {
         learningLevel: JLPTLevel?,
         bio: String?,
         instagramId: String?,
+        profileImageUrl: String?,
         avatarBase64: String?,
         randomMatchingEnabled: Bool?
     ) {
@@ -46,6 +53,7 @@ struct ServerUserProfileResponse: Decodable {
         self.learningLevel = learningLevel
         self.bio = bio
         self.instagramId = instagramId
+        self.profileImageUrl = profileImageUrl
         self.avatarBase64 = avatarBase64
         self.randomMatchingEnabled = randomMatchingEnabled
     }
@@ -59,10 +67,38 @@ struct ServerUserProfileResponse: Decodable {
         learningLevel = levelRaw.flatMap { JLPTLevel(rawValue: $0.uppercased()) }
         bio = try container.decodeFirstNonEmptyString(forKeys: [.bio, .introduction, .oneLineIntro])
         instagramId = try container.decodeFirstNonEmptyString(forKeys: [.instagramId, .instagram, .instagramHandle])
+        profileImageUrl = try container.decodeFirstNonEmptyString(forKeys: [.profileImageUrl, .profileImageURL, .profileImage, .imageUrl, .imageURL])
         avatarBase64 = try container.decodeFirstNonEmptyString(forKeys: [.avatarBase64, .avatarImageBase64, .avatar])
         randomMatchingEnabled = try container.decodeFlexibleBoolIfPresent(forKey: .randomMatchingEnabled)
             ?? container.decodeFlexibleBoolIfPresent(forKey: .enabled)
             ?? container.decodeFlexibleBoolIfPresent(forKey: .isEnabled)
+    }
+}
+
+struct UploadProfileImageResponse: Decodable {
+    let userId: Int?
+    let profileImageUrl: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case userId
+        case id
+        case profileImageUrl
+        case profileImageURL
+        case profileImage
+        case imageUrl
+        case imageURL
+    }
+
+    init(userId: Int?, profileImageUrl: String?) {
+        self.userId = userId
+        self.profileImageUrl = profileImageUrl
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        userId = try container.decodeFlexibleIntIfPresent(forKey: .userId)
+            ?? container.decodeFlexibleIntIfPresent(forKey: .id)
+        profileImageUrl = try container.decodeFirstNonEmptyString(forKeys: [.profileImageUrl, .profileImageURL, .profileImage, .imageUrl, .imageURL])
     }
 }
 

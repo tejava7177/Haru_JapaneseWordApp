@@ -2,6 +2,7 @@ import Foundation
 
 protocol ProfileAPIServiceProtocol {
     func fetchUserProfile(userId: String) async throws -> ServerUserProfileResponse
+    func uploadProfileImage(userId: String, imageData: Data, fileName: String, mimeType: String) async throws -> UploadProfileImageResponse
     func updateLearningLevel(userId: String, level: JLPTLevel) async throws -> UpdateLearningLevelResponse
     func regenerateTodayDailyWords(userId: String) async throws -> RegenerateDailyWordsResponse
     func updateRandomMatching(userId: String, enabled: Bool) async throws -> ToggleRandomMatchingResponse
@@ -15,9 +16,13 @@ extension ProfileAPIServiceProtocol {
             learningLevel: nil,
             bio: nil,
             instagramId: nil,
+            profileImageUrl: nil,
             avatarBase64: nil,
             randomMatchingEnabled: nil
         )
+    }
+    func uploadProfileImage(userId: String, imageData: Data, fileName: String, mimeType: String) async throws -> UploadProfileImageResponse {
+        UploadProfileImageResponse(userId: Int(userId), profileImageUrl: nil)
     }
 }
 
@@ -32,6 +37,39 @@ struct ProfileAPIService: ProfileAPIServiceProtocol, Sendable {
         print("[ProfileAPI] GET /api/users/\(userId)")
         let endpoint = APIEndpoint(path: "api/users/\(userId)")
         return try await client.get(endpoint, responseType: ServerUserProfileResponse.self)
+    }
+
+    nonisolated func uploadProfileImage(
+        userId: String,
+        imageData: Data,
+        fileName: String,
+        mimeType: String
+    ) async throws -> UploadProfileImageResponse {
+        print("[ProfileAPI] POST /api/users/\(userId)/profile-image multipart fileName=\(fileName) mimeType=\(mimeType)")
+        let endpoint = APIEndpoint(
+            path: "api/users/\(userId)/profile-image",
+            method: .post
+        )
+        do {
+            return try await client.postMultipart(
+                endpoint,
+                fileData: imageData,
+                fieldName: "file",
+                fileName: fileName,
+                mimeType: mimeType,
+                responseType: UploadProfileImageResponse.self
+            )
+        } catch APIError.decodingFailed {
+            _ = try await client.postMultipart(
+                endpoint,
+                fileData: imageData,
+                fieldName: "file",
+                fileName: fileName,
+                mimeType: mimeType,
+                responseType: EmptyUploadProfileImageResponse.self
+            )
+            return UploadProfileImageResponse(userId: Int(userId), profileImageUrl: nil)
+        }
     }
 
     nonisolated func updateLearningLevel(userId: String, level: JLPTLevel) async throws -> UpdateLearningLevelResponse {
@@ -66,3 +104,4 @@ struct ProfileAPIService: ProfileAPIServiceProtocol, Sendable {
 }
 
 private struct EmptyRequestBody: Encodable {}
+private struct EmptyUploadProfileImageResponse: Decodable {}

@@ -3,6 +3,7 @@ import PhotosUI
 import SwiftUI
 import Combine
 import UIKit
+import UniformTypeIdentifiers
 
 @MainActor
 final class ProfileViewModel: ObservableObject {
@@ -26,6 +27,7 @@ final class ProfileViewModel: ObservableObject {
     @Published var localResetErrorMessage: String?
     @Published var isRefreshingServerProfile: Bool = false
     @Published var profileSourceText: String = "source: local fallback"
+    @Published var avatarLoadErrorMessage: String?
 
     private let profileStore: UserProfileStore
     private let settingsStore: AppSettingsStore
@@ -150,15 +152,40 @@ final class ProfileViewModel: ObservableObject {
 
     func loadAvatar(from item: PhotosPickerItem?) async {
         guard let item else { return }
-        if let data = try? await item.loadTransferable(type: Data.self) {
-            let compressed = compressImageData(data)
-            profile.avatarData = compressed
-            if settingsStore.isMateLoggedIn {
-                settingsStore.updateCurrentMateAvatarData(compressed)
-            } else {
-                profileStore.updateAvatar(compressed)
+        avatarLoadErrorMessage = nil
+
+        let supportedTypes = item.supportedContentTypes.map(\.identifier)
+        print("[Profile] avatar load start supportedTypes=\(supportedTypes)")
+
+        do {
+            if let data = try await item.loadTransferable(type: Data.self) {
+                print("[Profile] avatar load success via Data bytes=\(data.count)")
+                await handleLoadedAvatarData(data)
+                return
             }
+
+            print("[Profile] avatar load via Data returned nil; falling back to Image")
+
+            if let image = try await item.loadTransferable(type: Image.self) {
+                let renderedData = renderImageToJPEGData(image)
+                if let renderedData {
+                    print("[Profile] avatar load success via Image fallback bytes=\(renderedData.count)")
+                    await handleLoadedAvatarData(renderedData)
+                    return
+                }
+
+                print("[Profile] avatar image fallback render failed")
+            } else {
+                print("[Profile] avatar load via Image returned nil")
+            }
+        } catch {
+            print("[Profile] avatar load failed supportedTypes=\(supportedTypes) error=\(error.localizedDescription)")
+            avatarLoadErrorMessage = "선택한 사진을 불러오지 못했어요. 다른 사진으로 다시 시도해 주세요."
+            return
         }
+
+        print("[Profile] avatar load failed no supported transferable result supportedTypes=\(supportedTypes)")
+        avatarLoadErrorMessage = "선택한 사진을 불러오지 못했어요. 다른 사진으로 다시 시도해 주세요."
     }
 
     func regenerateTodayDailyWordsForDevelopment() {
@@ -246,6 +273,10 @@ final class ProfileViewModel: ObservableObject {
         localResetErrorMessage = nil
     }
 
+    func clearAvatarLoadError() {
+        avatarLoadErrorMessage = nil
+    }
+
     func resetLocalStateForDevelopment() {
         localResetErrorMessage = nil
         settingsStore.clearLocalStateForDevelopment()
@@ -279,54 +310,12 @@ final class ProfileViewModel: ObservableObject {
     }
 
     private func refreshCurrentUserProfileFromServer(triggerSource: String, force: Bool = false) {
-        print("[Profile] trigger source=\(triggerSource)")
-        let mateUserId = settingsStore.mateUserId
-        guard mateUserId.isEmpty == false else {
-            print("[Profile] currentBackendUserId=nil reason=mateUserId empty")
-            profileSourceText = "source: local fallback"
-            hasLoadedProfile = false
-            lastLoadedBackendUserId = nil
-            return
-        }
-
-        guard let backendUserId = settingsStore.currentBackendUserId else {
-            print("[Profile] currentBackendUserId=nil reason=unmapped mateUserId=\(mateUserId)")
-            profileSourceText = "source: local fallback"
-            hasLoadedProfile = false
-            lastLoadedBackendUserId = nil
-            return
-        }
-
-        if isRefreshingServerProfile, force == false {
-            print("[Profile] skip duplicate fetch currentBackendUserId=\(backendUserId)")
-            return
-        }
-
-        if force == false, hasLoadedProfile, lastLoadedBackendUserId == backendUserId {
-            print("[Profile] fetch skipped already loaded")
-            return
-        }
-
-        print("[Profile] currentBackendUserId=\(backendUserId)")
-        isRefreshingServerProfile = true
-        lastLoadedBackendUserId = backendUserId
-
         Task {
-            defer { isRefreshingServerProfile = false }
-
-            do {
-                let response = try await profileAPIService.fetchUserProfile(userId: backendUserId)
-                hasLoadedProfile = true
-                applyServerProfile(response)
-            } catch {
-                hasLoadedProfile = false
-                profileSourceText = "source: local fallback"
-                print("[Profile] fetch failed error=\(error.localizedDescription)")
-            }
+            await refreshCurrentUserProfileFromServerNow(triggerSource: triggerSource, force: force)
         }
     }
 
-    private func applyServerProfile(_ response: ServerUserProfileResponse) {
+    private func applyServerProfile(_ response: ServerUserProfileResponse, avatarData: Data?) {
         let currentUserId = settingsStore.mateUserId
         let cachedProfile = settingsStore.currentMateProfile()
 
@@ -366,7 +355,6 @@ final class ProfileViewModel: ObservableObject {
             serverValue: response.learningLevel,
             fallbackValue: cachedProfile?.jlptLevel
         ) ?? .n5
-        let avatarData = decodeAvatarData(from: response.avatarBase64) ?? cachedProfile?.avatarData
         let resolvedRandomMatchingEnabled = response.randomMatchingEnabled ?? settingsStore.currentMateRandomMatchingEnabled()
 
         let didUpdateStore = settingsStore.applyServerProfile(
@@ -434,6 +422,143 @@ final class ProfileViewModel: ObservableObject {
     private func compressImageData(_ data: Data) -> Data? {
         guard let image = UIImage(data: data) else { return data }
         return image.jpegData(compressionQuality: 0.8) ?? data
+    }
+
+    private func applyLoadedAvatarData(_ data: Data) {
+        let compressed = compressImageData(data)
+        profile.avatarData = compressed
+        if settingsStore.isMateLoggedIn {
+            settingsStore.updateCurrentMateAvatarData(compressed)
+        } else {
+            profileStore.updateAvatar(compressed)
+        }
+    }
+
+    private func applyAvatarPreview(_ data: Data) {
+        profile.avatarData = compressImageData(data)
+    }
+
+    private func renderImageToJPEGData(_ image: Image) -> Data? {
+        let renderer = ImageRenderer(content: image.resizable().scaledToFit())
+        renderer.scale = UIScreen.main.scale
+        guard let uiImage = renderer.uiImage else { return nil }
+        return uiImage.jpegData(compressionQuality: 0.8)
+    }
+
+    private func handleLoadedAvatarData(_ data: Data) async {
+        let compressed = compressImageData(data) ?? data
+        print("[ProfileImage] selected image size=\(compressed.count)")
+
+        guard let backendUserId = settingsStore.currentBackendUserId,
+              settingsStore.isMateLoggedIn else {
+            applyLoadedAvatarData(compressed)
+            return
+        }
+
+        applyAvatarPreview(compressed)
+
+        do {
+            print("[ProfileImage] upload start userId=\(backendUserId)")
+            let response = try await profileAPIService.uploadProfileImage(
+                userId: backendUserId,
+                imageData: compressed,
+                fileName: "profile.jpg",
+                mimeType: "image/jpeg"
+            )
+            print("[ProfileImage] upload success url=\(response.profileImageUrl ?? "nil")")
+            print("[ProfileImage] refresh profile after upload")
+            hasLoadedProfile = false
+            await refreshCurrentUserProfileFromServerNow(triggerSource: "profileImageUpload", force: true)
+        } catch {
+            print("[ProfileImage] upload failed error=\(error.localizedDescription)")
+            avatarLoadErrorMessage = "프로필 사진을 서버에 저장하지 못했어요. 다시 시도해 주세요."
+        }
+    }
+
+    private func refreshCurrentUserProfileFromServerNow(triggerSource: String, force: Bool = false) async {
+        print("[Profile] trigger source=\(triggerSource)")
+        let mateUserId = settingsStore.mateUserId
+        guard mateUserId.isEmpty == false else {
+            print("[Profile] currentBackendUserId=nil reason=mateUserId empty")
+            profileSourceText = "source: local fallback"
+            hasLoadedProfile = false
+            lastLoadedBackendUserId = nil
+            return
+        }
+
+        guard let backendUserId = settingsStore.currentBackendUserId else {
+            print("[Profile] currentBackendUserId=nil reason=unmapped mateUserId=\(mateUserId)")
+            profileSourceText = "source: local fallback"
+            hasLoadedProfile = false
+            lastLoadedBackendUserId = nil
+            return
+        }
+
+        if isRefreshingServerProfile, force == false {
+            print("[Profile] skip duplicate fetch currentBackendUserId=\(backendUserId)")
+            return
+        }
+
+        if force == false, hasLoadedProfile, lastLoadedBackendUserId == backendUserId {
+            print("[Profile] fetch skipped already loaded")
+            return
+        }
+
+        print("[Profile] currentBackendUserId=\(backendUserId)")
+        isRefreshingServerProfile = true
+        lastLoadedBackendUserId = backendUserId
+        defer { isRefreshingServerProfile = false }
+
+        do {
+            let response = try await profileAPIService.fetchUserProfile(userId: backendUserId)
+            let avatarData = await resolvedAvatarData(
+                from: response,
+                fallbackAvatarData: settingsStore.currentMateProfile()?.avatarData
+            )
+            hasLoadedProfile = true
+            applyServerProfile(response, avatarData: avatarData)
+        } catch {
+            hasLoadedProfile = false
+            profileSourceText = "source: local fallback"
+            print("[Profile] fetch failed error=\(error.localizedDescription)")
+        }
+    }
+
+    private func resolvedAvatarData(from response: ServerUserProfileResponse, fallbackAvatarData: Data?) async -> Data? {
+        if let avatarData = decodeAvatarData(from: response.avatarBase64) {
+            return avatarData
+        }
+
+        if let profileImageUrl = trimmedNonEmpty(response.profileImageUrl),
+           let avatarData = await downloadImageData(from: profileImageUrl) {
+            return avatarData
+        }
+
+        return fallbackAvatarData
+    }
+
+    private func downloadImageData(from path: String) async -> Data? {
+        guard let url = resolvedImageURL(from: path) else { return nil }
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            guard let httpResponse = response as? HTTPURLResponse,
+                  (200..<300).contains(httpResponse.statusCode) else {
+                return nil
+            }
+            return data
+        } catch {
+            print("[Profile] image download failed url=\(path) error=\(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    private func resolvedImageURL(from path: String) -> URL? {
+        if let url = URL(string: path), url.scheme != nil {
+            return url
+        }
+
+        let trimmedPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return APIConfiguration.baseURL.appendingPathComponent(trimmedPath)
     }
 
     private func applyLearningLevelLocally(_ level: JLPTLevel) {
