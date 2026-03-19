@@ -4,6 +4,10 @@ struct NotebookDetailView: View {
     @ObservedObject var store: NotebookStore
     let notebookId: UUID
     @State private var isAddWordPresented: Bool = false
+    @State private var isNotebookTitleEditorPresented: Bool = false
+    @State private var isNotebookDeleteDialogPresented: Bool = false
+    @State private var notebookTitleDraft: String = ""
+    @Environment(\.dismiss) private var dismiss
 
     private var notebook: WordNotebook? {
         store.notebook(for: notebookId)
@@ -22,7 +26,7 @@ struct NotebookDetailView: View {
             } else {
                 ForEach(items) { item in
                     NavigationLink {
-                        NotebookWordDetailView(item: item)
+                        NotebookWordDetailView(store: store, notebookId: notebookId, itemId: item.id)
                     } label: {
                         itemRow(item)
                     }
@@ -34,15 +38,46 @@ struct NotebookDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    isAddWordPresented = true
-                } label: {
-                    Image(systemName: "plus")
+                HStack(spacing: 16) {
+                    Button {
+                        isAddWordPresented = true
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+
+                    Menu {
+                        Button("이름 수정") {
+                            notebookTitleDraft = notebook?.title ?? ""
+                            isNotebookTitleEditorPresented = true
+                        }
+
+                        Button("삭제", role: .destructive) {
+                            isNotebookDeleteDialogPresented = true
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
                 }
             }
         }
         .sheet(isPresented: $isAddWordPresented) {
             AddNotebookWordView(store: store, notebookId: notebookId)
+        }
+        .alert("단어장 이름 수정", isPresented: $isNotebookTitleEditorPresented) {
+            TextField("단어장 이름", text: $notebookTitleDraft)
+            Button("취소", role: .cancel) {}
+            Button("저장") {
+                store.updateNotebookTitle(notebookId, title: notebookTitleDraft)
+            }
+        } message: {
+            Text("새 이름을 입력해 주세요.")
+        }
+        .confirmationDialog("이 단어장을 삭제하면 포함된 단어도 모두 삭제됩니다", isPresented: $isNotebookDeleteDialogPresented, titleVisibility: .visible) {
+            Button("삭제", role: .destructive) {
+                store.deleteNotebook(notebookId)
+                dismiss()
+            }
+            Button("취소", role: .cancel) {}
         }
     }
 }

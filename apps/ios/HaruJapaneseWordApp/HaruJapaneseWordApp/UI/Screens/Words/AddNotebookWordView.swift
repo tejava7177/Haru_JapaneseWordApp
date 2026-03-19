@@ -3,6 +3,7 @@ import SwiftUI
 struct AddNotebookWordView: View {
     @ObservedObject var store: NotebookStore
     let notebookId: UUID
+    let editingItemId: UUID?
 
     @Environment(\.dismiss) private var dismiss
     @State private var word: String = ""
@@ -10,9 +11,22 @@ struct AddNotebookWordView: View {
     @State private var meaning: String = ""
     @State private var note: String = ""
 
+    private var isEditing: Bool {
+        editingItemId != nil
+    }
+
+    init(store: NotebookStore, notebookId: UUID, editingItem: WordNotebookItem? = nil) {
+        self.store = store
+        self.notebookId = notebookId
+        self.editingItemId = editingItem?.id
+        _word = State(initialValue: editingItem?.word ?? "")
+        _reading = State(initialValue: editingItem?.reading ?? "")
+        _meaning = State(initialValue: editingItem?.meaning ?? "")
+        _note = State(initialValue: editingItem?.note ?? "")
+    }
+
     private var canSave: Bool {
         word.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false &&
-        reading.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false &&
         meaning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
     }
 
@@ -42,7 +56,7 @@ struct AddNotebookWordView: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle("단어 추가")
+            .navigationTitle(isEditing ? "단어 수정" : "단어 추가")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -53,7 +67,18 @@ struct AddNotebookWordView: View {
 
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("저장") {
-                        store.addItem(to: notebookId, word: word, reading: reading, meaning: meaning, note: note)
+                        if let editingItemId {
+                            store.updateItem(
+                                in: notebookId,
+                                itemId: editingItemId,
+                                word: word,
+                                reading: reading,
+                                meaning: meaning,
+                                note: note
+                            )
+                        } else {
+                            store.addItem(to: notebookId, word: word, reading: reading, meaning: meaning, note: note)
+                        }
                         dismiss()
                     }
                     .disabled(canSave == false)

@@ -23,7 +23,7 @@ struct WordNotebookItem: Identifiable, Codable, Equatable {
     let id: UUID
     let wordId: Int?
     let word: String
-    let reading: String
+    let reading: String?
     let meaning: String
     let note: String?
     let addedAt: Date
@@ -32,7 +32,7 @@ struct WordNotebookItem: Identifiable, Codable, Equatable {
         id: UUID = UUID(),
         wordId: Int? = nil,
         word: String,
-        reading: String,
+        reading: String? = nil,
         meaning: String,
         note: String? = nil,
         addedAt: Date = Date()
