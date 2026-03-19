@@ -13,48 +13,38 @@ struct WordListView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                HStack {
-                    Button {
-                        isRangeSheetPresented = true
-                    } label: {
-                        Image(systemName: "line.3.horizontal.decrease.circle")
-                            .font(.title3)
-                    }
-                    .buttonStyle(.plain)
-
-                    Spacer()
-                }
-                .padding(.horizontal)
-                .padding(.top, 8)
-
+            Group {
                 if viewModel.isLoading {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if viewModel.hasError {
                     emptyStateView()
                 } else {
-                    List(viewModel.displayedWords) { word in
-                        NavigationLink {
-                            WordDetailView(wordId: word.id, repository: repository)
-                        } label: {
-                            WordRow(word: word, isReviewWord: viewModel.isReviewWord(word.id))
-                        }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            if viewModel.isReviewWord(word.id) {
-                                Button {
-                                    viewModel.toggleReview(word.id)
-                                } label: {
-                                    Label("해제", systemImage: "book.fill")
+                    List {
+                        headerRow
+
+                        ForEach(viewModel.displayedWords) { word in
+                            NavigationLink {
+                                WordDetailView(wordId: word.id, repository: repository)
+                            } label: {
+                                WordRow(word: word, isReviewWord: viewModel.isReviewWord(word.id))
+                            }
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                if viewModel.isReviewWord(word.id) {
+                                    Button {
+                                        viewModel.toggleReview(word.id)
+                                    } label: {
+                                        Label("해제", systemImage: "book.fill")
+                                    }
+                                    .tint(.secondary)
+                                } else {
+                                    Button {
+                                        viewModel.toggleReview(word.id)
+                                    } label: {
+                                        Label("복습", systemImage: "book.fill")
+                                    }
+                                    .tint(.orange)
                                 }
-                                .tint(.secondary)
-                            } else {
-                                Button {
-                                    viewModel.toggleReview(word.id)
-                                } label: {
-                                    Label("복습", systemImage: "book.fill")
-                                }
-                                .tint(.orange)
                             }
                         }
                     }
@@ -65,7 +55,7 @@ struct WordListView: View {
                     }
                 }
             }
-            .navigationTitle("단어")
+            .navigationBarTitleDisplayMode(.inline)
         }
         .searchable(text: $viewModel.searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "검색")
         .onChange(of: viewModel.searchText) { _ in
@@ -101,6 +91,28 @@ struct WordListView: View {
 }
 
 private extension WordListView {
+    var headerRow: some View {
+        HStack(spacing: 12) {
+            Text("단어")
+                .font(.largeTitle.weight(.bold))
+
+            Spacer()
+
+            Button {
+                isRangeSheetPresented = true
+            } label: {
+                Image(systemName: "line.3.horizontal.decrease.circle")
+                    .font(.title3)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.top, 8)
+        .padding(.bottom, 4)
+        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
+    }
+
     @ViewBuilder
     func emptyStateView() -> some View {
         VStack(spacing: 12) {
