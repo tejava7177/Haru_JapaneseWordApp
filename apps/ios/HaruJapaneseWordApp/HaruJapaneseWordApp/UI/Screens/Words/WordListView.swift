@@ -1,10 +1,18 @@
 import SwiftUI
 
 struct WordListView: View {
+    enum WordTab {
+        case jlpt
+        case notebook
+    }
+
     @ObservedObject private var viewModel: WordListViewModel
     private let repository: DictionaryRepository
+    @StateObject private var notebookStore = NotebookStore()
     @State private var isRangeSheetPresented: Bool = false
+    @State private var isCreateNotebookPresented: Bool = false
     @State private var lastRefreshAction: WordListViewModel.RefreshAction = .shuffled
+    @State private var selectedTab: WordTab = .jlpt
 
     init(repository: DictionaryRepository, viewModel: WordListViewModel) {
         self.repository = repository
@@ -14,45 +22,11 @@ struct WordListView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if viewModel.isLoading {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if viewModel.hasError {
-                    emptyStateView()
-                } else {
-                    List {
-                        headerRow
-
-                        ForEach(viewModel.displayedWords) { word in
-                            NavigationLink {
-                                WordDetailView(wordId: word.id, repository: repository)
-                            } label: {
-                                WordRow(word: word, isReviewWord: viewModel.isReviewWord(word.id))
-                            }
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                if viewModel.isReviewWord(word.id) {
-                                    Button {
-                                        viewModel.toggleReview(word.id)
-                                    } label: {
-                                        Label("해제", systemImage: "book.fill")
-                                    }
-                                    .tint(.secondary)
-                                } else {
-                                    Button {
-                                        viewModel.toggleReview(word.id)
-                                    } label: {
-                                        Label("복습", systemImage: "book.fill")
-                                    }
-                                    .tint(.orange)
-                                }
-                            }
-                        }
-                    }
-                    .listStyle(.plain)
-                    .refreshable {
-                        let action = await viewModel.pullToRefresh()
-                        lastRefreshAction = action
-                    }
+                switch selectedTab {
+                case .jlpt:
+                    jlptContent
+                case .notebook:
+                    notebookContent
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -79,8 +53,11 @@ struct WordListView: View {
                 onClose: { isRangeSheetPresented = false }
             )
         }
+        .sheet(isPresented: $isCreateNotebookPresented) {
+            CreateNotebookView(store: notebookStore)
+        }
         .overlay(alignment: .top) {
-            if viewModel.isShuffling {
+            if selectedTab == .jlpt, viewModel.isShuffling {
                 ShuffleHUD(action: lastRefreshAction)
                     .padding(.top, 12)
                     .transition(.opacity)
@@ -91,26 +68,119 @@ struct WordListView: View {
 }
 
 private extension WordListView {
-    var headerRow: some View {
-        HStack(spacing: 12) {
-            Text("단어")
-                .font(.largeTitle.weight(.bold))
+    @ViewBuilder
+    var jlptContent: some View {
+        if viewModel.isLoading {
+            ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if viewModel.hasError {
+            emptyStateView()
+        } else {
+            List {
+                headerRow
+                tabRow
 
-            Spacer()
+                ForEach(viewModel.displayedWords) { word in
+                    NavigationLink {
+                        WordDetailView(wordId: word.id, repository: repository)
+                    } label: {
+                        WordRow(word: word, isReviewWord: viewModel.isReviewWord(word.id))
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        if viewModel.isReviewWord(word.id) {
+                            Button {
+                                viewModel.toggleReview(word.id)
+                            } label: {
+                                Label("해제", systemImage: "book.fill")
+                            }
+                            .tint(.secondary)
+                        } else {
+                            Button {
+                                viewModel.toggleReview(word.id)
+                            } label: {
+                                Label("복습", systemImage: "book.fill")
+                            }
+                            .tint(.orange)
+                        }
+                    }
+                }
+            }
+            .listStyle(.plain)
+            .refreshable {
+                let action = await viewModel.pullToRefresh()
+                lastRefreshAction = action
+            }
+        }
+    }
+
+    var notebookContent: some View {
+        NotebookListView(store: notebookStore) {
+            headerRow
+            tabRow
+        }
+    }
+
+    var actionButtons: some View {
+        HStack(spacing: 12) {
+            Button {
+                isCreateNotebookPresented = true
+            } label: {
+                Image(systemName: "plus")
+                    .font(.title3)
+            }
+            .buttonStyle(.plain)
 
             Button {
                 isRangeSheetPresented = true
             } label: {
                 Image(systemName: "line.3.horizontal.decrease.circle")
                     .font(.title3)
+                    .foregroundStyle(selectedTab == .jlpt ? .primary : .secondary)
             }
             .buttonStyle(.plain)
+            .disabled(selectedTab != .jlpt)
         }
-        .padding(.top, 8)
-        .padding(.bottom, 4)
+    }
+
+    var headerRow: some View {
+        headerContent
         .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
         .listRowSeparator(.hidden)
         .listRowBackground(Color.clear)
+    }
+
+    var tabRow: some View {
+        tabContent
+        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 8, trailing: 16))
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
+    }
+
+    var headerContent: some View {
+        HStack(spacing: 12) {
+            Text("단어")
+                .font(.largeTitle.weight(.bold))
+
+            Spacer()
+
+            actionButtons
+        }
+        .padding(.top, 8)
+        .padding(.bottom, 4)
+    }
+
+    var tabContent: some View {
+        HStack(spacing: 10) {
+            WordTabButton(title: "단어", isSelected: selectedTab == .jlpt) {
+                selectedTab = .jlpt
+            }
+
+            WordTabButton(title: "내 단어장", isSelected: selectedTab == .notebook) {
+                selectedTab = .notebook
+            }
+
+            Spacer()
+        }
     }
 
     @ViewBuilder
@@ -138,6 +208,25 @@ private extension WordListView {
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private struct WordTabButton: View {
+    let title: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(isSelected ? .white : .primary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(isSelected ? Color.primary : Color(uiColor: .systemGray6))
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 }
 
