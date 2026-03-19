@@ -81,21 +81,13 @@ private extension NotebookDetailView {
     }
 
     func itemRow(_ item: WordNotebookItem) -> some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(item.word)
-                    .font(.headline)
+        VStack(alignment: .leading, spacing: 4) {
+            Text(item.word)
+                .font(.headline)
 
-                Text(item.meaning)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.tertiary)
+            Text(item.meaning)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
         }
         .padding(.vertical, 6)
     }

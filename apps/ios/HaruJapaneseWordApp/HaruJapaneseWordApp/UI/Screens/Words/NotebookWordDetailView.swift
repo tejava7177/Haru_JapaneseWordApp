@@ -47,9 +47,6 @@ private extension NotebookWordDetailView {
 
     var memoSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("메모")
-                .font(.headline)
-
             if let note = item.note, note.isEmpty == false {
                 Text(note)
                     .font(.body)
