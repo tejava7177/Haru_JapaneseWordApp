@@ -6,5 +6,6 @@ struct MateUserProfile: Hashable {
     var bio: String
     var instagramId: String
     var jlptLevel: JLPTLevel
+    var profileImageUrl: String?
     var avatarData: Data?
 }

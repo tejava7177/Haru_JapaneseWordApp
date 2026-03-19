@@ -13,6 +13,7 @@ struct BuddyDiscoveryCardItem: Identifiable, Equatable {
     let recentAccessText: String
     let bio: String
     let instagramId: String
+    let profileImageUrl: String?
     let avatarData: Data?
     let primaryActionTitle: String
     let isPrimaryActionDisabled: Bool
@@ -86,7 +87,7 @@ struct BuddyDiscoveryCardView: View {
     var body: some View {
         HStack(alignment: .center, spacing: 14) {
             Button(action: onPreviewTap) {
-                BuddyAvatarView(data: item.avatarData, size: 56)
+                BuddyAvatarView(data: item.avatarData, imageURLString: item.profileImageUrl, size: 56)
             }
             .buttonStyle(.plain)
 

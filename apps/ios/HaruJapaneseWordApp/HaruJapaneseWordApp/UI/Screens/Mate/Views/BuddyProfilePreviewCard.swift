@@ -5,6 +5,7 @@ struct BuddyProfilePreviewItem: Equatable {
     let jlptLevel: JLPTLevel
     let bio: String
     let instagramId: String
+    let profileImageUrl: String?
     let avatarData: Data?
     let detailTitle: String
     let detailValue: String
@@ -41,7 +42,7 @@ struct BuddyProfilePreviewCard: View {
             }
 
             VStack(spacing: 12) {
-                BuddyAvatarView(data: item.avatarData, size: 104)
+                BuddyAvatarView(data: item.avatarData, imageURLString: item.profileImageUrl, size: 104)
                     .shadow(color: Color.black.opacity(0.12), radius: 12, x: 0, y: 8)
 
                 VStack(spacing: 6) {

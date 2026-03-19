@@ -6,6 +6,7 @@ final class AppSettingsStore: ObservableObject {
     @Published private(set) var hasSeenOnboarding: Bool
     @Published private(set) var isSignedIn: Bool
     @Published private(set) var appleUserId: String?
+    @Published private(set) var profileRefreshTick: Int = 0
 
     private let userDefaults: UserDefaults
 
@@ -123,13 +124,22 @@ final class AppSettingsStore: ObservableObject {
 
     func profile(for userId: String) -> MateUserProfile {
         guard userId.isEmpty == false else {
-            return MateUserProfile(userId: "", displayName: "", bio: "", instagramId: "", jlptLevel: .n5, avatarData: nil)
+            return MateUserProfile(
+                userId: "",
+                displayName: "",
+                bio: "",
+                instagramId: "",
+                jlptLevel: .n5,
+                profileImageUrl: nil,
+                avatarData: nil
+            )
         }
 
         let candidateUserIds = candidateProfileUserIds(for: userId)
         let displayName = firstStoredString(for: candidateUserIds, field: "display_name") ?? defaultDisplayName(for: userId)
         let bio = firstStoredString(for: candidateUserIds, field: "bio") ?? ""
         let instagramId = firstStoredString(for: candidateUserIds, field: "instagram_id") ?? ""
+        let profileImageUrl = firstStoredString(for: candidateUserIds, field: "profile_image_url")
         let avatarData = firstStoredData(for: candidateUserIds, field: "avatar_data")
         let levelRaw = firstStoredString(for: candidateUserIds, field: "jlpt_level")
             ?? candidateUserIds.lazy.compactMap(loadLegacyProfileLevelRaw(for:)).first
@@ -142,6 +152,7 @@ final class AppSettingsStore: ObservableObject {
             bio: bio,
             instagramId: instagramId,
             jlptLevel: jlptLevel,
+            profileImageUrl: profileImageUrl,
             avatarData: avatarData
         )
     }
@@ -171,26 +182,37 @@ final class AppSettingsStore: ObservableObject {
     func updateCurrentMateDisplayName(_ name: String) {
         guard let current = currentMateProfile() else { return }
         userDefaults.set(name, forKey: mateProfileKey(userId: current.userId, field: "display_name"))
+        notifyProfileDidChange()
     }
 
     func updateCurrentMateBio(_ bio: String) {
         guard let current = currentMateProfile() else { return }
         userDefaults.set(bio, forKey: mateProfileKey(userId: current.userId, field: "bio"))
+        notifyProfileDidChange()
     }
 
     func updateCurrentMateInstagramId(_ instagramId: String) {
         guard let current = currentMateProfile() else { return }
         userDefaults.set(instagramId, forKey: mateProfileKey(userId: current.userId, field: "instagram_id"))
+        notifyProfileDidChange()
     }
 
     func updateCurrentMateJLPTLevel(_ level: JLPTLevel) {
         guard let current = currentMateProfile() else { return }
         updateProfileJLPTLevel(level, for: current.userId)
+        notifyProfileDidChange()
+    }
+
+    func updateCurrentMateProfileImageUrl(_ profileImageUrl: String?) {
+        guard let current = currentMateProfile() else { return }
+        _ = setOptionalStringIfNeeded(profileImageUrl, forKey: mateProfileKey(userId: current.userId, field: "profile_image_url"))
+        notifyProfileDidChange()
     }
 
     func updateCurrentMateAvatarData(_ avatarData: Data?) {
         guard let current = currentMateProfile() else { return }
         userDefaults.set(avatarData, forKey: mateProfileKey(userId: current.userId, field: "avatar_data"))
+        notifyProfileDidChange()
     }
 
     func isRandomMatchingEnabled(for userId: String) -> Bool {
@@ -214,6 +236,7 @@ final class AppSettingsStore: ObservableObject {
         bio: String?,
         instagramId: String?,
         jlptLevel: JLPTLevel?,
+        profileImageUrl: String?,
         avatarData: Data?,
         randomMatchingEnabled: Bool?
     ) -> Bool {
@@ -233,6 +256,10 @@ final class AppSettingsStore: ObservableObject {
         if let jlptLevel {
             didChange = setStringIfNeeded(jlptLevel.rawValue, forKey: mateProfileKey(userId: userId, field: "jlpt_level")) || didChange
         }
+        didChange = setOptionalStringIfNeeded(
+            profileImageUrl,
+            forKey: mateProfileKey(userId: userId, field: "profile_image_url")
+        ) || didChange
         if let avatarData {
             didChange = setDataIfNeeded(avatarData, forKey: mateProfileKey(userId: userId, field: "avatar_data")) || didChange
         }
@@ -247,6 +274,10 @@ final class AppSettingsStore: ObservableObject {
                 save(settings: updated)
                 didChange = true
             }
+        }
+
+        if didChange {
+            notifyProfileDidChange()
         }
 
         return didChange
@@ -281,6 +312,7 @@ final class AppSettingsStore: ObservableObject {
         userDefaults.set(defaultDisplayName(for: userId), forKey: displayNameKey)
         userDefaults.set("", forKey: mateProfileKey(userId: userId, field: "bio"))
         userDefaults.set("", forKey: mateProfileKey(userId: userId, field: "instagram_id"))
+        userDefaults.removeObject(forKey: mateProfileKey(userId: userId, field: "profile_image_url"))
         userDefaults.removeObject(forKey: mateProfileKey(userId: userId, field: "avatar_data"))
         userDefaults.set(false, forKey: mateProfileKey(userId: userId, field: randomMatchingEnabledField))
         let levelRaw = loadLegacyProfileLevelRaw(for: userId) ?? JLPTLevel.n5.rawValue
@@ -302,9 +334,26 @@ final class AppSettingsStore: ObservableObject {
         }
     }
 
+    private func notifyProfileDidChange() {
+        profileRefreshTick &+= 1
+    }
+
     private func setStringIfNeeded(_ value: String, forKey key: String) -> Bool {
         guard userDefaults.string(forKey: key) != value else { return false }
         userDefaults.set(value, forKey: key)
+        return true
+    }
+
+    private func setOptionalStringIfNeeded(_ value: String?, forKey key: String) -> Bool {
+        let currentValue = userDefaults.string(forKey: key)
+        if currentValue == value {
+            return false
+        }
+        if let value {
+            userDefaults.set(value, forKey: key)
+        } else {
+            userDefaults.removeObject(forKey: key)
+        }
         return true
     }
 

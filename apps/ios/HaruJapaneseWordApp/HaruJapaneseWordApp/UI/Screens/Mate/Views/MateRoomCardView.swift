@@ -62,7 +62,11 @@ struct MateRoomCardView: View {
     }
 
     private var avatarView: some View {
-        BuddyAvatarView(data: item.profile.avatarData, size: avatarSize)
+        BuddyAvatarView(
+            data: item.profile.avatarData,
+            imageURLString: item.profile.profileImageUrl,
+            size: avatarSize
+        )
             .contentShape(Circle())
             .onTapGesture {
                 onAvatarTap?()
@@ -72,22 +76,24 @@ struct MateRoomCardView: View {
 
 struct BuddyAvatarView: View {
     let data: Data?
+    let imageURLString: String?
     let size: CGFloat
 
     var body: some View {
         Group {
-            if let data, let image = UIImage(data: data) {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                ZStack {
-                    Circle()
-                        .fill(Color(uiColor: .systemGray5))
-                    Image(systemName: "person.fill")
-                        .font(.system(size: size * 0.42, weight: .medium))
-                        .foregroundStyle(Color(uiColor: .systemGray2))
+            if let imageURL = resolvedImageURL(from: imageURLString) {
+                AsyncImage(url: imageURL) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    default:
+                        fallbackImageView
+                    }
                 }
+            } else {
+                fallbackImageView
             }
         }
         .frame(width: size, height: size)
@@ -96,6 +102,37 @@ struct BuddyAvatarView: View {
             Circle()
                 .stroke(Color.white.opacity(0.85), lineWidth: 1)
         }
+    }
+
+    @ViewBuilder
+    private var fallbackImageView: some View {
+        if let data, let image = UIImage(data: data) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+        } else {
+            ZStack {
+                Circle()
+                    .fill(Color(uiColor: .systemGray5))
+                Image(systemName: "person.fill")
+                    .font(.system(size: size * 0.42, weight: .medium))
+                    .foregroundStyle(Color(uiColor: .systemGray2))
+            }
+        }
+    }
+
+    private func resolvedImageURL(from path: String?) -> URL? {
+        guard let path = path?.trimmingCharacters(in: .whitespacesAndNewlines),
+              path.isEmpty == false else {
+            return nil
+        }
+
+        if let url = URL(string: path), url.scheme != nil {
+            return url
+        }
+
+        let trimmedPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return APIConfiguration.baseURL.appendingPathComponent(trimmedPath)
     }
 }
 

@@ -24,6 +24,7 @@ private struct BuddyServerProfile: Equatable {
     let jlptLevel: JLPTLevel?
     let bio: String?
     let instagramId: String?
+    let profileImageUrl: String?
     let avatarData: Data?
 }
 
@@ -57,6 +58,7 @@ struct MateRoomCardItem: Identifiable, Equatable {
             jlptLevel: jlptLevel,
             bio: profile.bio,
             instagramId: profile.instagramId,
+            profileImageUrl: profile.profileImageUrl,
             avatarData: profile.avatarData,
             detailTitle: "티키타카",
             detailValue: miniProfileTikiTakaText,
@@ -74,6 +76,7 @@ struct IncomingBuddyRequestItem: Identifiable, Equatable {
     let recentAccessText: String
     let bio: String
     let instagramId: String
+    let profileImageUrl: String?
     let avatarData: Data?
 
     var cardItem: BuddyDiscoveryCardItem {
@@ -85,6 +88,7 @@ struct IncomingBuddyRequestItem: Identifiable, Equatable {
             recentAccessText: recentAccessText,
             bio: bio,
             instagramId: instagramId,
+            profileImageUrl: profileImageUrl,
             avatarData: avatarData,
             primaryActionTitle: "수락",
             isPrimaryActionDisabled: false
@@ -97,6 +101,7 @@ struct IncomingBuddyRequestItem: Identifiable, Equatable {
             jlptLevel: jlptLevel,
             bio: bio,
             instagramId: instagramId,
+            profileImageUrl: profileImageUrl,
             avatarData: avatarData,
             detailTitle: "최근 접속일",
             detailValue: recentAccessText,
@@ -113,6 +118,7 @@ struct RandomCandidateItem: Identifiable, Equatable {
     let recentAccessText: String
     let bio: String
     let instagramId: String
+    let profileImageUrl: String?
     let avatarData: Data?
     let isPending: Bool
 
@@ -125,6 +131,7 @@ struct RandomCandidateItem: Identifiable, Equatable {
             recentAccessText: recentAccessText,
             bio: bio,
             instagramId: instagramId,
+            profileImageUrl: profileImageUrl,
             avatarData: avatarData,
             primaryActionTitle: isPending ? "신청 대기중" : "버디 신청",
             isPrimaryActionDisabled: isPending || userId == nil
@@ -137,6 +144,7 @@ struct RandomCandidateItem: Identifiable, Equatable {
             jlptLevel: jlptLevel,
             bio: bio,
             instagramId: instagramId,
+            profileImageUrl: profileImageUrl,
             avatarData: avatarData,
             detailTitle: "최근 접속일",
             detailValue: recentAccessText,
@@ -193,6 +201,13 @@ final class MateViewModel: ObservableObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 self?.load(triggerSource: "onChange")
+            }
+            .store(in: &cancellables)
+
+        settingsStore.$profileRefreshTick
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.load(triggerSource: "profileRefresh", force: true)
             }
             .store(in: &cancellables)
     }
@@ -608,6 +623,7 @@ final class MateViewModel: ObservableObject {
                 recentAccessText: item.recentAccessText,
                 bio: item.bio,
                 instagramId: item.instagramId,
+                profileImageUrl: item.profileImageUrl,
                 avatarData: item.avatarData,
                 isPending: pendingOutgoingIds.contains(userId)
             )
@@ -672,6 +688,7 @@ final class MateViewModel: ObservableObject {
             bio: resolvedBio,
             instagramId: resolvedInstagramId,
             jlptLevel: resolvedLevel,
+            profileImageUrl: resolvedAvatar.profileImageUrl,
             avatarData: resolvedAvatar.data
         )
 
@@ -706,6 +723,7 @@ final class MateViewModel: ObservableObject {
         let level = serverProfile?.jlptLevel ?? response.jlptLevel
         let bio = serverProfile?.bio ?? response.bio
         let instagramId = serverProfile?.instagramId ?? response.instagramId
+        let profileImageUrl = serverProfile?.profileImageUrl
         let avatarData = resolvedRequestAvatarData(
             buddyUserId: response.requesterId,
             serverProfile: serverProfile,
@@ -722,6 +740,7 @@ final class MateViewModel: ObservableObject {
             recentAccessText: recentAccessText(from: response.lastActiveAt),
             bio: bio,
             instagramId: instagramId,
+            profileImageUrl: profileImageUrl,
             avatarData: avatarData
         )
     }
@@ -732,6 +751,7 @@ final class MateViewModel: ObservableObject {
         let level = serverProfile?.jlptLevel ?? response.jlptLevel
         let bio = serverProfile?.bio ?? response.bio
         let instagramId = serverProfile?.instagramId ?? response.instagramId
+        let profileImageUrl = serverProfile?.profileImageUrl
         let avatarData = resolvedCandidateAvatarData(
             buddyUserId: response.userId,
             serverProfile: serverProfile,
@@ -747,6 +767,7 @@ final class MateViewModel: ObservableObject {
             recentAccessText: recentAccessText(from: response.lastActiveAt),
             bio: bio,
             instagramId: instagramId,
+            profileImageUrl: profileImageUrl,
             avatarData: avatarData,
             isPending: response.userId.map(pendingOutgoingIds.contains) ?? false
         )
@@ -787,6 +808,7 @@ final class MateViewModel: ObservableObject {
                             jlptLevel: response.learningLevel,
                             bio: response.bio,
                             instagramId: response.instagramId,
+                            profileImageUrl: response.profileImageUrl,
                             avatarData: avatarData
                         )
                     } catch {
@@ -845,14 +867,20 @@ final class MateViewModel: ObservableObject {
         serverProfile: BuddyServerProfile?,
         summaryAvatarBase64: String?,
         fallbackAvatarData: Data?
-    ) -> (data: Data?, source: String) {
-        if let buddyUserId, let avatarData = serverProfile?.avatarData {
-            print("[Buddy] using server profile image for buddyUserId=\(buddyUserId) image=true")
-            return (avatarData, "serverProfile")
+    ) -> (data: Data?, profileImageUrl: String?, source: String) {
+        if let buddyUserId, let serverProfile {
+            if let profileImageUrl = serverProfile.profileImageUrl {
+                print("[Buddy] using server profile image for buddyUserId=\(buddyUserId)")
+                return (serverProfile.avatarData, profileImageUrl, "serverProfileUrl")
+            }
+            if let avatarData = serverProfile.avatarData {
+                print("[Buddy] using server profile image for buddyUserId=\(buddyUserId)")
+                return (avatarData, nil, "serverProfile")
+            }
         }
 
         if let avatarData = decodeAvatarData(from: summaryAvatarBase64) {
-            return (avatarData, "buddySummary")
+            return (avatarData, nil, "buddySummary")
         }
 
         if let buddyUserId {
@@ -861,7 +889,7 @@ final class MateViewModel: ObservableObject {
 
         if let buddyUserId, let fallbackAvatarData {
             print("[Buddy] fallback to local profile image for buddyUserId=\(buddyUserId)")
-            return (fallbackAvatarData, "localFallback")
+            return (fallbackAvatarData, nil, "localFallback")
         }
 
         if let buddyUserId {
@@ -869,7 +897,7 @@ final class MateViewModel: ObservableObject {
         } else {
             print("[Buddy] fallback to default avatar for buddyUserId=nil")
         }
-        return (nil, "default")
+        return (nil, nil, "default")
     }
 
     private func resolvedRequestAvatarData(

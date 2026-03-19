@@ -396,22 +396,12 @@ struct ProfileView: View {
 
     private var avatarView: some View {
         let size: CGFloat = 72
-        return Group {
-            if let data = viewModel.currentProfile.avatarData,
-               let uiImage = UIImage(data: data) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                Image(systemName: "person.circle.fill")
-                    .resizable()
-                    .scaledToFit()
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .frame(width: size, height: size)
+        return BuddyAvatarView(
+            data: viewModel.localAvatarPreviewData ?? viewModel.currentProfile.avatarData,
+            imageURLString: viewModel.currentProfile.profileImageUrl,
+            size: size
+        )
         .background(Color.black.opacity(0.04))
-        .clipShape(Circle())
     }
 
     private func showToast(message: String) {

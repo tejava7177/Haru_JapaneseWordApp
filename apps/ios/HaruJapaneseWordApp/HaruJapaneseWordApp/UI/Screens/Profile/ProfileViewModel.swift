@@ -28,6 +28,7 @@ final class ProfileViewModel: ObservableObject {
     @Published var isRefreshingServerProfile: Bool = false
     @Published var profileSourceText: String = "source: local fallback"
     @Published var avatarLoadErrorMessage: String?
+    @Published private(set) var localAvatarPreviewData: Data?
 
     private let profileStore: UserProfileStore
     private let settingsStore: AppSettingsStore
@@ -56,6 +57,13 @@ final class ProfileViewModel: ObservableObject {
                 self?.settings = value
                 self?.syncProfileFromCurrentUser()
                 self?.refreshCurrentUserProfileFromServer(triggerSource: "onChange")
+            }
+            .store(in: &cancellables)
+
+        settingsStore.$profileRefreshTick
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.syncProfileFromCurrentUser()
             }
             .store(in: &cancellables)
 
@@ -285,6 +293,7 @@ final class ProfileViewModel: ObservableObject {
         selectedLearningLevel = settingsStore.settings.homeDeckLevel
         isRandomMatchingEnabled = false
         localResetNotice = "로컬 상태를 초기화했어요."
+        localAvatarPreviewData = nil
     }
 
     private func syncProfileFromCurrentUser() {
@@ -293,6 +302,7 @@ final class ProfileViewModel: ObservableObject {
             profile.nickname = mateProfile.displayName
             profile.bio = mateProfile.bio
             profile.instagramId = mateProfile.instagramId
+            profile.profileImageUrl = mateProfile.profileImageUrl
             profile.avatarData = mateProfile.avatarData
             selectedLearningLevel = mateProfile.jlptLevel
             isRandomMatchingEnabled = settingsStore.currentMateRandomMatchingEnabled()
@@ -303,6 +313,7 @@ final class ProfileViewModel: ObservableObject {
             profile.nickname = legacyProfile.nickname
             profile.bio = legacyProfile.bio
             profile.instagramId = legacyProfile.instagramId
+            profile.profileImageUrl = legacyProfile.profileImageUrl
             profile.avatarData = legacyProfile.avatarData
             selectedLearningLevel = settingsStore.settings.homeDeckLevel
             isRandomMatchingEnabled = false
@@ -328,6 +339,7 @@ final class ProfileViewModel: ObservableObject {
         if let instagramId = trimmedNonEmpty(response.instagramId) {
             print("[Profile] server instagramId=\(instagramId)")
         }
+        print("[ProfileImage] server profileImageUrl=\(response.profileImageUrl ?? "nil")")
         if let learningLevel = response.learningLevel {
             print("[Profile] server learningLevel=\(learningLevel.rawValue)")
         }
@@ -356,6 +368,7 @@ final class ProfileViewModel: ObservableObject {
             fallbackValue: cachedProfile?.jlptLevel
         ) ?? .n5
         let resolvedRandomMatchingEnabled = response.randomMatchingEnabled ?? settingsStore.currentMateRandomMatchingEnabled()
+        let resolvedProfileImageUrl = trimmedNonEmpty(response.profileImageUrl)
 
         let didUpdateStore = settingsStore.applyServerProfile(
             userId: currentUserId,
@@ -363,6 +376,7 @@ final class ProfileViewModel: ObservableObject {
             bio: resolvedBio,
             instagramId: resolvedInstagramId,
             jlptLevel: resolvedLevel,
+            profileImageUrl: resolvedProfileImageUrl,
             avatarData: avatarData,
             randomMatchingEnabled: resolvedRandomMatchingEnabled
         )
@@ -373,6 +387,7 @@ final class ProfileViewModel: ObservableObject {
         }
         profileSourceText = "source: server"
         syncProfileFromCurrentUser()
+        localAvatarPreviewData = nil
         profileSourceText = "source: server"
     }
 
@@ -426,16 +441,22 @@ final class ProfileViewModel: ObservableObject {
 
     private func applyLoadedAvatarData(_ data: Data) {
         let compressed = compressImageData(data)
+        localAvatarPreviewData = nil
         profile.avatarData = compressed
+        profile.profileImageUrl = nil
         if settingsStore.isMateLoggedIn {
+            settingsStore.updateCurrentMateProfileImageUrl(nil)
             settingsStore.updateCurrentMateAvatarData(compressed)
         } else {
+            profileStore.updateProfileImageUrl(nil)
             profileStore.updateAvatar(compressed)
         }
     }
 
     private func applyAvatarPreview(_ data: Data) {
-        profile.avatarData = compressImageData(data)
+        let compressed = compressImageData(data)
+        localAvatarPreviewData = compressed
+        profile.avatarData = compressed
     }
 
     private func renderImageToJPEGData(_ image: Image) -> Data? {
@@ -471,6 +492,8 @@ final class ProfileViewModel: ObservableObject {
             await refreshCurrentUserProfileFromServerNow(triggerSource: "profileImageUpload", force: true)
         } catch {
             print("[ProfileImage] upload failed error=\(error.localizedDescription)")
+            localAvatarPreviewData = nil
+            syncProfileFromCurrentUser()
             avatarLoadErrorMessage = "프로필 사진을 서버에 저장하지 못했어요. 다시 시도해 주세요."
         }
     }
