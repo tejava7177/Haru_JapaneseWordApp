@@ -21,7 +21,11 @@ struct NotebookDetailView: View {
                 emptyState
             } else {
                 ForEach(items) { item in
-                    itemRow(item)
+                    NavigationLink {
+                        NotebookWordDetailView(item: item)
+                    } label: {
+                        itemRow(item)
+                    }
                 }
             }
         }
@@ -77,24 +81,21 @@ private extension NotebookDetailView {
     }
 
     func itemRow(_ item: WordNotebookItem) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(item.word)
-                .font(.headline)
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.word)
+                    .font(.headline)
 
-            Text(item.reading)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            Text(item.meaning)
-                .font(.subheadline)
-                .foregroundStyle(.primary)
-
-            if let note = item.note, note.isEmpty == false {
-                Text(note)
-                    .font(.footnote)
+                Text(item.meaning)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .padding(.top, 4)
             }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
         }
         .padding(.vertical, 6)
     }
