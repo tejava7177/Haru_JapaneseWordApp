@@ -6,7 +6,6 @@ struct NotebookDetailView: View {
     @State private var isAddWordPresented: Bool = false
     @State private var isNotebookTitleEditorPresented: Bool = false
     @State private var isNotebookDeleteDialogPresented: Bool = false
-    @State private var pendingDeleteItem: WordNotebookItem?
     @State private var notebookTitleDraft: String = ""
     @Environment(\.dismiss) private var dismiss
 
@@ -33,7 +32,7 @@ struct NotebookDetailView: View {
                     }
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button(role: .destructive) {
-                            pendingDeleteItem = item
+                            store.deleteItem(in: notebookId, itemId: item.id)
                         } label: {
                             Image(systemName: "trash")
                         }
@@ -78,42 +77,19 @@ struct NotebookDetailView: View {
                 store.updateNotebookTitle(notebookId, title: notebookTitleDraft)
             }
         } 
-        .confirmationDialog("이 단어장을 삭제하면 포함된 단어도 모두 삭제됩니다", isPresented: $isNotebookDeleteDialogPresented, titleVisibility: .visible) {
+        .confirmationDialog("이 단어장을 삭제할까요?", isPresented: $isNotebookDeleteDialogPresented, titleVisibility: .visible) {
             Button("삭제", role: .destructive) {
                 store.deleteNotebook(notebookId)
                 dismiss()
             }
             Button("취소", role: .cancel) {}
-        }
-        .confirmationDialog(
-            "이 단어를 삭제할까요?",
-            isPresented: pendingDeleteItemBinding,
-            titleVisibility: .visible
-        ) {
-            Button("삭제", role: .destructive) {
-                guard let pendingDeleteItem else { return }
-                store.deleteItem(in: notebookId, itemId: pendingDeleteItem.id)
-                self.pendingDeleteItem = nil
-            }
-            Button("취소", role: .cancel) {
-                pendingDeleteItem = nil
-            }
+        } message: {
+            Text("포함된 단어도 모두 삭제됩니다")
         }
     }
 }
 
 private extension NotebookDetailView {
-    var pendingDeleteItemBinding: Binding<Bool> {
-        Binding(
-            get: { pendingDeleteItem != nil },
-            set: { isPresented in
-                if isPresented == false {
-                    pendingDeleteItem = nil
-                }
-            }
-        )
-    }
-
     var summarySection: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(notebook?.title ?? "단어장")

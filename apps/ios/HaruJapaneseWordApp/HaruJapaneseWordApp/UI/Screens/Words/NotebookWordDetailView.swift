@@ -6,7 +6,6 @@ struct NotebookWordDetailView: View {
     let itemId: UUID
     @Environment(\.dismiss) private var dismiss
     @State private var isEditPresented: Bool = false
-    @State private var isDeleteDialogPresented: Bool = false
 
     private var item: WordNotebookItem? {
         store.item(for: notebookId, itemId: itemId)
@@ -33,7 +32,8 @@ struct NotebookWordDetailView: View {
                     }
 
                     Button("삭제", role: .destructive) {
-                        isDeleteDialogPresented = true
+                        store.deleteItem(in: notebookId, itemId: itemId)
+                        dismiss()
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -45,13 +45,6 @@ struct NotebookWordDetailView: View {
             if let item {
                 AddNotebookWordView(store: store, notebookId: notebookId, editingItem: item)
             }
-        }
-        .confirmationDialog("이 단어를 삭제할까요?", isPresented: $isDeleteDialogPresented, titleVisibility: .visible) {
-            Button("삭제", role: .destructive) {
-                store.deleteItem(in: notebookId, itemId: itemId)
-                dismiss()
-            }
-            Button("취소", role: .cancel) {}
         }
     }
 }
