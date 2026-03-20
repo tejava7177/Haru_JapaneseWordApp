@@ -82,7 +82,7 @@ private extension WordListView {
 
                 ForEach(viewModel.displayedWords) { word in
                     NavigationLink {
-                        WordDetailView(wordId: word.id, repository: repository)
+                        WordDetailView(wordId: word.id, repository: repository, notebookStore: notebookStore)
                     } label: {
                         WordRow(word: word, isReviewWord: viewModel.isReviewWord(word.id))
                     }

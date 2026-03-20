@@ -2,14 +2,24 @@ import SwiftUI
 
 struct WordDetailView: View {
     @StateObject private var viewModel: WordDetailViewModel
+    @StateObject private var notebookStore: NotebookStore
     @State private var isReadingExpanded: Bool = false
+    @State private var isNotebookPickerPresented: Bool = false
+    @State private var feedbackMessage: String?
     private let wordId: Int
     private let repository: DictionaryRepository
 
+    @MainActor
     init(wordId: Int, repository: DictionaryRepository) {
+        self.init(wordId: wordId, repository: repository, notebookStore: NotebookStore())
+    }
+
+    @MainActor
+    init(wordId: Int, repository: DictionaryRepository, notebookStore: NotebookStore) {
         self.wordId = wordId
         self.repository = repository
         _viewModel = StateObject(wrappedValue: WordDetailViewModel(repository: repository))
+        _notebookStore = StateObject(wrappedValue: notebookStore)
     }
 
     var body: some View {
@@ -44,7 +54,8 @@ struct WordDetailView: View {
                     if viewModel.recommendations.isEmpty == false {
                         RecommendationSection(
                             recommendations: viewModel.recommendations,
-                            repository: repository
+                            repository: repository,
+                            notebookStore: notebookStore
                         )
                     }
                 }
@@ -55,6 +66,39 @@ struct WordDetailView: View {
         }
         .navigationTitle("단어 상세")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if let detail = viewModel.detail {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button("내 단어장에 추가") {
+                            isNotebookPickerPresented = true
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $isNotebookPickerPresented) {
+            if let detail = viewModel.detail {
+                NotebookPickerSheetView(
+                    store: notebookStore,
+                    wordId: detail.id,
+                    word: displayExpression(for: detail),
+                    reading: detail.reading,
+                    meaning: notebookMeaning(for: detail)
+                ) { result in
+                    handleNotebookPickResult(result)
+                }
+            }
+        }
+        .overlay(alignment: .top) {
+            if let feedbackMessage {
+                FeedbackBanner(message: feedbackMessage)
+                    .padding(.top, 12)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
         .task(id: wordId) {
             viewModel.load(wordId: wordId)
         }
@@ -63,6 +107,44 @@ struct WordDetailView: View {
     private func displayExpression(for detail: WordDetail) -> String {
         let trimmed = detail.expression.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? detail.reading : detail.expression
+    }
+
+    private func notebookMeaning(for detail: WordDetail) -> String {
+        detail.meanings
+            .sorted(by: { $0.ord < $1.ord })
+            .map(\.text)
+            .joined(separator: " / ")
+    }
+
+    private func handleNotebookPickResult(_ result: NotebookStore.AddJLPTWordResult) {
+        let message: String
+        let feedbackType: UINotificationFeedbackGenerator.FeedbackType
+
+        switch result {
+        case .success:
+            message = "단어장에 추가했어요"
+            feedbackType = .success
+        case .duplicate:
+            message = "이미 이 단어장에 있어요"
+            feedbackType = .warning
+        case .notebookNotFound:
+            message = "단어장을 찾을 수 없어요"
+            feedbackType = .error
+        }
+
+        let feedback = UINotificationFeedbackGenerator()
+        feedback.notificationOccurred(feedbackType)
+
+        withAnimation(.easeInOut(duration: 0.2)) {
+            feedbackMessage = message
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+            guard feedbackMessage == message else { return }
+            withAnimation(.easeInOut(duration: 0.2)) {
+                feedbackMessage = nil
+            }
+        }
     }
 }
 
@@ -336,6 +418,7 @@ private struct MeaningCard: View {
 private struct RecommendationSection: View {
     let recommendations: [(kanji: String, words: [WordSummary])]
     let repository: DictionaryRepository
+    let notebookStore: NotebookStore
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -355,7 +438,7 @@ private struct RecommendationSection: View {
 
                     ForEach(group.words) { word in
                         NavigationLink {
-                            WordDetailView(wordId: word.id, repository: repository)
+                            WordDetailView(wordId: word.id, repository: repository, notebookStore: notebookStore)
                         } label: {
                             RecommendationCard(word: word)
                         }
@@ -374,6 +457,24 @@ private struct RecommendationSection: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(Color(uiColor: .systemGray5), lineWidth: 0.5)
         )
+    }
+}
+
+private struct FeedbackBanner: View {
+    let message: String
+
+    var body: some View {
+        Text(message)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(Color(uiColor: .systemGray5), lineWidth: 0.5)
+            )
+            .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 3)
     }
 }
 

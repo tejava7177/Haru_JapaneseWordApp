@@ -3,6 +3,12 @@ import Combine
 
 @MainActor
 final class NotebookStore: ObservableObject {
+    enum AddJLPTWordResult {
+        case success
+        case duplicate
+        case notebookNotFound
+    }
+
     @Published private(set) var notebooks: [WordNotebook] = []
 
     private let userDefaults: UserDefaults
@@ -72,6 +78,44 @@ final class NotebookStore: ObservableObject {
         save()
     }
 
+    func addJLPTWord(
+        to notebookId: UUID,
+        wordId: Int? = nil,
+        word: String,
+        reading: String?,
+        meaning: String
+    ) -> AddJLPTWordResult {
+        let trimmedWord = word.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedReading = reading?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedReading = trimmedReading?.isEmpty == false ? trimmedReading : nil
+        let trimmedMeaning = meaning.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard trimmedWord.isEmpty == false,
+              trimmedMeaning.isEmpty == false,
+              let notebookIndex = notebooks.firstIndex(where: { $0.id == notebookId }) else {
+            return .notebookNotFound
+        }
+
+        let isDuplicate = notebooks[notebookIndex].items.contains {
+            $0.word == trimmedWord && normalizedReadingValue($0.reading) == normalizedReadingValue(normalizedReading)
+        }
+        guard isDuplicate == false else {
+            return .duplicate
+        }
+
+        notebooks[notebookIndex].items.append(
+            WordNotebookItem(
+                wordId: wordId,
+                word: trimmedWord,
+                reading: normalizedReading,
+                meaning: trimmedMeaning,
+                note: nil
+            )
+        )
+        save()
+        return .success
+    }
+
     func updateItem(
         in notebookId: UUID,
         itemId: UUID,
@@ -134,5 +178,10 @@ final class NotebookStore: ObservableObject {
         } catch {
             assertionFailure("Failed to save notebooks: \(error)")
         }
+    }
+
+    private func normalizedReadingValue(_ reading: String?) -> String? {
+        let trimmedReading = reading?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedReading?.isEmpty == false ? trimmedReading : nil
     }
 }
