@@ -56,6 +56,14 @@ final class NotebookStore: ObservableObject {
         items(for: notebookId).first { $0.id == itemId }
     }
 
+    func wordListItems(in notebookIds: Set<UUID>) -> [WordListItem] {
+        notebooks
+            .filter { notebookIds.contains($0.id) }
+            .flatMap { notebook in
+                notebook.items.map { WordListItem(notebookId: notebook.id, item: $0) }
+            }
+    }
+
     func addItem(to notebookId: UUID, word: String, reading: String, meaning: String, note: String? = nil) {
         let trimmedWord = word.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedReading = reading.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -32,19 +32,30 @@ struct WordListView: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .searchable(text: $viewModel.searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "검색")
-        .onChange(of: viewModel.searchText) { _ in
+        .onChange(of: viewModel.searchText) {
             viewModel.search()
         }
         .onAppear {
             viewModel.refreshReviewState()
         }
+        .onReceive(notebookStore.$notebooks) { notebooks in
+            viewModel.updateNotebooks(notebooks)
+        }
         .task {
+            viewModel.updateNotebooks(notebookStore.notebooks)
             viewModel.load()
         }
         .sheet(isPresented: $isRangeSheetPresented) {
             LevelFilterSheetContent(
+                showJLPTWords: viewModel.showJLPTWords,
+                onSetShowJLPTWords: { viewModel.setShowJLPTWords($0) },
+                showNotebookWords: viewModel.showNotebookWords,
+                onSetShowNotebookWords: { viewModel.setShowNotebookWords($0) },
                 availableLevels: viewModel.availableLevels,
                 isLevelSelected: { viewModel.selectedLevels.contains($0) },
+                notebooks: notebookStore.notebooks,
+                isNotebookSelected: { viewModel.isNotebookSelected($0) },
+                onToggleNotebook: { viewModel.toggleNotebookSelection($0) },
                 isReviewOnly: viewModel.reviewOnly,
                 onToggleReviewOnly: { viewModel.toggleReviewOnly() },
                 isShuffleLocked: viewModel.preferences.shuffleLocked,
@@ -80,27 +91,33 @@ private extension WordListView {
                 headerRow
                 tabRow
 
-                ForEach(viewModel.displayedWords) { word in
-                    NavigationLink {
-                        WordDetailView(wordId: word.id, repository: repository, notebookStore: notebookStore)
-                    } label: {
-                        WordRow(word: word, isReviewWord: viewModel.isReviewWord(word.id))
-                    }
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        if viewModel.isReviewWord(word.id) {
-                            Button {
-                                viewModel.toggleReview(word.id)
-                            } label: {
-                                Label("해제", systemImage: "book.fill")
+                if viewModel.displayedWords.isEmpty {
+                    emptyFilteredStateRow
+                } else {
+                    ForEach(viewModel.displayedWords) { word in
+                        NavigationLink {
+                            destinationView(for: word)
+                        } label: {
+                            WordRow(word: word, isReviewWord: viewModel.isReviewWord(word))
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            if let wordId = word.jlptWordId {
+                                if viewModel.isReviewWord(wordId) {
+                                    Button {
+                                        viewModel.toggleReview(wordId)
+                                    } label: {
+                                        Label("해제", systemImage: "book.fill")
+                                    }
+                                    .tint(.secondary)
+                                } else {
+                                    Button {
+                                        viewModel.toggleReview(wordId)
+                                    } label: {
+                                        Label("복습", systemImage: "book.fill")
+                                    }
+                                    .tint(.orange)
+                                }
                             }
-                            .tint(.secondary)
-                        } else {
-                            Button {
-                                viewModel.toggleReview(word.id)
-                            } label: {
-                                Label("복습", systemImage: "book.fill")
-                            }
-                            .tint(.orange)
                         }
                     }
                 }
@@ -208,6 +225,37 @@ private extension WordListView {
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    func destinationView(for word: WordListItem) -> some View {
+        switch word.source {
+        case let .jlpt(_, wordId):
+            WordDetailView(wordId: wordId, repository: repository, notebookStore: notebookStore)
+        case let .notebook(notebookId, itemId):
+            NotebookWordDetailView(store: notebookStore, notebookId: notebookId, itemId: itemId)
+        }
+    }
+
+    var emptyFilteredStateRow: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "line.3.horizontal.decrease.circle")
+                .font(.system(size: 28))
+                .foregroundStyle(.secondary)
+
+            Text("선택한 조건에 맞는 단어가 없어요")
+                .font(.headline)
+
+            Text("데이터 소스나 레벨, 단어장을 다시 선택해 보세요")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 48)
+        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
     }
 }
 
@@ -348,8 +396,15 @@ private struct ShuffleHUD: View {
 }
 
 private struct LevelFilterSheetContent: View {
+    let showJLPTWords: Bool
+    let onSetShowJLPTWords: (Bool) -> Void
+    let showNotebookWords: Bool
+    let onSetShowNotebookWords: (Bool) -> Void
     let availableLevels: [JLPTLevel]
     let isLevelSelected: (JLPTLevel) -> Bool
+    let notebooks: [WordNotebook]
+    let isNotebookSelected: (UUID) -> Bool
+    let onToggleNotebook: (UUID) -> Void
     let isReviewOnly: Bool
     let onToggleReviewOnly: () -> Void
     let isShuffleLocked: Bool
@@ -360,33 +415,78 @@ private struct LevelFilterSheetContent: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("범위 선택") {
-                    VStack(alignment: .leading, spacing: 12) {
-                        if availableLevels.isEmpty {
-                            Text("사용 가능한 레벨이 없습니다.")
+                Section("데이터 소스") {
+                    Toggle("JLPT 단어", isOn: Binding(
+                        get: { showJLPTWords },
+                        set: { onSetShowJLPTWords($0) }
+                    ))
+
+                    Toggle("내 단어장", isOn: Binding(
+                        get: { showNotebookWords },
+                        set: { onSetShowNotebookWords($0) }
+                    ))
+                }
+
+                if showJLPTWords {
+                    Section("JLPT 레벨 선택") {
+                        VStack(alignment: .leading, spacing: 12) {
+                            if availableLevels.isEmpty {
+                                Text("사용 가능한 레벨이 없습니다.")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                HStack(spacing: 8) {
+                                    ForEach(availableLevels, id: \.self) { level in
+                                        LevelToggleButton(
+                                            title: level.title,
+                                            isOn: isLevelSelected(level)
+                                        ) {
+                                            onToggleLevel(level)
+                                        }
+                                    }
+                                    BookChip(isOn: isReviewOnly) {
+                                        onToggleReviewOnly()
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 8)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.white)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if showNotebookWords {
+                    Section("내 단어장 선택") {
+                        if notebooks.isEmpty {
+                            Text("아직 만든 단어장이 없어요.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         } else {
-                            HStack(spacing: 8) {
-                                ForEach(availableLevels, id: \.self) { level in
-                                    LevelToggleButton(
-                                        title: level.title,
-                                        isOn: isLevelSelected(level)
-                                    ) {
-                                        onToggleLevel(level)
+                            ForEach(notebooks) { notebook in
+                                Button {
+                                    onToggleNotebook(notebook.id)
+                                } label: {
+                                    HStack(spacing: 12) {
+                                        Text(notebook.title)
+                                            .foregroundStyle(.primary)
+
+                                        Spacer()
+
+                                        Text("\(notebook.items.count)")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+
+                                        Image(systemName: isNotebookSelected(notebook.id) ? "checkmark.circle.fill" : "circle")
+                                            .foregroundStyle(isNotebookSelected(notebook.id) ? Color.accentColor : Color.secondary)
                                     }
                                 }
-                                BookChip(isOn: isReviewOnly) {
-                                    onToggleReviewOnly()
-                                }
+                                .buttonStyle(.plain)
                             }
-                            .frame(maxWidth: .infinity, alignment: .center)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 8)
-                            .background(
-                                Capsule()
-                                    .fill(Color.white)
-                            )
                         }
                     }
                 }
@@ -419,13 +519,25 @@ private struct LevelFilterSheetPreview: View {
     @State private var selectedLevels: Set<JLPTLevel>
     @State private var reviewOnly: Bool
     @State private var shuffleLocked: Bool
+    @State private var showJLPTWords: Bool
+    @State private var showNotebookWords: Bool
+    @State private var selectedNotebookIds: Set<UUID>
     private let availableLevels: [JLPTLevel]
+    private let notebooks: [WordNotebook]
 
     init(initialLevels: Set<JLPTLevel>, availableLevels: [JLPTLevel]) {
         _selectedLevels = State(initialValue: initialLevels)
         _reviewOnly = State(initialValue: false)
         _shuffleLocked = State(initialValue: false)
+        _showJLPTWords = State(initialValue: true)
+        _showNotebookWords = State(initialValue: true)
+        let previewNotebooks = [
+            WordNotebook(title: "회화 표현", items: [WordNotebookItem(word: "伝言", reading: "でんごん", meaning: "전언")]),
+            WordNotebook(title: "N4 동사", items: [WordNotebookItem(word: "続ける", reading: "つづける", meaning: "계속하다")])
+        ]
+        _selectedNotebookIds = State(initialValue: Set(previewNotebooks.map(\.id)))
         self.availableLevels = availableLevels
+        self.notebooks = previewNotebooks
     }
 
     private func toggleLevel(_ level: JLPTLevel) {
@@ -438,8 +550,21 @@ private struct LevelFilterSheetPreview: View {
 
     var body: some View {
         LevelFilterSheetContent(
+            showJLPTWords: showJLPTWords,
+            onSetShowJLPTWords: { showJLPTWords = $0 },
+            showNotebookWords: showNotebookWords,
+            onSetShowNotebookWords: { showNotebookWords = $0 },
             availableLevels: availableLevels,
             isLevelSelected: { selectedLevels.contains($0) },
+            notebooks: notebooks,
+            isNotebookSelected: { selectedNotebookIds.contains($0) },
+            onToggleNotebook: { notebookId in
+                if selectedNotebookIds.contains(notebookId) {
+                    selectedNotebookIds.remove(notebookId)
+                } else {
+                    selectedNotebookIds.insert(notebookId)
+                }
+            },
             isReviewOnly: reviewOnly,
             onToggleReviewOnly: { reviewOnly.toggle() },
             isShuffleLocked: shuffleLocked,

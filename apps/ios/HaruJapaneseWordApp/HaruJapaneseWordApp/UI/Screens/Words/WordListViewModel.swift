@@ -6,6 +6,9 @@ import Combine
 final class WordListViewModel: ObservableObject {
     private static let selectedLevelsKey = "WordFilter.selectedLevels"
     private static let reviewOnlyKey = "WordFilter.reviewOnly"
+    private static let showJLPTWordsKey = "WordFilter.showJLPTWords"
+    private static let showNotebookWordsKey = "WordFilter.showNotebookWords"
+    private static let selectedNotebookIdsKey = "WordFilter.selectedNotebookIds"
     private static let shuffledWordIdsKey = "WordList.shuffledWordIds"
     private static let preferencesKey = "wordListPreferences"
 
@@ -27,8 +30,11 @@ final class WordListViewModel: ObservableObject {
     @Published var searchText: String = ""
     @Published var selectedLevels: Set<JLPTLevel> = []
     @Published var reviewOnly: Bool = false
+    @Published var showJLPTWords: Bool = true
+    @Published var showNotebookWords: Bool = false
+    @Published var selectedNotebookIds: Set<UUID> = []
     @Published var preferences: WordListPreferences = WordListPreferences()
-    @Published private(set) var displayedWords: [WordSummary] = []
+    @Published private(set) var displayedWords: [WordListItem] = []
     @Published private(set) var availableLevels: [JLPTLevel] = []
     @Published private(set) var reviewWordIds: Set<Int> = []
     @Published var isLoading: Bool = false
@@ -38,13 +44,17 @@ final class WordListViewModel: ObservableObject {
 
     private let repository: DictionaryRepository
     private let reviewStore = ReviewWordStore()
-    private var baseWords: [WordSummary] = []
-    private var shuffledWordIds: [Int] = []
+    private var baseJLPTWords: [WordSummary] = []
+    private var notebooks: [WordNotebook] = []
+    private var shuffledWordIds: [String] = []
 
     init(repository: DictionaryRepository) {
         self.repository = repository
         self.selectedLevels = Self.loadSelectedLevels()
         self.reviewOnly = Self.loadReviewOnly()
+        self.showJLPTWords = Self.loadShowJLPTWords()
+        self.showNotebookWords = Self.loadShowNotebookWords()
+        self.selectedNotebookIds = Self.loadSelectedNotebookIds()
         self.shuffledWordIds = Self.loadShuffledWordIds()
         self.preferences = Self.loadPreferences()
         self.reviewWordIds = reviewStore.loadReviewSet()
@@ -75,6 +85,32 @@ final class WordListViewModel: ObservableObject {
         applyFiltersAndOrder()
     }
 
+    func setShowJLPTWords(_ isOn: Bool) {
+        showJLPTWords = isOn
+        persistShowJLPTWords()
+        applyFiltersAndOrder()
+    }
+
+    func setShowNotebookWords(_ isOn: Bool) {
+        showNotebookWords = isOn
+        persistShowNotebookWords()
+        applyFiltersAndOrder()
+    }
+
+    func toggleNotebookSelection(_ notebookId: UUID) {
+        if selectedNotebookIds.contains(notebookId) {
+            selectedNotebookIds.remove(notebookId)
+        } else {
+            selectedNotebookIds.insert(notebookId)
+        }
+        persistSelectedNotebookIds()
+        applyFiltersAndOrder()
+    }
+
+    func isNotebookSelected(_ notebookId: UUID) -> Bool {
+        selectedNotebookIds.contains(notebookId)
+    }
+
     func setShuffleLocked(_ isLocked: Bool) {
         preferences.shuffleLocked = isLocked
         persistPreferences()
@@ -96,6 +132,11 @@ final class WordListViewModel: ObservableObject {
         reviewWordIds.contains(wordId)
     }
 
+    func isReviewWord(_ word: WordListItem) -> Bool {
+        guard let wordId = word.jlptWordId else { return false }
+        return isReviewWord(wordId)
+    }
+
     func toggleReview(_ wordId: Int) {
         if isReviewWord(wordId) {
             removeFromReview(wordId)
@@ -106,6 +147,17 @@ final class WordListViewModel: ObservableObject {
 
     func refreshReviewState() {
         reviewWordIds = reviewStore.loadReviewSet()
+        applyFiltersAndOrder()
+    }
+
+    func updateNotebooks(_ notebooks: [WordNotebook]) {
+        self.notebooks = notebooks
+        let validIds = Set(notebooks.map(\.id))
+        let filteredIds = Set(selectedNotebookIds.filter { validIds.contains($0) })
+        if filteredIds != selectedNotebookIds {
+            selectedNotebookIds = filteredIds
+            persistSelectedNotebookIds()
+        }
         applyFiltersAndOrder()
     }
 
@@ -137,16 +189,16 @@ final class WordListViewModel: ObservableObject {
         do {
             let trimmedQuery = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmedQuery.isEmpty {
-                baseWords = try repository.fetchWords(level: nil, limit: nil, offset: nil)
+                baseJLPTWords = try repository.fetchWords(level: nil, limit: nil, offset: nil)
             } else {
-                baseWords = try repository.searchWords(level: nil, query: trimmedQuery, limit: nil, offset: nil)
+                baseJLPTWords = try repository.searchWords(level: nil, query: trimmedQuery, limit: nil, offset: nil)
             }
-            updateAvailableLevels(from: baseWords)
+            updateAvailableLevels(from: baseJLPTWords)
             applyFiltersAndOrder()
         } catch {
             hasError = true
             debugError = String(describing: error)
-            baseWords = []
+            baseJLPTWords = []
             displayedWords = []
         }
 
@@ -161,18 +213,51 @@ final class WordListViewModel: ObservableObject {
     }
 
     private func applyFiltersAndOrder() {
-        let levelSet = selectedLevels.isEmpty ? Set(availableLevels) : selectedLevels
-        var filtered = baseWords
-        if levelSet.isEmpty == false {
-            filtered = filtered.filter { levelSet.contains($0.level) }
-        }
-        if reviewOnly {
-            filtered = filtered.filter { reviewWordIds.contains($0.id) }
-        }
-        displayedWords = applySort(to: filtered)
+        displayedWords = applySort(to: filteredWords())
     }
 
-    private func applySort(to words: [WordSummary]) -> [WordSummary] {
+    private func filteredWords() -> [WordListItem] {
+        let trimmedQuery = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let levelSet = selectedLevels.isEmpty ? Set(availableLevels) : selectedLevels
+        var filtered: [WordListItem] = []
+
+        if showJLPTWords {
+            var jlptWords = baseJLPTWords
+            if levelSet.isEmpty == false {
+                jlptWords = jlptWords.filter { levelSet.contains($0.level) }
+            }
+            if reviewOnly {
+                jlptWords = jlptWords.filter { reviewWordIds.contains($0.id) }
+            }
+            filtered.append(contentsOf: jlptWords.map(WordListItem.init(wordSummary:)))
+        }
+
+        if showNotebookWords {
+            let notebookWords = notebooks
+                .filter { selectedNotebookIds.contains($0.id) }
+                .flatMap { notebook in
+                    notebook.items.map { WordListItem(notebookId: notebook.id, item: $0) }
+                }
+                .filter { item in
+                    matchesNotebookWord(item, query: trimmedQuery)
+                }
+            filtered.append(contentsOf: notebookWords)
+        }
+
+        return filtered
+    }
+
+    private func matchesNotebookWord(_ item: WordListItem, query: String) -> Bool {
+        guard query.isEmpty == false else { return true }
+        let normalizedQuery = query.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+        let targets = [item.word, item.reading ?? "", item.meaning]
+        return targets.contains {
+            $0.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+                .localizedStandardContains(normalizedQuery)
+        }
+    }
+
+    private func applySort(to words: [WordListItem]) -> [WordListItem] {
         switch preferences.sortMode {
         case .alphabetical:
             return words
@@ -181,7 +266,7 @@ final class WordListViewModel: ObservableObject {
         }
     }
 
-    private func applyShuffleIfNeeded(to words: [WordSummary]) -> [WordSummary] {
+    private func applyShuffleIfNeeded(to words: [WordListItem]) -> [WordListItem] {
         if shuffledWordIds.isEmpty {
             shuffledWordIds = words.map { $0.id }
             shuffledWordIds.shuffle()
@@ -189,7 +274,7 @@ final class WordListViewModel: ObservableObject {
         }
 
         let wordById = Dictionary(uniqueKeysWithValues: words.map { ($0.id, $0) })
-        var ordered: [WordSummary] = []
+        var ordered: [WordListItem] = []
         ordered.reserveCapacity(words.count)
         for id in shuffledWordIds {
             if let word = wordById[id] {
@@ -211,14 +296,7 @@ final class WordListViewModel: ObservableObject {
     }
 
     private func shuffleCurrentWords() {
-        let levelSet = selectedLevels.isEmpty ? Set(availableLevels) : selectedLevels
-        var filtered = baseWords
-        if levelSet.isEmpty == false {
-            filtered = filtered.filter { levelSet.contains($0.level) }
-        }
-        if reviewOnly {
-            filtered = filtered.filter { reviewWordIds.contains($0.id) }
-        }
+        let filtered = filteredWords()
         shuffledWordIds = filtered.map { $0.id }
         shuffledWordIds.shuffle()
         persistShuffledWordIds()
@@ -257,6 +335,18 @@ final class WordListViewModel: ObservableObject {
         UserDefaults.standard.set(reviewOnly, forKey: Self.reviewOnlyKey)
     }
 
+    private func persistShowJLPTWords() {
+        UserDefaults.standard.set(showJLPTWords, forKey: Self.showJLPTWordsKey)
+    }
+
+    private func persistShowNotebookWords() {
+        UserDefaults.standard.set(showNotebookWords, forKey: Self.showNotebookWordsKey)
+    }
+
+    private func persistSelectedNotebookIds() {
+        UserDefaults.standard.set(selectedNotebookIds.map(\.uuidString), forKey: Self.selectedNotebookIdsKey)
+    }
+
     private func persistShuffledWordIds() {
         UserDefaults.standard.set(shuffledWordIds, forKey: Self.shuffledWordIdsKey)
     }
@@ -276,8 +366,24 @@ final class WordListViewModel: ObservableObject {
         UserDefaults.standard.bool(forKey: reviewOnlyKey)
     }
 
-    private static func loadShuffledWordIds() -> [Int] {
-        UserDefaults.standard.array(forKey: shuffledWordIdsKey) as? [Int] ?? []
+    private static func loadShowJLPTWords() -> Bool {
+        if UserDefaults.standard.object(forKey: showJLPTWordsKey) == nil {
+            return true
+        }
+        return UserDefaults.standard.bool(forKey: showJLPTWordsKey)
+    }
+
+    private static func loadShowNotebookWords() -> Bool {
+        UserDefaults.standard.bool(forKey: showNotebookWordsKey)
+    }
+
+    private static func loadSelectedNotebookIds() -> Set<UUID> {
+        let rawIds = UserDefaults.standard.stringArray(forKey: selectedNotebookIdsKey) ?? []
+        return Set(rawIds.compactMap(UUID.init(uuidString:)))
+    }
+
+    private static func loadShuffledWordIds() -> [String] {
+        UserDefaults.standard.stringArray(forKey: shuffledWordIdsKey) ?? []
     }
 
     private static func loadPreferences() -> WordListPreferences {

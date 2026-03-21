@@ -1,25 +1,32 @@
 import SwiftUI
 
 struct WordRow: View {
-    let word: WordSummary
+    let word: WordListItem
     let isReviewWord: Bool
 
     var body: some View {
-        let meaningsText = word.meanings.isEmpty ? "—" : word.meanings
+        let meaningsText = word.meaning.isEmpty ? "—" : word.meaning
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(word.expression)
+                Text(word.word)
                     .font(.headline)
 
                 Spacer(minLength: 8)
 
-                Text(word.level.title)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color.black.opacity(0.04))
-                    .clipShape(Capsule())
+                if let level = word.jlptLevel {
+                    Text(level.title)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.black.opacity(0.04))
+                        .clipShape(Capsule())
+                }
+
+                if word.isNotebookWord {
+                    Text("📘")
+                        .font(.caption2)
+                }
 
                 if isReviewWord {
                     Image(systemName: "book.fill")
@@ -38,7 +45,9 @@ struct WordRow: View {
 
 #Preview {
     WordRow(
-        word: WordSummary(id: 1, level: .n5, expression: "例", reading: "れい", meanings: "예 / 예시"),
+        word: WordListItem(
+            wordSummary: WordSummary(id: 1, level: .n5, expression: "例", reading: "れい", meanings: "예 / 예시")
+        ),
         isReviewWord: true
     )
         .padding()
