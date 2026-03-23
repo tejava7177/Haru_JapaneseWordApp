@@ -10,26 +10,16 @@ final class OnboardingViewModel: ObservableObject {
         var pages: [OnboardingPage] = [
             OnboardingPage(
                 id: 0,
-                title: "하루",
+                title: "하루 - 오늘의 추천 단어 10개",
                 description: [
-                    "매일 10개의 일본어 단어를",
-                    "가볍게 학습해보세요"
+                    "카드를 넘기며 새로운 단어를 학습할 수 있어요.",
+                    "체크를 표시하면 당분간 표시되지 않아요."
                 ],
                 supportingText: nil,
-                mockKind: .dailyWords
-            ),
-            OnboardingPage(
-                id: 1,
-                title: "오늘의 추천 단어",
-                description: [
-                    "카드를 넘기며",
-                    "새로운 단어를 학습할 수 있어요"
-                ],
-                supportingText: "체크하면 당분간 숨길 수 있어요",
                 mockKind: .recommendationCard
             ),
             OnboardingPage(
-                id: 2,
+                id: 1,
                 title: "단어 탐색",
                 description: [
                     "JLPT 레벨별 단어를",
@@ -39,7 +29,7 @@ final class OnboardingViewModel: ObservableObject {
                 mockKind: .search
             ),
             OnboardingPage(
-                id: 3,
+                id: 2,
                 title: "내 단어장",
                 description: [
                     "직접 단어를 추가하고",
@@ -53,7 +43,7 @@ final class OnboardingViewModel: ObservableObject {
         if isBuddyEnabled {
             pages.append(
                 OnboardingPage(
-                    id: 4,
+                    id: 3,
                     title: "Buddy",
                     description: [
                         "로그인하면 Buddy 기능으로",

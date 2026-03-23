@@ -86,69 +86,18 @@ struct HomeView: View {
 
     @ViewBuilder
     private func cardView(for word: WordSummary) -> some View {
-        let cornerRadius: CGFloat = 18
-        let bottomSafeSpace: CGFloat = 14
-        let isExcluded = viewModel.isExcluded(word.id)
-
-        ZStack {
-            NavigationLink(value: word.id) {
-                VStack(alignment: .leading, spacing: 0) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(word.expression)
-                            .font(.largeTitle)
-                            .fontWeight(.semibold)
-
-                        if word.reading.isEmpty == false {
-                            Text(word.reading)
-                                .font(.title3)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        if word.meanings.isEmpty == false {
-                            Text(word.meanings)
-                                .font(.body)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
-                        }
-                    }
-                    .padding(.top, 18)
-                    .padding(.leading, 18)
-                    .padding(.trailing, 16)
-                    .padding(.bottom, 8)
-
-                    Spacer(minLength: 10)
-                    Spacer(minLength: bottomSafeSpace)
+        NavigationLink(value: word.id) {
+            RecommendationWordCardView(
+                expression: word.expression,
+                reading: word.reading,
+                meanings: word.meanings,
+                isExcluded: viewModel.isExcluded(word.id),
+                action: {
+                    viewModel.toggleExcluded(wordId: word.id)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .contentShape(RoundedRectangle(cornerRadius: cornerRadius))
-                .padding(10)
-                .background(Color.white)
-                .overlay(
-                    RoundedRectangle(cornerRadius: cornerRadius)
-                        .stroke(isExcluded ? Color.black.opacity(0.16) : Color.black.opacity(0.08), lineWidth: 1)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
-                .shadow(color: Color.black.opacity(0.04), radius: 5, x: 0, y: 2)
-            }
-            .buttonStyle(.plain)
+            )
         }
-        .overlay(alignment: .topTrailing) {
-            Button {
-                viewModel.toggleExcluded(wordId: word.id)
-            } label: {
-                Image(systemName: isExcluded ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .foregroundStyle(isExcluded ? .primary : .secondary)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .padding(.top, 10)
-            .padding(.trailing, 10)
-        }
-        .overlay(alignment: .topLeading) {
-            EmptyView()
-        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder

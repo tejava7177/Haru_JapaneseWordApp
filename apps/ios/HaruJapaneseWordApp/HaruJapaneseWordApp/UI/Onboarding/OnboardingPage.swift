@@ -2,7 +2,6 @@ import SwiftUI
 
 struct OnboardingPage: Identifiable, Equatable {
     enum MockKind: Equatable {
-        case dailyWords
         case recommendationCard
         case search
         case notebook

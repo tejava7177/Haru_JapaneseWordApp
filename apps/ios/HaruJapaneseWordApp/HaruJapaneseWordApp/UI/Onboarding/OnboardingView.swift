@@ -70,12 +70,12 @@ private struct OnboardingPageContent: View {
     let page: OnboardingPage
 
     var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: 20) {
             Spacer(minLength: 28)
 
             mockCard
 
-            VStack(spacing: 12) {
+            VStack(spacing: 10) {
                 Text(page.title)
                     .font(.largeTitle.weight(.bold))
                     .multilineTextAlignment(.center)
@@ -91,10 +91,9 @@ private struct OnboardingPageContent: View {
 
                 if let supportingText = page.supportingText {
                     Text(supportingText)
-                        .font(.footnote.weight(.medium))
-                        .foregroundStyle(Color.black.opacity(0.65))
+                        .font(.body)
+                        .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
-                        .padding(.top, 4)
                 }
             }
             .padding(.horizontal, 28)
@@ -106,18 +105,7 @@ private struct OnboardingPageContent: View {
     }
 
     private var mockCard: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 32, style: .continuous)
-                .fill(Color.white.opacity(0.88))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 32, style: .continuous)
-                        .stroke(Color.black.opacity(0.06), lineWidth: 1)
-                )
-                .shadow(color: Color.black.opacity(0.06), radius: 20, x: 0, y: 12)
-
-            mockContent
-                .padding(24)
-        }
+        mockContent
         .frame(maxWidth: 360)
         .frame(height: 340)
     }
@@ -125,75 +113,33 @@ private struct OnboardingPageContent: View {
     @ViewBuilder
     private var mockContent: some View {
         switch page.mockKind {
-        case .dailyWords:
-            VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("DAY 01")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.secondary)
-                        Text("오늘의 10단어")
-                            .font(.title3.weight(.semibold))
-                    }
-
-                    Spacer()
-
-                    Circle()
-                        .fill(Color.orange.opacity(0.18))
-                        .frame(width: 42, height: 42)
-                        .overlay(Image(systemName: "sun.max.fill").foregroundStyle(Color.orange))
-                }
-
-                ForEach(0..<4, id: \.self) { index in
-                    HStack {
-                        Text("0\(index + 1)")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(index == 0 ? Color.black : Color.black.opacity(0.08))
-                            .frame(height: 12)
-                    }
-                }
-
-                Spacer()
-            }
-
         case .recommendationCard:
             VStack(spacing: 14) {
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color(red: 0.97, green: 0.89, blue: 0.78), Color.white],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .overlay(alignment: .topTrailing) {
-                        Image(systemName: "checkmark.circle")
-                            .font(.title2)
-                            .padding(16)
-                            .foregroundStyle(.secondary)
-                    }
-                    .overlay(alignment: .bottomLeading) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("食べる")
-                                .font(.system(size: 30, weight: .bold))
-                            Text("たべる")
-                                .font(.headline)
-                                .foregroundStyle(.secondary)
-                            Text("먹다")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(20)
-                    }
+                RecommendationWordCardView(
+                    expression: "食べる",
+                    reading: "たべる",
+                    meanings: "먹다",
+                    isExcluded: false,
+                    action: nil
+                )
 
                 HStack(spacing: 8) {
-                    Capsule().fill(Color.black).frame(width: 24, height: 6)
-                    Capsule().fill(Color.black.opacity(0.16)).frame(width: 8, height: 6)
-                    Capsule().fill(Color.black.opacity(0.16)).frame(width: 8, height: 6)
+                    Circle()
+                        .fill(Color.black.opacity(0.6))
+                        .frame(width: 6, height: 6)
+                    Circle()
+                        .fill(Color.black.opacity(0.2))
+                        .frame(width: 6, height: 6)
+                    Circle()
+                        .fill(Color.black.opacity(0.2))
+                        .frame(width: 6, height: 6)
                 }
+                .padding(.vertical, 6)
+                .padding(.horizontal, 12)
+                .background(
+                    Capsule()
+                        .fill(Color.black.opacity(0.08))
+                )
             }
 
         case .search:
