@@ -32,7 +32,7 @@ struct NotebookDetailView: View {
                         itemRow(item)
                     }
                     .buttonStyle(.plain)
-                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                    .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -106,32 +106,30 @@ struct NotebookDetailView: View {
 
 private extension NotebookDetailView {
     var summarySection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(notebook?.title ?? "단어장")
-                .font(.title3.weight(.semibold))
-
+        VStack(alignment: .leading, spacing: 10) {
             Text("단어 \(items.count)개")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(.headline)
+                .foregroundStyle(.primary)
+
+            if let descriptionText = notebook?.descriptionText?.trimmingCharacters(in: .whitespacesAndNewlines),
+               descriptionText.isEmpty == false {
+                Text(descriptionText)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 16)
-        .background(Color.white.opacity(0.96))
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.black.opacity(0.04), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: 4)
-        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+        .padding(.horizontal, 20)
+        .padding(.top, 8)
+        .padding(.bottom, 10)
+        .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 10, trailing: 0))
         .listRowSeparator(.hidden)
         .listRowBackground(Color.clear)
     }
 
     var emptyState: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 12) {
             Image(systemName: "text.book.closed")
-                .font(.system(size: 28))
+                .font(.system(size: 30))
                 .foregroundStyle(.secondary)
 
             Text("아직 단어가 없어요")
@@ -140,33 +138,44 @@ private extension NotebookDetailView {
             Text("첫 단어를 추가해보세요")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 48)
-        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+        .padding(.horizontal, 20)
+        .padding(.vertical, 72)
+        .background(Color.white.opacity(0.92))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.black.opacity(0.04), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.02), radius: 4, x: 0, y: 1)
+        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
         .listRowSeparator(.hidden)
         .listRowBackground(Color.clear)
     }
 
     func itemRow(_ item: WordNotebookItem) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             Text(item.word)
                 .font(.headline)
+                .foregroundStyle(.primary)
 
             Text(item.meaning)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
         .contentShape(Rectangle())
-        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 20)
         .padding(.vertical, 12)
-        .background(Color.white.opacity(0.96))
+        .background(Color.white.opacity(0.94))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(Color.black.opacity(0.04), lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: 4)
+        .shadow(color: Color.black.opacity(0.015), radius: 2, x: 0, y: 1)
     }
 }
 

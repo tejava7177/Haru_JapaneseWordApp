@@ -19,11 +19,15 @@ final class NotebookStore: ObservableObject {
         load()
     }
 
-    func addNotebook(title: String) {
+    func addNotebook(title: String, descriptionText: String? = nil) {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedDescription = descriptionText?.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmedTitle.isEmpty == false else { return }
 
-        let notebook = WordNotebook(title: trimmedTitle)
+        let notebook = WordNotebook(
+            title: trimmedTitle,
+            descriptionText: trimmedDescription?.isEmpty == false ? trimmedDescription : nil
+        )
         notebooks.insert(notebook, at: 0)
         save()
     }

@@ -75,10 +75,7 @@ private extension NotebookListView {
                 Text(notebook.title)
                     .font(.headline)
 
-                HStack(spacing: 8) {
-                    Label("\(notebook.items.count)개 단어", systemImage: "text.book.closed")
-                    Text(notebook.createdAt.formatted(date: .abbreviated, time: .omitted))
-                }
+                Text("\(notebook.items.count)개 단어 · \(notebook.createdAt.formatted(date: .abbreviated, time: .omitted))")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             }
