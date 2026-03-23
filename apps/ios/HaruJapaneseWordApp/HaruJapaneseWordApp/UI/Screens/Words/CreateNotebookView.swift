@@ -31,6 +31,7 @@ struct CreateNotebookView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("설명")
                         .font(.subheadline.weight(.semibold))
+
                     ZStack(alignment: .topLeading) {
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .fill(Color(uiColor: .secondarySystemBackground))
@@ -47,20 +48,28 @@ struct CreateNotebookView: View {
                             .scrollContentBackground(.hidden)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 8)
-                            .frame(minHeight: 120)
+                            .frame(height: 104)
                             .background(Color.clear)
                     }
+                    .frame(height: 104)
                 }
 
-                Button("생성") {
-                    store.addNotebook(
-                        title: trimmedTitle,
-                        descriptionText: trimmedDescription.isEmpty ? nil : trimmedDescription
-                    )
-                    dismiss()
+                HStack {
+                    Spacer()
+
+                    Button("생성") {
+                        store.addNotebook(
+                            title: trimmedTitle,
+                            descriptionText: trimmedDescription.isEmpty ? nil : trimmedDescription
+                        )
+                        dismiss()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(trimmedTitle.isEmpty)
+
+                    Spacer()
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(trimmedTitle.isEmpty)
+                .padding(.top, 4)
 
                 Spacer()
             }
