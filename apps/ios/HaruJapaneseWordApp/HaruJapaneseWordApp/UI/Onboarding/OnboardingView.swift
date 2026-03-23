@@ -227,52 +227,98 @@ private struct OnboardingPageContent: View {
 
         case .buddy:
             VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    Text("Buddy")
-                        .font(.title3.weight(.semibold))
+                buddyCard(
+                    name: "유나",
+                    subtitle: "연결됨",
+                    trailing: AnyView(
+                        Text("티키타카 2회")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    ),
+                    accent: Color.green,
+                    icon: "person.2.fill"
+                )
 
-                    Spacer()
-
-                    Text("LOGIN")
-                        .font(.caption.weight(.bold))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Color.green.opacity(0.12))
-                        .clipShape(Capsule())
-                }
-
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(Color.black.opacity(0.05))
-                    .frame(height: 112)
-                    .overlay {
-                        HStack(spacing: 14) {
-                            Circle()
-                                .fill(Color.pink.opacity(0.20))
-                                .frame(width: 58, height: 58)
-                                .overlay(Image(systemName: "person.fill").foregroundStyle(Color.pink))
-
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text("친구와 단어 공유")
-                                    .font(.headline)
-                                Text("로그인 후 Buddy 탭에서 시작")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            Spacer()
+                buddyCard(
+                    name: "하린",
+                    subtitle: "받은 신청",
+                    trailing: AnyView(
+                        HStack(spacing: 8) {
+                            smallAction("거절", fill: Color.black.opacity(0.06), textColor: .secondary)
+                            smallAction("수락", fill: Color.green.opacity(0.14), textColor: .green)
                         }
-                        .padding(18)
-                    }
+                    ),
+                    accent: Color.orange,
+                    icon: "tray.and.arrow.down.fill"
+                )
 
-                HStack(spacing: 12) {
-                    ForEach(0..<3, id: \.self) { _ in
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(Color.black.opacity(0.05))
-                            .frame(height: 64)
-                    }
-                }
+                buddyCard(
+                    name: "미오",
+                    subtitle: "랜덤 매칭 후보",
+                    trailing: AnyView(
+                        HStack(spacing: 8) {
+                            Text("N3")
+                                .font(.caption.weight(.bold))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Color.blue.opacity(0.12))
+                                .clipShape(Capsule())
+
+                            smallAction("신청", fill: Color.black, textColor: .white)
+                        }
+                    ),
+                    accent: Color.blue,
+                    icon: "sparkles"
+                )
             }
         }
+    }
+
+    private func buddyCard(
+        name: String,
+        subtitle: String,
+        trailing: AnyView,
+        accent: Color,
+        icon: String
+    ) -> some View {
+        HStack(spacing: 14) {
+            Circle()
+                .fill(accent.opacity(0.16))
+                .frame(width: 48, height: 48)
+                .overlay(
+                    Image(systemName: icon)
+                        .foregroundStyle(accent)
+                )
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(name)
+                    .font(.headline)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            trailing
+        }
+        .padding(16)
+        .background(Color.white.opacity(0.9))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.black.opacity(0.04), lineWidth: 1)
+        )
+    }
+
+    private func smallAction(_ title: String, fill: Color, textColor: Color) -> some View {
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(textColor)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(fill)
+            .clipShape(Capsule())
     }
 }
 

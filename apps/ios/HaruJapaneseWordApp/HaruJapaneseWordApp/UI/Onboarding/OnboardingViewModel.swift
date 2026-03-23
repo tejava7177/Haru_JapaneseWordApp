@@ -7,7 +7,7 @@ final class OnboardingViewModel: ObservableObject {
     let pages: [OnboardingPage]
 
     init(isBuddyEnabled: Bool) {
-        var pages: [OnboardingPage] = [
+        self.pages = [
             OnboardingPage(
                 id: 0,
                 title: "하루 - 오늘의 추천 단어 10개",
@@ -37,25 +37,18 @@ final class OnboardingViewModel: ObservableObject {
                 ],
                 supportingText: nil,
                 mockKind: .notebook
+            ),
+            OnboardingPage(
+                id: 3,
+                title: "버디와 함께 학습하기",
+                description: [
+                    "비슷한 레벨의 학습자와 연결해",
+                    "단어를 주고받으며 가볍게 복습할 수 있어요"
+                ],
+                supportingText: nil,
+                mockKind: .buddy
             )
         ]
-
-        if isBuddyEnabled {
-            pages.append(
-                OnboardingPage(
-                    id: 3,
-                    title: "Buddy",
-                    description: [
-                        "로그인하면 Buddy 기능으로",
-                        "함께 단어를 주고받을 수 있어요"
-                    ],
-                    supportingText: "Buddy 기능은 로그인 상태일 때만 표시돼요",
-                    mockKind: .buddy
-                )
-            )
-        }
-
-        self.pages = pages
     }
 
     var isLastPage: Bool {

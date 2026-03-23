@@ -66,7 +66,7 @@ struct RootView: View {
 
             ProfileView(settingsStore: settingsStore)
                 .tabItem {
-                    Label("프로필", systemImage: "person.circle")
+                    Label("Profile", systemImage: "person.circle")
                 }
                 .tag(RootTab.profile)
         }
