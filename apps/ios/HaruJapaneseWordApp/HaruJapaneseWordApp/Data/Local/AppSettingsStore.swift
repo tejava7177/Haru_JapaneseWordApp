@@ -11,7 +11,8 @@ final class AppSettingsStore: ObservableObject {
     private let userDefaults: UserDefaults
 
     private let homeDeckLevelKey = "settings_home_deck_level"
-    private let onboardingKey = "has_seen_onboarding"
+    private let onboardingKey = "hasSeenOnboarding"
+    private let legacyOnboardingKey = "has_seen_onboarding"
     private let isSignedInKey = "auth_is_signed_in"
     private let appleUserIdKey = "auth_apple_user_id"
     private let mateUserIdKey = "mate_user_id"
@@ -35,7 +36,8 @@ final class AppSettingsStore: ObservableObject {
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
         self.settings = AppSettingsStore.loadSettings(userDefaults: userDefaults)
-        self.hasSeenOnboarding = userDefaults.bool(forKey: onboardingKey)
+        self.hasSeenOnboarding = userDefaults.object(forKey: onboardingKey) as? Bool
+            ?? userDefaults.bool(forKey: legacyOnboardingKey)
         self.isSignedIn = userDefaults.bool(forKey: isSignedInKey)
         self.appleUserId = userDefaults.string(forKey: appleUserIdKey)
 
@@ -68,6 +70,7 @@ final class AppSettingsStore: ObservableObject {
     func markOnboardingSeen() {
         hasSeenOnboarding = true
         userDefaults.set(true, forKey: onboardingKey)
+        userDefaults.removeObject(forKey: legacyOnboardingKey)
     }
 
     func signIn(appleUserId: String) {
@@ -292,7 +295,8 @@ final class AppSettingsStore: ObservableObject {
         Self.deleteWritableSQLiteIfNeeded()
 
         settings = AppSettingsStore.loadSettings(userDefaults: userDefaults)
-        hasSeenOnboarding = userDefaults.bool(forKey: onboardingKey)
+        hasSeenOnboarding = userDefaults.object(forKey: onboardingKey) as? Bool
+            ?? userDefaults.bool(forKey: legacyOnboardingKey)
         isSignedIn = userDefaults.bool(forKey: isSignedInKey)
         appleUserId = userDefaults.string(forKey: appleUserIdKey)
     }

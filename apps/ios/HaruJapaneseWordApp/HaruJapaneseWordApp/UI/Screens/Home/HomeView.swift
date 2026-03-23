@@ -54,7 +54,6 @@ struct HomeView: View {
                                     .padding(.top, 6)
                                     .frame(maxWidth: .infinity, alignment: .center)
                             }
-
                         } else if viewModel.hasError {
                             emptyStateView()
                         } else {
@@ -151,7 +150,6 @@ struct HomeView: View {
             EmptyView()
         }
     }
-
 
     @ViewBuilder
     private func todayLyricView() -> some View {
@@ -295,7 +293,6 @@ struct HomeView: View {
                 .fill(Color.black.opacity(0.08))
         )
     }
-
 
     @ViewBuilder
     private func emptyStateView() -> some View {

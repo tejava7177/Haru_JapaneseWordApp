@@ -5,7 +5,6 @@ struct RootView: View {
     @StateObject private var settingsStore: AppSettingsStore
     @StateObject private var wordListViewModel: WordListViewModel
     @StateObject private var mateViewModel: MateViewModel
-    @State private var isShowingOnboarding: Bool = false
     @State private var selectedTab: RootTab = .home
 
     enum RootTab: Hashable {
@@ -25,6 +24,19 @@ struct RootView: View {
     }
 
     var body: some View {
+        Group {
+            if settingsStore.hasSeenOnboarding {
+                mainTabView
+            } else {
+                OnboardingView(isBuddyEnabled: settingsStore.isMateLoggedIn) {
+                    selectedTab = .home
+                    settingsStore.markOnboardingSeen()
+                }
+            }
+        }
+    }
+
+    private var mainTabView: some View {
         TabView(selection: $selectedTab) {
             HomeView(repository: repository, settingsStore: settingsStore)
                 .tabItem {
@@ -57,17 +69,6 @@ struct RootView: View {
                     Label("프로필", systemImage: "person.circle")
                 }
                 .tag(RootTab.profile)
-        }
-        .onAppear {
-            if settingsStore.hasSeenOnboarding == false {
-                isShowingOnboarding = true
-            }
-        }
-        .fullScreenCover(isPresented: $isShowingOnboarding) {
-            OnboardingView {
-                settingsStore.markOnboardingSeen()
-                isShowingOnboarding = false
-            }
         }
     }
 }
