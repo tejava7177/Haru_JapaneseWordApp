@@ -10,6 +10,7 @@ final class ProfileViewModel: ObservableObject {
     @Published var profile: UserProfile
     @Published var settings: AppSettings
     @Published var selectedLearningLevel: JLPTLevel
+    @Published var isDarkModeEnabled: Bool
     @Published var selectedPhotoItem: PhotosPickerItem?
     @Published var isResetAlertPresented: Bool = false
     @Published var isLocalResetAlertPresented: Bool = false
@@ -23,6 +24,10 @@ final class ProfileViewModel: ObservableObject {
     @Published var isUpdatingRandomMatching: Bool = false
     @Published var randomMatchingErrorMessage: String?
     @Published var randomMatchingNotice: String?
+    @Published var isLearningNotificationEnabled: Bool
+    @Published var isUpdatingLearningNotification: Bool = false
+    @Published var learningNotificationNotice: String?
+    @Published var learningNotificationErrorMessage: String?
     @Published var localResetNotice: String?
     @Published var localResetErrorMessage: String?
     @Published var isRefreshingServerProfile: Bool = false
@@ -50,13 +55,23 @@ final class ProfileViewModel: ObservableObject {
         self.profile = legacyProfile
         self.settings = settingsStore.settings
         self.selectedLearningLevel = settingsStore.settings.homeDeckLevel
+        self.isDarkModeEnabled = settingsStore.isDarkModeEnabled
+        self.isLearningNotificationEnabled = settingsStore.settings.isLearningNotificationEnabled
 
         settingsStore.$settings
             .receive(on: RunLoop.main)
             .sink { [weak self] value in
                 self?.settings = value
+                self?.isLearningNotificationEnabled = value.isLearningNotificationEnabled
                 self?.syncProfileFromCurrentUser()
                 self?.refreshCurrentUserProfileFromServer(triggerSource: "onChange")
+            }
+            .store(in: &cancellables)
+
+        settingsStore.$isDarkModeEnabled
+            .receive(on: RunLoop.main)
+            .sink { [weak self] value in
+                self?.isDarkModeEnabled = value
             }
             .store(in: &cancellables)
 
@@ -156,6 +171,44 @@ final class ProfileViewModel: ObservableObject {
 
     func signOutForMate() {
         settingsStore.signOutForMate()
+    }
+
+    func updateDarkModeEnabled(_ enabled: Bool) {
+        settingsStore.setDarkModeEnabled(enabled)
+    }
+
+    func updateLearningNotificationEnabled(_ enabled: Bool) {
+        print("[Notification] toggle changed enabled=\(enabled)")
+        guard isUpdatingLearningNotification == false else { return }
+
+        learningNotificationErrorMessage = nil
+        learningNotificationNotice = nil
+        isUpdatingLearningNotification = true
+
+        Task {
+            defer { isUpdatingLearningNotification = false }
+
+            if enabled {
+                let granted = await NotificationManager.shared.requestAuthorizationIfNeeded()
+                guard granted else {
+                    settingsStore.setLearningNotificationEnabled(false)
+                    isLearningNotificationEnabled = false
+                    learningNotificationNotice = "알림 권한이 꺼져 있어요. 설정에서 알림을 허용해 주세요."
+                    return
+                }
+
+                settingsStore.setLearningNotificationEnabled(true)
+                isLearningNotificationEnabled = true
+                await NotificationManager.shared.scheduleDailyLearningReminder()
+                learningNotificationNotice = "매일 오후 8시에 학습 알림을 보내드릴게요."
+                return
+            }
+
+            settingsStore.setLearningNotificationEnabled(false)
+            isLearningNotificationEnabled = false
+            await NotificationManager.shared.cancelDailyLearningReminder()
+            learningNotificationNotice = "학습 알림을 껐어요."
+        }
     }
 
     func loadAvatar(from item: PhotosPickerItem?) async {
@@ -273,6 +326,14 @@ final class ProfileViewModel: ObservableObject {
         randomMatchingErrorMessage = nil
     }
 
+    func clearLearningNotificationNotice() {
+        learningNotificationNotice = nil
+    }
+
+    func clearLearningNotificationError() {
+        learningNotificationErrorMessage = nil
+    }
+
     func clearLocalResetNotice() {
         localResetNotice = nil
     }
@@ -291,6 +352,7 @@ final class ProfileViewModel: ObservableObject {
         profile = profileStore.load()
         settings = settingsStore.settings
         selectedLearningLevel = settingsStore.settings.homeDeckLevel
+        isLearningNotificationEnabled = settingsStore.settings.isLearningNotificationEnabled
         isRandomMatchingEnabled = false
         localResetNotice = "로컬 상태를 초기화했어요."
         localAvatarPreviewData = nil

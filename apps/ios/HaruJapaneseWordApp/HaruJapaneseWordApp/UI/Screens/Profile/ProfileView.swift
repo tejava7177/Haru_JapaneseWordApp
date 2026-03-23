@@ -25,8 +25,10 @@ struct ProfileView: View {
                 } else {
                     guestContent
                 }
+                appearanceSection
+                notificationSettingsSection
                 helpSection
-                dataSection
+                appInfoSection
             }
             .navigationTitle("프로필")
         }
@@ -43,36 +45,15 @@ struct ProfileView: View {
             showToast(message: message)
             viewModel.clearLearningLevelNotice()
         }
-        .onChange(of: viewModel.dailyWordsRegenerateNotice) { message in
-            guard let message else { return }
-            showToast(message: message)
-            viewModel.clearDailyWordsRegenerateNotice()
-        }
         .onChange(of: viewModel.randomMatchingNotice) { message in
             guard let message else { return }
             showToast(message: message)
             viewModel.clearRandomMatchingNotice()
         }
-        .onChange(of: viewModel.localResetNotice) { message in
+        .onChange(of: viewModel.learningNotificationNotice) { message in
             guard let message else { return }
             showToast(message: message)
-            viewModel.clearLocalResetNotice()
-        }
-        .alert("학습 데이터 초기화", isPresented: $viewModel.isResetAlertPresented) {
-            Button("초기화", role: .destructive) {
-                viewModel.regenerateTodayDailyWordsForDevelopment()
-            }
-            Button("취소", role: .cancel) { }
-        } message: {
-            Text("개발용으로 오늘 단어를 즉시 다시 생성합니다.")
-        }
-        .alert("로컬 상태 초기화", isPresented: $viewModel.isLocalResetAlertPresented) {
-            Button("초기화", role: .destructive) {
-                viewModel.resetLocalStateForDevelopment()
-            }
-            Button("취소", role: .cancel) { }
-        } message: {
-            Text("UserDefaults, 로컬 SQLite, legacy Mate 값, 캐시된 프로필 표시값, 로그인 상태를 초기화합니다.")
+            viewModel.clearLearningNotificationNotice()
         }
         .alert("로그인 실패", isPresented: Binding(get: {
             errorMessage != nil
@@ -92,15 +73,6 @@ struct ProfileView: View {
         } message: {
             Text(viewModel.learningLevelErrorMessage ?? "학습 레벨을 저장하지 못했어요.")
         }
-        .alert("오늘 단어 재생성 실패", isPresented: Binding(get: {
-            viewModel.dailyWordsRegenerateErrorMessage != nil
-        }, set: { _ in
-            viewModel.clearDailyWordsRegenerateError()
-        })) {
-            Button("확인", role: .cancel) { }
-        } message: {
-            Text(viewModel.dailyWordsRegenerateErrorMessage ?? "오늘 단어를 다시 생성하지 못했어요.")
-        }
         .alert("랜덤 매칭 설정 실패", isPresented: Binding(get: {
             viewModel.randomMatchingErrorMessage != nil
         }, set: { _ in
@@ -119,14 +91,14 @@ struct ProfileView: View {
         } message: {
             Text(viewModel.avatarLoadErrorMessage ?? "선택한 사진을 불러오지 못했어요. 다른 사진으로 다시 시도해 주세요.")
         }
-        .alert("로컬 상태 초기화 실패", isPresented: Binding(get: {
-            viewModel.localResetErrorMessage != nil
+        .alert("학습 알림 설정 실패", isPresented: Binding(get: {
+            viewModel.learningNotificationErrorMessage != nil
         }, set: { _ in
-            viewModel.clearLocalResetError()
+            viewModel.clearLearningNotificationError()
         })) {
             Button("확인", role: .cancel) { }
         } message: {
-            Text(viewModel.localResetErrorMessage ?? "로컬 상태를 초기화하지 못했어요.")
+            Text(viewModel.learningNotificationErrorMessage ?? "학습 알림 설정을 변경하지 못했어요.")
         }
         .sheet(isPresented: $isGuidePresented) {
             GuideView()
@@ -148,10 +120,8 @@ struct ProfileView: View {
 
     @ViewBuilder
     private var loggedInContent: some View {
-        profileHeaderSection
-        loggedInStatusSection
-        profileEditSection
-        randomMatchingSection
+        profileSection
+        accountSection
         learningSettingsSection
     }
 
@@ -161,8 +131,8 @@ struct ProfileView: View {
         guestLoginSection
     }
 
-    private var profileHeaderSection: some View {
-        Section {
+    private var profileSection: some View {
+        Section("프로필") {
             HStack(spacing: 16) {
                 PhotosPicker(selection: $viewModel.selectedPhotoItem, matching: .images) {
                     avatarView
@@ -171,95 +141,30 @@ struct ProfileView: View {
 
                 VStack(alignment: .leading, spacing: 6) {
                     let nickname = viewModel.currentProfile.nickname
+                    let bio = viewModel.currentProfile.bio.trimmingCharacters(in: .whitespacesAndNewlines)
+
                     Text(nickname.isEmpty ? "하루" : nickname)
                         .font(.title3)
                         .fontWeight(.semibold)
-                    Text(viewModel.isMateLoggedIn ? "서버 프로필을 기준으로 표시 중이에요" : "로컬 프로필을 저장하고 있어요")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    if viewModel.isMateLoggedIn {
-                        Text(viewModel.profileSourceText)
-                            .font(.caption2)
+
+                    if bio.isEmpty == false {
+                        Text(bio)
+                            .font(.footnote)
                             .foregroundStyle(.secondary)
+                            .lineLimit(2)
                     }
+
+                    Text("현재 학습 레벨 \(viewModel.selectedLearningLevel.title)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Color(uiColor: .tertiarySystemFill))
+                        .clipShape(Capsule())
                 }
             }
             .padding(.vertical, 8)
-        }
-    }
 
-    private var guestPromptSection: some View {
-        Section {
-            GuestProfilePromptCardView()
-        }
-    }
-
-    private var guestLoginSection: some View {
-        Section("로그인") {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("로그인하면 프로필과 학습 설정을 저장하고, Mate 기능을 사용할 수 있어요.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                Text("테스트용 Dev Slot으로 로그인할 수 있어요.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-
-                #if targetEnvironment(simulator)
-                VStack(alignment: .leading, spacing: 8) {
-                    Button("Dev Slot A로 로그인") {
-                        viewModel.signInForMateDevSlot(.A)
-                    }
-                    Button("Dev Slot B로 로그인") {
-                        viewModel.signInForMateDevSlot(.B)
-                    }
-                    Button("Dev Slot C로 로그인") {
-                        viewModel.signInForMateDevSlot(.C)
-                    }
-                    Button("Dev Slot D로 로그인") {
-                        viewModel.signInForMateDevSlot(.D)
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.black)
-                #else
-                AppleSignInButton { userId in
-                    viewModel.signInWithApple(userId: userId)
-                } onFailure: { error in
-                    errorMessage = "Apple 로그인에 실패했어요. 다시 시도해 주세요.\n\(error.localizedDescription)"
-                }
-                .frame(height: 52)
-                #endif
-            }
-            .padding(.vertical, 4)
-        }
-    }
-
-    private var loggedInStatusSection: some View {
-        Section("로그인") {
-            HStack {
-                Text("Mate 로그인 상태예요.")
-                Spacer()
-                if viewModel.mateUserIdPrefix.isEmpty == false {
-                    Text(viewModel.mateUserIdPrefix)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text("연결됨")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Button(role: .destructive) {
-                viewModel.signOutForMate()
-            } label: {
-                Text("Mate 로그아웃")
-            }
-        }
-    }
-
-    private var profileEditSection: some View {
-        Section("프로필") {
             let nicknameBinding = Binding(
                 get: { viewModel.currentProfile.nickname },
                 set: { viewModel.updateNickname($0) }
@@ -296,17 +201,79 @@ struct ProfileView: View {
         }
     }
 
+    private var guestPromptSection: some View {
+        Section {
+            GuestProfilePromptCardView()
+        }
+    }
+
+    private var guestLoginSection: some View {
+        Section("계정") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("로그인하면 프로필과 학습 설정을 저장하고, Mate 기능을 사용할 수 있어요.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                AppleSignInButton { userId in
+                    viewModel.signInWithApple(userId: userId)
+                } onFailure: { error in
+                    errorMessage = "Apple 로그인에 실패했어요. 다시 시도해 주세요.\n\(error.localizedDescription)"
+                }
+                .frame(height: 52)
+            }
+            .padding(.vertical, 4)
+        }
+    }
+
+    private var accountSection: some View {
+        Section("계정") {
+            HStack {
+                Text("로그인 상태")
+                Spacer()
+                if viewModel.mateUserIdPrefix.isEmpty == false {
+                    Text(viewModel.mateUserIdPrefix)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("연결됨")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if viewModel.isMateLoggedIn {
+                Toggle(isOn: Binding(
+                    get: { viewModel.isRandomMatchingEnabled },
+                    set: { viewModel.updateRandomMatchingEnabled($0) }
+                )) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("랜덤 매칭에 노출하기")
+                        Text("켜두면 비슷한 레벨의 사용자에게 랜덤 후보로 보여져요.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .disabled(viewModel.isUpdatingRandomMatching)
+
+                if viewModel.isUpdatingRandomMatching {
+                    ProgressView("설정 저장 중...")
+                        .font(.footnote)
+                }
+            }
+
+            Button(role: .destructive) {
+                viewModel.signOutForMate()
+            } label: {
+                Text("로그아웃")
+            }
+        }
+    }
+
     private var learningSettingsSection: some View {
         Section("학습 설정") {
             VStack(alignment: .leading, spacing: 12) {
                 Text("학습 레벨은 하나만 선택할 수 있어요.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                if viewModel.isMateLoggedIn == false {
-                    Text("Dev Slot 로그인 후 사용자별 레벨을 저장할 수 있어요.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
 
                 let edgePadding: CGFloat = 16
                 let edgeCompensation: CGFloat = 16
@@ -338,23 +305,39 @@ struct ProfileView: View {
         }
     }
 
-    private var randomMatchingSection: some View {
-        Section("버디 매칭") {
+    private var appearanceSection: some View {
+        Section("화면 설정") {
             Toggle(isOn: Binding(
-                get: { viewModel.isRandomMatchingEnabled },
-                set: { viewModel.updateRandomMatchingEnabled($0) }
+                get: { viewModel.isDarkModeEnabled },
+                set: { viewModel.updateDarkModeEnabled($0) }
             )) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("랜덤 매칭에 노출하기")
-                    Text("켜두면 비슷한 레벨의 사용자에게 랜덤 후보로 보여져요.")
+                    Text("다크모드")
+                    Text("앱 전체 화면을 어두운 테마로 표시해요.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
             }
-            .disabled(viewModel.isUpdatingRandomMatching)
+        }
+    }
 
-            if viewModel.isUpdatingRandomMatching {
-                ProgressView("설정 저장 중...")
+    private var notificationSettingsSection: some View {
+        Section("알림 설정") {
+            Toggle(isOn: Binding(
+                get: { viewModel.isLearningNotificationEnabled },
+                set: { viewModel.updateLearningNotificationEnabled($0) }
+            )) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("학습 알림 받기")
+                    Text("매일 정해진 시간에 오늘의 단어 알림을 받아요")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .disabled(viewModel.isUpdatingLearningNotification)
+
+            if viewModel.isUpdatingLearningNotification {
+                ProgressView("알림 설정 중...")
                     .font(.footnote)
             }
         }
@@ -370,27 +353,30 @@ struct ProfileView: View {
         }
     }
 
-    private var dataSection: some View {
-        Section("데이터") {
-            Button(role: .destructive) {
-                viewModel.isResetAlertPresented = true
-            } label: {
-                HStack {
-                    Text("학습 데이터 초기화")
-                    if viewModel.isRegeneratingDailyWords {
-                        Spacer()
-                        ProgressView()
-                            .controlSize(.small)
-                    }
-                }
+    private var appInfoSection: some View {
+        Section("앱 정보") {
+            HStack {
+                Text("버전")
+                Spacer()
+                Text(appVersionText)
+                    .foregroundStyle(.secondary)
             }
-            .disabled(viewModel.isRegeneratingDailyWords || viewModel.isMateLoggedIn == false)
+        }
+    }
 
-            Button(role: .destructive) {
-                viewModel.isLocalResetAlertPresented = true
-            } label: {
-                Text("로컬 상태 초기화")
-            }
+    private var appVersionText: String {
+        let shortVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        let buildVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+
+        switch (shortVersion, buildVersion) {
+        case let (shortVersion?, buildVersion?) where shortVersion != buildVersion:
+            return "\(shortVersion) (\(buildVersion))"
+        case let (shortVersion?, _):
+            return shortVersion
+        case let (_, buildVersion?):
+            return buildVersion
+        default:
+            return "1.0.0"
         }
     }
 

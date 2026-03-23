@@ -34,6 +34,12 @@ struct RootView: View {
                 }
             }
         }
+        .preferredColorScheme(settingsStore.isDarkModeEnabled ? .dark : .light)
+        .task {
+            await NotificationManager.shared.syncDailyLearningReminder(
+                isEnabled: settingsStore.settings.isLearningNotificationEnabled
+            )
+        }
     }
 
     private var mainTabView: some View {

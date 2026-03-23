@@ -5,6 +5,7 @@ final class AppSettingsStore: ObservableObject {
     @Published private(set) var settings: AppSettings
     @Published private(set) var hasSeenOnboarding: Bool
     @Published private(set) var isSignedIn: Bool
+    @Published private(set) var isDarkModeEnabled: Bool
     @Published private(set) var appleUserId: String?
     @Published private(set) var profileRefreshTick: Int = 0
 
@@ -14,8 +15,10 @@ final class AppSettingsStore: ObservableObject {
     private let onboardingKey = "hasSeenOnboarding"
     private let legacyOnboardingKey = "has_seen_onboarding"
     private let isSignedInKey = "auth_is_signed_in"
+    private let darkModeEnabledKey = "appearance_is_dark_mode_enabled"
     private let appleUserIdKey = "auth_apple_user_id"
     private let mateUserIdKey = "mate_user_id"
+    private static let learningNotificationEnabledKey = "settings_learning_notification_enabled"
 
     private let legacyProfileLevelsByUserIdKey = "settings_profile_levels_by_user_id"
     private let mateProfilePrefix = "mate_profile"
@@ -39,6 +42,7 @@ final class AppSettingsStore: ObservableObject {
         self.hasSeenOnboarding = userDefaults.object(forKey: onboardingKey) as? Bool
             ?? userDefaults.bool(forKey: legacyOnboardingKey)
         self.isSignedIn = userDefaults.bool(forKey: isSignedInKey)
+        self.isDarkModeEnabled = userDefaults.bool(forKey: darkModeEnabledKey)
         self.appleUserId = userDefaults.string(forKey: appleUserIdKey)
 
         if settings.mateUserId.isEmpty == false {
@@ -65,6 +69,7 @@ final class AppSettingsStore: ObservableObject {
     func save(settings: AppSettings) {
         userDefaults.set(settings.homeDeckLevel.rawValue, forKey: homeDeckLevelKey)
         userDefaults.set(settings.mateUserId, forKey: mateUserIdKey)
+        userDefaults.set(settings.isLearningNotificationEnabled, forKey: Self.learningNotificationEnabledKey)
     }
 
     func markOnboardingSeen() {
@@ -107,6 +112,20 @@ final class AppSettingsStore: ObservableObject {
         var updated = settings
         updated.mateUserId = ""
         guard updated != settings else { return }
+        settings = updated
+        save(settings: updated)
+    }
+
+    func setDarkModeEnabled(_ enabled: Bool) {
+        guard isDarkModeEnabled != enabled else { return }
+        isDarkModeEnabled = enabled
+        userDefaults.set(enabled, forKey: darkModeEnabledKey)
+    }
+
+    func setLearningNotificationEnabled(_ enabled: Bool) {
+        guard settings.isLearningNotificationEnabled != enabled else { return }
+        var updated = settings
+        updated.isLearningNotificationEnabled = enabled
         settings = updated
         save(settings: updated)
     }
@@ -271,7 +290,11 @@ final class AppSettingsStore: ObservableObject {
         }
 
         if settings.mateUserId == userId, let jlptLevel {
-            let updated = AppSettings(homeDeckLevel: jlptLevel, mateUserId: settings.mateUserId)
+            let updated = AppSettings(
+                homeDeckLevel: jlptLevel,
+                mateUserId: settings.mateUserId,
+                isLearningNotificationEnabled: settings.isLearningNotificationEnabled
+            )
             if updated != settings {
                 settings = updated
                 save(settings: updated)
@@ -298,6 +321,7 @@ final class AppSettingsStore: ObservableObject {
         hasSeenOnboarding = userDefaults.object(forKey: onboardingKey) as? Bool
             ?? userDefaults.bool(forKey: legacyOnboardingKey)
         isSignedIn = userDefaults.bool(forKey: isSignedInKey)
+        isDarkModeEnabled = userDefaults.bool(forKey: darkModeEnabledKey)
         appleUserId = userDefaults.string(forKey: appleUserIdKey)
     }
 
@@ -305,7 +329,12 @@ final class AppSettingsStore: ObservableObject {
         let levelRaw = userDefaults.string(forKey: "settings_home_deck_level") ?? JLPTLevel.n5.rawValue
         let level = JLPTLevel(rawValue: levelRaw) ?? .n5
         let mateUserId = userDefaults.string(forKey: "mate_user_id") ?? ""
-        return AppSettings(homeDeckLevel: level, mateUserId: mateUserId)
+        let isLearningNotificationEnabled = userDefaults.bool(forKey: Self.learningNotificationEnabledKey)
+        return AppSettings(
+            homeDeckLevel: level,
+            mateUserId: mateUserId,
+            isLearningNotificationEnabled: isLearningNotificationEnabled
+        )
     }
 
     private func ensureProfileExists(for userId: String) {
@@ -328,7 +357,11 @@ final class AppSettingsStore: ObservableObject {
         let didChange = setStringIfNeeded(level.rawValue, forKey: mateProfileKey(userId: userId, field: "jlpt_level"))
 
         if settings.mateUserId == userId {
-            let updated = AppSettings(homeDeckLevel: level, mateUserId: settings.mateUserId)
+            let updated = AppSettings(
+                homeDeckLevel: level,
+                mateUserId: settings.mateUserId,
+                isLearningNotificationEnabled: settings.isLearningNotificationEnabled
+            )
             if updated != settings {
                 settings = updated
                 save(settings: updated)
