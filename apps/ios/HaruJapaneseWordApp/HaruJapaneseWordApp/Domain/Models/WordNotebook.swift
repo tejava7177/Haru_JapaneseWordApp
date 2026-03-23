@@ -1,6 +1,6 @@
 import Foundation
 
-struct WordNotebook: Identifiable, Codable, Equatable {
+struct WordNotebook: Identifiable, Codable, Equatable, Hashable {
     let id: UUID
     var title: String
     var items: [WordNotebookItem]
@@ -19,7 +19,7 @@ struct WordNotebook: Identifiable, Codable, Equatable {
     }
 }
 
-struct WordNotebookItem: Identifiable, Codable, Equatable {
+struct WordNotebookItem: Identifiable, Codable, Equatable, Hashable {
     let id: UUID
     let wordId: Int?
     let word: String

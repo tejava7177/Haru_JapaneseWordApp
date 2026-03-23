@@ -7,6 +7,7 @@ struct NotebookDetailView: View {
     @State private var isNotebookTitleEditorPresented: Bool = false
     @State private var isNotebookDeleteDialogPresented: Bool = false
     @State private var notebookTitleDraft: String = ""
+    @State private var selectedItem: WordNotebookItem?
     @Environment(\.dismiss) private var dismiss
 
     private var notebook: WordNotebook? {
@@ -25,11 +26,15 @@ struct NotebookDetailView: View {
                 emptyState
             } else {
                 ForEach(items) { item in
-                    NavigationLink {
-                        NotebookWordDetailView(store: store, notebookId: notebookId, itemId: item.id)
+                    Button {
+                        selectedItem = item
                     } label: {
                         itemRow(item)
                     }
+                    .buttonStyle(.plain)
+                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button(role: .destructive) {
                             store.deleteItem(in: notebookId, itemId: item.id)
@@ -41,8 +46,13 @@ struct NotebookDetailView: View {
             }
         }
         .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(Color(uiColor: .systemGroupedBackground))
         .navigationTitle(notebook?.title ?? "단어장")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(item: $selectedItem) { item in
+            NotebookWordDetailView(store: store, notebookId: notebookId, itemId: item.id)
+        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 HStack(spacing: 16) {
@@ -50,6 +60,11 @@ struct NotebookDetailView: View {
                         isAddWordPresented = true
                     } label: {
                         Image(systemName: "plus")
+                            .font(.headline.weight(.bold))
+                            .frame(width: 36, height: 36)
+                            .background(Color.white.opacity(0.96))
+                            .clipShape(Circle())
+                            .shadow(color: Color.black.opacity(0.10), radius: 10, x: 0, y: 4)
                     }
 
                     Menu {
@@ -99,8 +114,18 @@ private extension NotebookDetailView {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 6)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 16)
+        .background(Color.white.opacity(0.96))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.black.opacity(0.04), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: 4)
+        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
         .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
     }
 
     var emptyState: some View {
@@ -118,12 +143,13 @@ private extension NotebookDetailView {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 48)
+        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
         .listRowSeparator(.hidden)
         .listRowBackground(Color.clear)
     }
 
     func itemRow(_ item: WordNotebookItem) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             Text(item.word)
                 .font(.headline)
 
@@ -131,7 +157,16 @@ private extension NotebookDetailView {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 6)
+        .contentShape(Rectangle())
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(Color.white.opacity(0.96))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.black.opacity(0.04), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: 4)
     }
 }
 

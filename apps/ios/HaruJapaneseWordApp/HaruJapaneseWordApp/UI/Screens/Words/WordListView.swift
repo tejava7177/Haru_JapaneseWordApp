@@ -13,6 +13,8 @@ struct WordListView: View {
     @State private var isCreateNotebookPresented: Bool = false
     @State private var lastRefreshAction: WordListViewModel.RefreshAction = .shuffled
     @State private var selectedTab: WordTab = .jlpt
+    @State private var selectedWord: WordListItem?
+    @State private var selectedNotebook: WordNotebook?
 
     init(repository: DictionaryRepository, viewModel: WordListViewModel) {
         self.repository = repository
@@ -21,17 +23,28 @@ struct WordListView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                switch selectedTab {
-                case .jlpt:
-                    jlptContent
-                case .notebook:
-                    notebookContent
+            ZStack {
+                screenBackground
+                    .ignoresSafeArea()
+
+                Group {
+                    switch selectedTab {
+                    case .jlpt:
+                        jlptContent
+                    case .notebook:
+                        notebookContent
+                    }
+                }
+                .navigationBarTitleDisplayMode(.inline)
+                .navigationDestination(item: $selectedWord) { word in
+                    destinationView(for: word)
+                }
+                .navigationDestination(item: $selectedNotebook) { notebook in
+                    NotebookDetailView(store: notebookStore, notebookId: notebook.id)
                 }
             }
-            .navigationBarTitleDisplayMode(.inline)
         }
-        .searchable(text: $viewModel.searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "검색")
+        .toolbarBackground(.hidden, for: .navigationBar)
         .onChange(of: viewModel.searchText) {
             viewModel.search()
         }
@@ -90,16 +103,21 @@ private extension WordListView {
             List {
                 headerRow
                 tabRow
+                searchRow
 
                 if viewModel.displayedWords.isEmpty {
                     emptyFilteredStateRow
                 } else {
                     ForEach(viewModel.displayedWords) { word in
-                        NavigationLink {
-                            destinationView(for: word)
+                        Button {
+                            selectedWord = word
                         } label: {
                             WordRow(word: word, isReviewWord: viewModel.isReviewWord(word))
                         }
+                        .buttonStyle(.plain)
+                        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             if let wordId = word.jlptWordId {
                                 if viewModel.isReviewWord(wordId) {
@@ -123,6 +141,7 @@ private extension WordListView {
                 }
             }
             .listStyle(.plain)
+            .scrollContentBackground(.hidden)
             .refreshable {
                 let action = await viewModel.pullToRefresh()
                 lastRefreshAction = action
@@ -131,9 +150,12 @@ private extension WordListView {
     }
 
     var notebookContent: some View {
-        NotebookListView(store: notebookStore) {
+        NotebookListView(store: notebookStore, onSelectNotebook: { notebook in
+            selectedNotebook = notebook
+        }) {
             headerRow
             tabRow
+            searchRow
         }
     }
 
@@ -143,7 +165,11 @@ private extension WordListView {
                 isCreateNotebookPresented = true
             } label: {
                 Image(systemName: "plus")
-                    .font(.title3)
+                    .font(.headline.weight(.bold))
+                    .frame(width: 38, height: 38)
+                    .background(Color.white.opacity(0.96))
+                    .clipShape(Circle())
+                    .shadow(color: Color.black.opacity(0.10), radius: 10, x: 0, y: 4)
             }
             .buttonStyle(.plain)
 
@@ -173,6 +199,13 @@ private extension WordListView {
         .listRowBackground(Color.clear)
     }
 
+    var searchRow: some View {
+        searchContent
+            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 8, trailing: 16))
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+    }
+
     var headerContent: some View {
         HStack(spacing: 12) {
             Text("단어")
@@ -184,6 +217,36 @@ private extension WordListView {
         }
         .padding(.top, 8)
         .padding(.bottom, 4)
+    }
+
+    var searchContent: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+
+            TextField("검색", text: $viewModel.searchText)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+
+            if viewModel.searchText.isEmpty == false {
+                Button {
+                    viewModel.searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(Color.white.opacity(0.82))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.black.opacity(0.04), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.035), radius: 8, x: 0, y: 3)
     }
 
     var tabContent: some View {
@@ -257,6 +320,10 @@ private extension WordListView {
         .listRowSeparator(.hidden)
         .listRowBackground(Color.clear)
     }
+
+    var screenBackground: some View {
+        Color(uiColor: .systemGroupedBackground)
+    }
 }
 
 private struct WordTabButton: View {
@@ -271,8 +338,13 @@ private struct WordTabButton: View {
                 .foregroundStyle(isSelected ? .white : .primary)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .background(isSelected ? Color.primary : Color(uiColor: .systemGray6))
+                .background(isSelected ? Color.primary : Color.white.opacity(0.78))
+                .overlay(
+                    Capsule()
+                        .stroke(Color.black.opacity(0.04), lineWidth: 1)
+                )
                 .clipShape(Capsule())
+                .shadow(color: Color.black.opacity(isSelected ? 0.05 : 0.03), radius: 6, x: 0, y: 2)
         }
         .buttonStyle(.plain)
     }

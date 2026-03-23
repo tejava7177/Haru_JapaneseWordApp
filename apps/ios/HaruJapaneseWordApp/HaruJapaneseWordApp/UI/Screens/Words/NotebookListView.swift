@@ -2,6 +2,7 @@ import SwiftUI
 
 struct NotebookListView<Header: View>: View {
     @ObservedObject var store: NotebookStore
+    let onSelectNotebook: (WordNotebook) -> Void
     @ViewBuilder let header: () -> Header
 
     var body: some View {
@@ -12,15 +13,20 @@ struct NotebookListView<Header: View>: View {
                 emptyState
             } else {
                 ForEach(store.notebooks) { notebook in
-                    NavigationLink {
-                        NotebookDetailView(store: store, notebookId: notebook.id)
+                    Button {
+                        onSelectNotebook(notebook)
                     } label: {
                         notebookRow(notebook)
                     }
+                    .buttonStyle(.plain)
+                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
                 }
             }
         }
         .listStyle(.plain)
+        .scrollContentBackground(.hidden)
     }
 }
 
@@ -47,23 +53,53 @@ private extension NotebookListView {
     }
 
     func notebookRow(_ notebook: WordNotebook) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(notebook.title)
-                .font(.headline)
+        HStack(spacing: 14) {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.orange.opacity(0.20),
+                            Color.yellow.opacity(0.12)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 48, height: 48)
+                .overlay(
+                    Image(systemName: "text.book.closed")
+                        .foregroundStyle(Color.orange.opacity(0.95))
+                )
 
-            HStack(spacing: 8) {
-                Label("\(notebook.items.count)개 단어", systemImage: "text.book.closed")
-                Text(notebook.createdAt.formatted(date: .abbreviated, time: .omitted))
+            VStack(alignment: .leading, spacing: 6) {
+                Text(notebook.title)
+                    .font(.headline)
+
+                HStack(spacing: 8) {
+                    Label("\(notebook.items.count)개 단어", systemImage: "text.book.closed")
+                    Text(notebook.createdAt.formatted(date: .abbreviated, time: .omitted))
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
+
+            Spacer(minLength: 12)
         }
-        .padding(.vertical, 6)
+        .contentShape(Rectangle())
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(Color.white.opacity(0.96))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.black.opacity(0.04), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.07), radius: 12, x: 0, y: 4)
     }
 }
 
 #Preview {
-    NotebookListView(store: previewStore) {
+    NotebookListView(store: previewStore, onSelectNotebook: { _ in }) {
         EmptyView()
     }
 }
