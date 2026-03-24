@@ -7,6 +7,8 @@ final class AppSettingsStore: ObservableObject {
     @Published private(set) var isSignedIn: Bool
     @Published private(set) var isDarkModeEnabled: Bool
     @Published private(set) var appleUserId: String?
+    @Published private(set) var appleEmail: String?
+    @Published private(set) var appleDisplayName: String?
     @Published private(set) var profileRefreshTick: Int = 0
 
     private let userDefaults: UserDefaults
@@ -17,6 +19,8 @@ final class AppSettingsStore: ObservableObject {
     private let isSignedInKey = "auth_is_signed_in"
     private let darkModeEnabledKey = "appearance_is_dark_mode_enabled"
     private let appleUserIdKey = "auth_apple_user_id"
+    private let appleEmailKey = "auth_apple_email"
+    private let appleDisplayNameKey = "auth_apple_display_name"
     private let mateUserIdKey = "mate_user_id"
     private static let learningNotificationEnabledKey = "settings_learning_notification_enabled"
 
@@ -44,6 +48,8 @@ final class AppSettingsStore: ObservableObject {
         self.isSignedIn = userDefaults.bool(forKey: isSignedInKey)
         self.isDarkModeEnabled = userDefaults.bool(forKey: darkModeEnabledKey)
         self.appleUserId = userDefaults.string(forKey: appleUserIdKey)
+        self.appleEmail = userDefaults.string(forKey: appleEmailKey)
+        self.appleDisplayName = userDefaults.string(forKey: appleDisplayNameKey)
 
         if settings.mateUserId.isEmpty == false {
             ensureProfileExists(for: settings.mateUserId)
@@ -78,26 +84,46 @@ final class AppSettingsStore: ObservableObject {
         userDefaults.removeObject(forKey: legacyOnboardingKey)
     }
 
-    func signIn(appleUserId: String) {
+    func signIn(appleUserId: String, email: String?, displayName: String?) {
         self.appleUserId = appleUserId
+        if let email {
+            self.appleEmail = email
+            userDefaults.set(email, forKey: appleEmailKey)
+        }
+        if let displayName, displayName.isEmpty == false {
+            self.appleDisplayName = displayName
+            userDefaults.set(displayName, forKey: appleDisplayNameKey)
+        }
         isSignedIn = true
         userDefaults.set(true, forKey: isSignedInKey)
         userDefaults.set(appleUserId, forKey: appleUserIdKey)
         signInForMate(userId: appleUserId)
+        if let displayName, displayName.isEmpty == false {
+            updateCurrentMateDisplayName(displayName)
+        }
+        print("[AppleSignIn] state persisted")
     }
 
     func signOut() {
         appleUserId = nil
+        appleEmail = nil
+        appleDisplayName = nil
         isSignedIn = false
         userDefaults.set(false, forKey: isSignedInKey)
         userDefaults.removeObject(forKey: appleUserIdKey)
+        userDefaults.removeObject(forKey: appleEmailKey)
+        userDefaults.removeObject(forKey: appleDisplayNameKey)
         signOutForMate()
     }
 
     func signInForMate(userId: String) {
         ensureProfileExists(for: userId)
         let resolvedLevel = profileLevel(for: userId)
-        let updated = AppSettings(homeDeckLevel: resolvedLevel, mateUserId: userId)
+        let updated = AppSettings(
+            homeDeckLevel: resolvedLevel,
+            mateUserId: userId,
+            isLearningNotificationEnabled: settings.isLearningNotificationEnabled
+        )
         guard updated != settings else { return }
         settings = updated
         save(settings: updated)
@@ -323,6 +349,8 @@ final class AppSettingsStore: ObservableObject {
         isSignedIn = userDefaults.bool(forKey: isSignedInKey)
         isDarkModeEnabled = userDefaults.bool(forKey: darkModeEnabledKey)
         appleUserId = userDefaults.string(forKey: appleUserIdKey)
+        appleEmail = userDefaults.string(forKey: appleEmailKey)
+        appleDisplayName = userDefaults.string(forKey: appleDisplayNameKey)
     }
 
     private static func loadSettings(userDefaults: UserDefaults) -> AppSettings {

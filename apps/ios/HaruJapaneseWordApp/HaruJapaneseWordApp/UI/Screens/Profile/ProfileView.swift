@@ -55,6 +55,11 @@ struct ProfileView: View {
             showToast(message: message)
             viewModel.clearLearningNotificationNotice()
         }
+        .onChange(of: viewModel.appleSignInNotice) { message in
+            guard let message else { return }
+            showToast(message: message)
+            viewModel.clearAppleSignInNotice()
+        }
         .alert("로그인 실패", isPresented: Binding(get: {
             errorMessage != nil
         }, set: { _ in
@@ -99,6 +104,15 @@ struct ProfileView: View {
             Button("확인", role: .cancel) { }
         } message: {
             Text(viewModel.learningNotificationErrorMessage ?? "학습 알림 설정을 변경하지 못했어요.")
+        }
+        .alert("Apple 로그인 실패", isPresented: Binding(get: {
+            viewModel.appleSignInErrorMessage != nil
+        }, set: { _ in
+            viewModel.clearAppleSignInError()
+        })) {
+            Button("확인", role: .cancel) { }
+        } message: {
+            Text(viewModel.appleSignInErrorMessage ?? "Apple 로그인에 실패했어요.")
         }
         .sheet(isPresented: $isGuidePresented) {
             GuideView()
@@ -213,12 +227,13 @@ struct ProfileView: View {
                 Text("로그인하면 프로필과 학습 설정을 저장하고, Mate 기능을 사용할 수 있어요.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                AppleSignInButton { userId in
-                    viewModel.signInWithApple(userId: userId)
-                } onFailure: { error in
-                    errorMessage = "Apple 로그인에 실패했어요. 다시 시도해 주세요.\n\(error.localizedDescription)"
+                AppleSignInButton(isLoading: viewModel.isSigningInWithApple) {
+                    viewModel.signInWithApple()
                 }
-                .frame(height: 52)
+                if viewModel.isSigningInWithApple {
+                    ProgressView("로그인 처리 중...")
+                        .font(.footnote)
+                }
             }
             .padding(.vertical, 4)
         }
@@ -512,25 +527,25 @@ private struct LevelDescriptionCard: View {
     ProfileView(settingsStore: AppSettingsStore())
 }
 
-// Real implementation of Sign in with Apple button using AuthenticationServices
 struct AppleSignInButton: View {
-    let onSuccess: (String) -> Void
-    let onFailure: (Error) -> Void
+    let isLoading: Bool
+    let onTap: () -> Void
 
     var body: some View {
-        SignInWithAppleButtonRepresentable(onSuccess: onSuccess, onFailure: onFailure)
+        SignInWithAppleButtonRepresentable(onTap: onTap)
             .frame(maxWidth: .infinity)
             .frame(height: 52)
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .accessibilityLabel("Apple로 로그인")
+            .disabled(isLoading)
+            .opacity(isLoading ? 0.6 : 1)
     }
 }
 
 private struct SignInWithAppleButtonRepresentable: UIViewRepresentable {
-    let onSuccess: (String) -> Void
-    let onFailure: (Error) -> Void
+    let onTap: () -> Void
+
     func makeUIView(context: Context) -> ASAuthorizationAppleIDButton {
-        print("[AppleSignInButton] makeUIView")
         let button = ASAuthorizationAppleIDButton(type: .signIn, style: .black)
         button.cornerRadius = 12
         button.addTarget(context.coordinator, action: #selector(Coordinator.didTapButton), for: .touchUpInside)
@@ -540,91 +555,18 @@ private struct SignInWithAppleButtonRepresentable: UIViewRepresentable {
     func updateUIView(_ uiView: ASAuthorizationAppleIDButton, context: Context) {}
 
     func makeCoordinator() -> Coordinator {
-        print("[AppleSignInButton] makeCoordinator")
-        return Coordinator(onSuccess: onSuccess, onFailure: onFailure)
+        Coordinator(onTap: onTap)
     }
 
-    final class Coordinator: NSObject, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
-        let onSuccess: (String) -> Void
-        let onFailure: (Error) -> Void
-        private var hasCallback: Bool = false
-        private var watchdogWorkItem: DispatchWorkItem?
+    final class Coordinator: NSObject {
+        let onTap: () -> Void
 
-        init(onSuccess: @escaping (String) -> Void, onFailure: @escaping (Error) -> Void) {
-            self.onSuccess = onSuccess
-            self.onFailure = onFailure
-            super.init()
-            print("[AppleSignInButton] coordinatorInit")
-        }
-
-        deinit {
-            print("[AppleSignInButton] coordinatorDeinit")
+        init(onTap: @escaping () -> Void) {
+            self.onTap = onTap
         }
 
         @objc func didTapButton() {
-            print("[AppleSignInButton] tap")
-            hasCallback = false
-            watchdogWorkItem?.cancel()
-            let workItem = DispatchWorkItem { [weak self] in
-                guard let self, self.hasCallback == false else { return }
-                print("[AppleSignInButton] watchdogTimeout (no callback within 8s)")
-            }
-            watchdogWorkItem = workItem
-            DispatchQueue.main.asyncAfter(deadline: .now() + 8, execute: workItem)
-
-            print("[AppleAuth] start")
-            let provider = ASAuthorizationAppleIDProvider()
-            let request = provider.createRequest()
-            request.requestedScopes = [.fullName, .email]
-            print("[AppleAuth] makeRequest")
-
-            let controller = ASAuthorizationController(authorizationRequests: [request])
-            print("[AppleAuth] controllerCreated")
-            controller.delegate = self
-            controller.presentationContextProvider = self
-            print("[AppleAuth] performRequests")
-            controller.performRequests()
-        }
-
-        // MARK: - ASAuthorizationControllerDelegate
-        func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
-            hasCallback = true
-            watchdogWorkItem?.cancel()
-            print("[AppleSignInButton] didCompleteWithAuthorization")
-            print("[AppleAuth] success")
-            if let credential = authorization.credential as? ASAuthorizationAppleIDCredential {
-                // The stable user identifier for the app and developer team
-                let userID = credential.user
-                onSuccess(userID)
-            } else {
-                onFailure(NSError(domain: "AppleSignIn", code: -1, userInfo: [NSLocalizedDescriptionKey: "인증 자격 증명을 가져올 수 없어요."]))
-            }
-        }
-
-        func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
-            hasCallback = true
-            watchdogWorkItem?.cancel()
-            print("[AppleSignInButton] didCompleteWithError")
-            let nsError = error as NSError
-            let authCode = ASAuthorizationError.Code(rawValue: nsError.code)
-            let userInfoKeys = nsError.userInfo.keys.map { "\($0)" }
-            if nsError.domain == ASAuthorizationError.errorDomain, let authCode {
-                print("[AppleAuth] failure domain=\(nsError.domain) code=\(nsError.code) authCode=\(authCode) description=\(nsError.localizedDescription)")
-            } else {
-                print("[AppleAuth] failure domain=\(nsError.domain) code=\(nsError.code) description=\(nsError.localizedDescription)")
-            }
-            print("[AppleAuth] failure userInfoKeys=\(userInfoKeys)")
-            onFailure(error)
-        }
-
-        // MARK: - ASAuthorizationControllerPresentationContextProviding
-        func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
-            print("[AppleSignInButton] presentationAnchor")
-            // Try to find a key window for presentation
-            return UIApplication.shared.connectedScenes
-                .compactMap { $0 as? UIWindowScene }
-                .flatMap { $0.windows }
-                .first { $0.isKeyWindow } ?? ASPresentationAnchor()
+            onTap()
         }
     }
 }

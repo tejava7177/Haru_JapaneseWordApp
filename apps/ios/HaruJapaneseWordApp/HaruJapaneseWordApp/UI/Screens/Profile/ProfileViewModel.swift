@@ -28,6 +28,9 @@ final class ProfileViewModel: ObservableObject {
     @Published var isUpdatingLearningNotification: Bool = false
     @Published var learningNotificationNotice: String?
     @Published var learningNotificationErrorMessage: String?
+    @Published var isSigningInWithApple: Bool = false
+    @Published var appleSignInNotice: String?
+    @Published var appleSignInErrorMessage: String?
     @Published var localResetNotice: String?
     @Published var localResetErrorMessage: String?
     @Published var isRefreshingServerProfile: Bool = false
@@ -157,8 +160,34 @@ final class ProfileViewModel: ObservableObject {
         return String(value.prefix(prefixLength))
     }
 
-    func signInWithApple(userId: String) {
-        settingsStore.signIn(appleUserId: userId)
+    func signInWithApple() {
+        guard isSigningInWithApple == false else { return }
+
+        isSigningInWithApple = true
+        appleSignInErrorMessage = nil
+        appleSignInNotice = nil
+
+        Task {
+            defer { isSigningInWithApple = false }
+
+            do {
+                let result = try await AppleSignInManager.shared.signIn()
+                let displayName = PersonNameComponentsFormatter().string(from: result.fullName ?? PersonNameComponents())
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                let resolvedDisplayName = displayName.isEmpty ? nil : displayName
+
+                settingsStore.signIn(
+                    appleUserId: result.userId,
+                    email: result.email,
+                    displayName: resolvedDisplayName
+                )
+                appleSignInNotice = "Apple 로그인에 성공했어요."
+                print("[AppleSignIn] UI updated loggedIn=\(settingsStore.isSignedIn)")
+            } catch {
+                appleSignInErrorMessage = "Apple 로그인에 실패했어요. 다시 시도해 주세요.\n\(error.localizedDescription)"
+                print("[AppleSignIn] UI updated loggedIn=\(settingsStore.isSignedIn)")
+            }
+        }
     }
 
     func signInForMate(userId: String) {
@@ -170,7 +199,8 @@ final class ProfileViewModel: ObservableObject {
     }
 
     func signOutForMate() {
-        settingsStore.signOutForMate()
+        settingsStore.signOut()
+        print("[AppleSignIn] UI updated loggedIn=\(settingsStore.isSignedIn)")
     }
 
     func updateDarkModeEnabled(_ enabled: Bool) {
@@ -332,6 +362,14 @@ final class ProfileViewModel: ObservableObject {
 
     func clearLearningNotificationError() {
         learningNotificationErrorMessage = nil
+    }
+
+    func clearAppleSignInNotice() {
+        appleSignInNotice = nil
+    }
+
+    func clearAppleSignInError() {
+        appleSignInErrorMessage = nil
     }
 
     func clearLocalResetNotice() {
