@@ -251,36 +251,24 @@ struct ProfileView: View {
                         if viewModel.isSavingProfile {
                             ProgressView()
                                 .controlSize(.small)
+                                .tint(.secondary)
                         }
                         Text(viewModel.isSavingProfile ? "저장 중..." : "저장")
                             .fontWeight(.semibold)
+                            .font(.system(size: 15))
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .foregroundStyle(viewModel.hasProfileDraftChanges ? Color.blue : Color.gray)
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(viewModel.isSavingProfile)
-
-                if viewModel.hasProfileDraftChanges == false {
-                    Text("변경한 내용이 있으면 저장할 수 있어요.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else if viewModel.nicknameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text("닉네임은 비워둘 수 없어요.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                .buttonStyle(.plain)
+                .disabled(viewModel.isSavingProfile || viewModel.canSaveProfile == false)
+                .opacity(viewModel.isSavingProfile ? 0.6 : 1.0)
             }
+            .frame(maxWidth: .infinity, alignment: .center)
             .padding(.top, 6)
 
             if viewModel.isSavingProfile {
                 Text("프로필 저장 중...")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            if let profileSaveSuccessMessage = viewModel.profileSaveSuccessMessage {
-                Text(profileSaveSuccessMessage)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
