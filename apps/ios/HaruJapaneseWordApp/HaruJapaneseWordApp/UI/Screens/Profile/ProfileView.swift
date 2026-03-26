@@ -128,11 +128,6 @@ struct ProfileView: View {
                 }
             }
         }
-        .safeAreaInset(edge: .bottom) {
-            if viewModel.hasAuthenticatedSession {
-                bottomSaveBar
-            }
-        }
         .overlay(alignment: .bottom) {
             toastOverlay
         }
@@ -248,18 +243,38 @@ struct ProfileView: View {
                 field: .instagramId
             )
 
+            VStack(spacing: 8) {
+                Button {
+                    handleSaveButtonTap()
+                } label: {
+                    HStack {
+                        if viewModel.isSavingProfile {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                        Text(viewModel.isSavingProfile ? "저장 중..." : "저장")
+                            .fontWeight(.semibold)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(viewModel.isSavingProfile)
+
+                if viewModel.hasProfileDraftChanges == false {
+                    Text("변경한 내용이 있으면 저장할 수 있어요.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if viewModel.nicknameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("닉네임은 비워둘 수 없어요.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.top, 6)
+
             if viewModel.isSavingProfile {
                 Text("프로필 저장 중...")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            if viewModel.hasProfileDraftChanges == false {
-                Text("변경한 내용이 있으면 저장 버튼이 활성화돼요.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            } else if viewModel.nicknameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text("닉네임은 비워둘 수 없어요.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -287,42 +302,6 @@ struct ProfileView: View {
                     .foregroundStyle(.secondary)
             }
         }
-    }
-
-    private var bottomSaveBar: some View {
-        VStack(spacing: 8) {
-            Button {
-                handleSaveButtonTap()
-            } label: {
-                HStack {
-                    if viewModel.isSavingProfile {
-                        ProgressView()
-                            .controlSize(.small)
-                    }
-                    Text(viewModel.isSavingProfile ? "저장 중..." : "저장")
-                        .fontWeight(.semibold)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(viewModel.canSaveProfile ? .accentColor : Color(uiColor: .systemGray3))
-            .disabled(viewModel.isSavingProfile)
-
-            if viewModel.hasProfileDraftChanges == false {
-                Text("변경한 내용이 있으면 저장할 수 있어요.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else if viewModel.nicknameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text("닉네임은 비워둘 수 없어요.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 10)
-        .padding(.bottom, 10)
-        .background(.thinMaterial)
     }
 
     private var guestPromptSection: some View {
