@@ -30,9 +30,11 @@ struct ProfileView: View {
             viewModel.onViewAppear()
         }
         .onChange(of: viewModel.selectedPhotoItem) { newItem in
-            print("[ProfileImage] picker item selected")
+            guard newItem != nil else { return }
+            print("[ProfileImage] item selected")
             Task {
                 await viewModel.loadAvatar(from: newItem)
+                viewModel.selectedPhotoItem = nil
             }
         }
         .onChange(of: focusedField) { field in
@@ -190,6 +192,12 @@ struct ProfileView: View {
                     avatarView
                 }
                 .buttonStyle(.plain)
+                .simultaneousGesture(
+                    TapGesture().onEnded {
+                        dismissKeyboard()
+                        print("[ProfileImage] picker opened")
+                    }
+                )
 
                 VStack(alignment: .leading, spacing: 6) {
                     let nickname = viewModel.currentProfile.nickname

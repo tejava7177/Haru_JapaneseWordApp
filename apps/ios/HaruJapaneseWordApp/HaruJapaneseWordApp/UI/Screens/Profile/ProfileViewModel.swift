@@ -700,6 +700,45 @@ final class ProfileViewModel: ObservableObject {
         return image.jpegData(compressionQuality: 0.8) ?? data
     }
 
+    private func resizeImageForUpload(_ image: UIImage, maxDimension: CGFloat = 1024) -> UIImage {
+        let originalSize = image.size
+        let largestSide = max(originalSize.width, originalSize.height)
+
+        if largestSide > maxDimension {
+            let scale = maxDimension / largestSide
+            let targetSize = CGSize(
+                width: max(1, floor(originalSize.width * scale)),
+                height: max(1, floor(originalSize.height * scale))
+            )
+
+            let renderer = UIGraphicsImageRenderer(size: targetSize)
+            return renderer.image { _ in
+                image.draw(in: CGRect(origin: .zero, size: targetSize))
+            }
+        }
+
+        return image
+    }
+
+    private func makeUploadImageData(from data: Data) -> Data? {
+        guard let image = UIImage(data: data) else { return compressImageData(data) }
+
+        let resizedImage = resizeImageForUpload(image)
+        let compressionCandidates: [CGFloat] = [0.7, 0.6, 0.5]
+        let preferredMaxUploadBytes = 900_000
+
+        for quality in compressionCandidates {
+            if let jpegData = resizedImage.jpegData(compressionQuality: quality),
+               jpegData.count <= preferredMaxUploadBytes {
+                return jpegData
+            }
+        }
+
+        return resizedImage.jpegData(compressionQuality: 0.4)
+            ?? resizedImage.jpegData(compressionQuality: 0.5)
+            ?? data
+    }
+
     private func applyLoadedAvatarData(_ data: Data) {
         let compressed = compressImageData(data)
         localAvatarPreviewData = nil
@@ -730,22 +769,24 @@ final class ProfileViewModel: ObservableObject {
     }
 
     private func handleLoadedAvatarData(_ data: Data) async {
-        let compressed = compressImageData(data) ?? data
-        print("[ProfileImage] selected image size=\(compressed.count)")
+        let previewData = UIImage(data: data) != nil ? data : (compressImageData(data) ?? data)
+        let uploadData = makeUploadImageData(from: data) ?? previewData
+        print("[ProfileImage] original image bytes=\(data.count)")
+        print("[ProfileImage] resized image bytes=\(uploadData.count)")
 
         guard let backendUserId = settingsStore.currentBackendUserId,
               settingsStore.isMateLoggedIn else {
-            applyLoadedAvatarData(compressed)
+            applyLoadedAvatarData(previewData)
             return
         }
 
-        applyAvatarPreview(compressed)
+        applyAvatarPreview(previewData)
 
         do {
             print("[ProfileImage] upload start userId=\(backendUserId)")
             _ = try await profileAPIService.uploadProfileImage(
                 userId: backendUserId,
-                imageData: compressed,
+                imageData: uploadData,
                 fileName: "profile.jpg",
                 mimeType: "image/jpeg"
             )
