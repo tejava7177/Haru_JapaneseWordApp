@@ -66,11 +66,11 @@ struct ServerUserProfileResponse: Decodable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         userId = try container.decodeFlexibleIntIfPresent(forKey: .userId)
             ?? container.decodeFlexibleIntIfPresent(forKey: .id)
-        nickname = try container.decodeFirstNonEmptyString(forKeys: [.nickname, .displayName, .name])
+        nickname = try container.decodeFirstTrimmedStringIfPresent(forKeys: [.nickname, .displayName, .name])
         let levelRaw = try container.decodeFirstNonEmptyString(forKeys: [.learningLevel, .jlptLevel, .level])
         learningLevel = levelRaw.flatMap { JLPTLevel(rawValue: $0.uppercased()) }
-        bio = try container.decodeFirstNonEmptyString(forKeys: [.bio, .introduction, .oneLineIntro])
-        instagramId = try container.decodeFirstNonEmptyString(forKeys: [.instagramId, .instagram, .instagramHandle])
+        bio = try container.decodeFirstTrimmedStringIfPresent(forKeys: [.bio, .introduction, .oneLineIntro])
+        instagramId = try container.decodeFirstTrimmedStringIfPresent(forKeys: [.instagramId, .instagram, .instagramHandle])
         buddyCode = try container.decodeFirstNonEmptyString(forKeys: [.buddyCode])
         profileImageUrl = try container.decodeFirstNonEmptyString(forKeys: [.profileImageUrl, .profileImageURL, .profileImage, .imageUrl, .imageURL])
         avatarBase64 = try container.decodeFirstNonEmptyString(forKeys: [.avatarBase64, .avatarImageBase64, .avatar])
@@ -113,6 +113,12 @@ struct UpdateLearningLevelRequest: Encodable {
     init(level: JLPTLevel) {
         self.learningLevel = level.rawValue
     }
+}
+
+struct UpdateUserProfileRequest: Encodable {
+    let nickname: String
+    let bio: String
+    let instagramId: String
 }
 
 struct UpdateLearningLevelResponse: Decodable {
@@ -201,6 +207,15 @@ private extension KeyedDecodingContainer {
                 .trimmingCharacters(in: .whitespacesAndNewlines),
                value.isEmpty == false {
                 return value
+            }
+        }
+        return nil
+    }
+
+    func decodeFirstTrimmedStringIfPresent(forKeys keys: [Key]) throws -> String? {
+        for key in keys {
+            if let value = try decodeIfPresent(String.self, forKey: key) {
+                return value.trimmingCharacters(in: .whitespacesAndNewlines)
             }
         }
         return nil

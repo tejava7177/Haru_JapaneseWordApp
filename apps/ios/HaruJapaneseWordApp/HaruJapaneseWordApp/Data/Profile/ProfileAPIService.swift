@@ -2,6 +2,7 @@ import Foundation
 
 protocol ProfileAPIServiceProtocol {
     func fetchUserProfile(userId: String) async throws -> ServerUserProfileResponse
+    func updateUserProfile(userId: String, nickname: String, bio: String, instagramId: String) async throws -> ServerUserProfileResponse
     func uploadProfileImage(userId: String, imageData: Data, fileName: String, mimeType: String) async throws -> UploadProfileImageResponse
     func updateLearningLevel(userId: String, level: JLPTLevel) async throws -> UpdateLearningLevelResponse
     func regenerateTodayDailyWords(userId: String) async throws -> RegenerateDailyWordsResponse
@@ -22,6 +23,9 @@ extension ProfileAPIServiceProtocol {
             randomMatchingEnabled: nil
         )
     }
+    func updateUserProfile(userId: String, nickname: String, bio: String, instagramId: String) async throws -> ServerUserProfileResponse {
+        try await fetchUserProfile(userId: userId)
+    }
     func uploadProfileImage(userId: String, imageData: Data, fileName: String, mimeType: String) async throws -> UploadProfileImageResponse {
         UploadProfileImageResponse(userId: Int(userId), profileImageUrl: nil)
     }
@@ -38,6 +42,25 @@ struct ProfileAPIService: ProfileAPIServiceProtocol, Sendable {
         print("[ProfileAPI] GET /api/users/\(userId)")
         let endpoint = APIEndpoint(path: "api/users/\(userId)")
         return try await client.get(endpoint, responseType: ServerUserProfileResponse.self)
+    }
+
+    nonisolated func updateUserProfile(
+        userId: String,
+        nickname: String,
+        bio: String,
+        instagramId: String
+    ) async throws -> ServerUserProfileResponse {
+        print("[ProfileAPI] PATCH /api/users/\(userId)/profile")
+        let endpoint = APIEndpoint(
+            path: "api/users/\(userId)/profile",
+            method: .patch
+        )
+        let request = UpdateUserProfileRequest(
+            nickname: nickname,
+            bio: bio,
+            instagramId: instagramId
+        )
+        return try await client.patch(endpoint, body: request, responseType: ServerUserProfileResponse.self)
     }
 
     nonisolated func uploadProfileImage(

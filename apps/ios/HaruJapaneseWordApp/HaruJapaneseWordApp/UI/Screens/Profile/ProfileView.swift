@@ -4,12 +4,19 @@ import UIKit
 import Foundation
 import AuthenticationServices
 
+private enum ProfileEditField: String, Hashable {
+    case nickname
+    case bio
+    case instagramId
+}
+
 struct ProfileView: View {
     @StateObject private var viewModel: ProfileViewModel
     @State private var isGuidePresented: Bool = false
     @State private var isShowingToast: Bool = false
     @State private var toastMessage: String = ""
     @State private var errorMessage: String?
+    @FocusState private var focusedField: ProfileEditField?
 
     private let levelOptions: [JLPTLevel] = [.n5, .n4, .n3, .n2, .n1]
 
@@ -18,27 +25,18 @@ struct ProfileView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                if viewModel.hasAuthenticatedSession {
-                    loggedInContent
-                } else {
-                    guestContent
-                }
-                appearanceSection
-                notificationSettingsSection
-                helpSection
-                appInfoSection
-            }
-            .navigationTitle("프로필")
-        }
+        navigationContent
         .onAppear {
             viewModel.onViewAppear()
         }
         .onChange(of: viewModel.selectedPhotoItem) { newItem in
+            print("[ProfileImage] picker item selected")
             Task {
                 await viewModel.loadAvatar(from: newItem)
             }
+        }
+        .onChange(of: focusedField) { field in
+            print("[ProfileEdit] focus changed field=\(field?.rawValue ?? "nil")")
         }
         .onChange(of: viewModel.learningLevelNotice) { message in
             guard let message else { return }
@@ -117,18 +115,63 @@ struct ProfileView: View {
         .sheet(isPresented: $isGuidePresented) {
             GuideView()
         }
-        .overlay(alignment: .bottom) {
-            if isShowingToast {
-                Text(toastMessage)
-                    .font(.footnote)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(Color.black.opacity(0.85))
-                    .clipShape(Capsule())
-                    .padding(.bottom, 24)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("저장") {
+                    handleSaveButtonTap()
+                }
+                .disabled(viewModel.isSavingProfile)
+
+                Button("완료") {
+                    dismissKeyboard()
+                }
             }
+        }
+        .safeAreaInset(edge: .bottom) {
+            if viewModel.hasAuthenticatedSession {
+                bottomSaveBar
+            }
+        }
+        .overlay(alignment: .bottom) {
+            toastOverlay
+        }
+    }
+
+    private var navigationContent: some View {
+        NavigationStack {
+            formContent
+                .navigationTitle("프로필")
+        }
+    }
+
+    private var formContent: some View {
+        Form {
+            if viewModel.hasAuthenticatedSession {
+                loggedInContent
+            } else {
+                guestContent
+            }
+            appearanceSection
+            notificationSettingsSection
+            helpSection
+            appInfoSection
+        }
+        .scrollDismissesKeyboard(.interactively)
+    }
+
+    @ViewBuilder
+    private var toastOverlay: some View {
+        if isShowingToast {
+            Text(toastMessage)
+                .font(.footnote)
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(Color.black.opacity(0.85))
+                .clipShape(Capsule())
+                .padding(.bottom, 24)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
 
@@ -179,36 +222,56 @@ struct ProfileView: View {
             }
             .padding(.vertical, 8)
 
-            let nicknameBinding = Binding(
-                get: { viewModel.currentProfile.nickname },
-                set: { viewModel.updateNickname($0) }
-            )
-            let bioBinding = Binding(
-                get: { viewModel.currentProfile.bio },
-                set: { viewModel.updateBio($0) }
-            )
-            let instagramBinding = Binding(
-                get: { viewModel.currentProfile.instagramId },
-                set: { viewModel.updateInstagram($0) }
+            ProfileInputField(
+                title: "닉네임",
+                prompt: "닉네임을 입력해 주세요",
+                text: $viewModel.nicknameDraft,
+                focusedField: $focusedField,
+                field: .nickname
             )
 
-            TextField("닉네임", text: nicknameBinding)
-                .disabled(viewModel.hasResolvedServerSession)
+            ProfileInputField(
+                title: "한 줄 소개",
+                prompt: "매일 한 문장씩 일본어 연습 중",
+                text: $viewModel.bioDraft,
+                axis: .vertical,
+                focusedField: $focusedField,
+                field: .bio
+            )
 
-            TextField("한 줄 소개", text: bioBinding)
-                .disabled(viewModel.hasResolvedServerSession)
+            ProfileInputField(
+                title: "인스타 아이디",
+                prompt: "@haru_jp",
+                text: $viewModel.instagramIdDraft,
+                keyboardType: .asciiCapable,
+                focusedField: $focusedField,
+                field: .instagramId
+            )
 
-            HStack {
-                Text("@")
+            if viewModel.isSavingProfile {
+                Text("프로필 저장 중...")
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
-                TextField("인스타 아이디", text: instagramBinding)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .disabled(viewModel.hasResolvedServerSession)
             }
 
-            if viewModel.hasResolvedServerSession {
-                Text("닉네임, 소개, 인스타는 현재 서버 값을 읽기 전용으로 표시해요.")
+            if viewModel.hasProfileDraftChanges == false {
+                Text("변경한 내용이 있으면 저장 버튼이 활성화돼요.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else if viewModel.nicknameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text("닉네임은 비워둘 수 없어요.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let profileSaveSuccessMessage = viewModel.profileSaveSuccessMessage {
+                Text(profileSaveSuccessMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let profileSaveErrorMessage = viewModel.profileSaveErrorMessage {
+                Text(profileSaveErrorMessage)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -218,16 +281,48 @@ struct ProfileView: View {
                     .font(.footnote)
             }
 
-            Text(viewModel.profileSourceText)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
             if let profileRefreshErrorMessage = viewModel.profileRefreshErrorMessage {
                 Text(profileRefreshErrorMessage)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private var bottomSaveBar: some View {
+        VStack(spacing: 8) {
+            Button {
+                handleSaveButtonTap()
+            } label: {
+                HStack {
+                    if viewModel.isSavingProfile {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                    Text(viewModel.isSavingProfile ? "저장 중..." : "저장")
+                        .fontWeight(.semibold)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(viewModel.canSaveProfile ? .accentColor : Color(uiColor: .systemGray3))
+            .disabled(viewModel.isSavingProfile)
+
+            if viewModel.hasProfileDraftChanges == false {
+                Text("변경한 내용이 있으면 저장할 수 있어요.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if viewModel.nicknameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text("닉네임은 비워둘 수 없어요.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
+        .padding(.bottom, 10)
+        .background(.thinMaterial)
     }
 
     private var guestPromptSection: some View {
@@ -424,10 +519,26 @@ struct ProfileView: View {
         let size: CGFloat = 72
         return BuddyAvatarView(
             data: viewModel.localAvatarPreviewData ?? viewModel.currentProfile.avatarData,
-            imageURLString: viewModel.currentProfile.profileImageUrl,
+            imageURLString: viewModel.avatarImageURLForDisplay,
             size: size
         )
         .background(Color.black.opacity(0.04))
+    }
+
+    private func dismissKeyboard() {
+        print("[ProfileEdit] dismiss keyboard")
+        guard focusedField != nil else { return }
+        focusedField = nil
+    }
+
+    private func handleSaveButtonTap() {
+        print("[ProfileEdit] save button tapped")
+        let hadFocus = focusedField != nil
+        dismissKeyboard()
+        print("[ProfileEdit] save tapped focus cleared=\(hadFocus)")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            viewModel.saveProfileEdits()
+        }
     }
 
     private func showToast(message: String) {
@@ -440,6 +551,41 @@ struct ProfileView: View {
                 isShowingToast = false
             }
         }
+    }
+}
+
+private struct ProfileInputField: View {
+    let title: String
+    let prompt: String
+    @Binding var text: String
+    var axis: Axis = .horizontal
+    var keyboardType: UIKeyboardType = .default
+    var focusedField: FocusState<ProfileEditField?>.Binding
+    var field: ProfileEditField
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            TextField(
+                "",
+                text: $text,
+                prompt: Text(prompt).foregroundStyle(.tertiary),
+                axis: axis
+            )
+            .keyboardType(keyboardType)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .lineLimit(axis == .vertical ? 3 : 1)
+            .focused(focusedField, equals: field)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color(uiColor: .secondarySystemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .padding(.vertical, 2)
     }
 }
 

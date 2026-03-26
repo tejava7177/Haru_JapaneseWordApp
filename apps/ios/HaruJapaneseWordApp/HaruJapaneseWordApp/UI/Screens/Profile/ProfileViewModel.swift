@@ -22,6 +22,9 @@ private enum AppleAuthFlowError: LocalizedError {
 @MainActor
 final class ProfileViewModel: ObservableObject {
     @Published var profile: UserProfile
+    @Published var nicknameDraft: String
+    @Published var bioDraft: String
+    @Published var instagramIdDraft: String
     @Published var settings: AppSettings
     @Published var selectedLearningLevel: JLPTLevel
     @Published var isDarkModeEnabled: Bool
@@ -50,8 +53,12 @@ final class ProfileViewModel: ObservableObject {
     @Published var isRefreshingServerProfile: Bool = false
     @Published var profileSourceText: String = "source: local fallback"
     @Published var profileRefreshErrorMessage: String?
+    @Published var isSavingProfile: Bool = false
+    @Published var profileSaveErrorMessage: String?
+    @Published var profileSaveSuccessMessage: String?
     @Published var avatarLoadErrorMessage: String?
     @Published private(set) var localAvatarPreviewData: Data?
+    @Published private(set) var avatarImageRefreshKey: String = UUID().uuidString
 
     private let profileStore: UserProfileStore
     private let settingsStore: AppSettingsStore
@@ -74,6 +81,9 @@ final class ProfileViewModel: ObservableObject {
 
         let legacyProfile = profileStore.load()
         self.profile = legacyProfile
+        self.nicknameDraft = legacyProfile.nickname
+        self.bioDraft = legacyProfile.bio
+        self.instagramIdDraft = legacyProfile.instagramId
         self.settings = settingsStore.settings
         self.selectedLearningLevel = settingsStore.settings.homeDeckLevel
         self.isDarkModeEnabled = settingsStore.isDarkModeEnabled
@@ -82,9 +92,10 @@ final class ProfileViewModel: ObservableObject {
         settingsStore.$settings
             .receive(on: RunLoop.main)
             .sink { [weak self] value in
+                let shouldSyncDrafts = self?.settings.mateUserId != value.mateUserId
                 self?.settings = value
                 self?.isLearningNotificationEnabled = value.isLearningNotificationEnabled
-                self?.syncProfileFromCurrentUser()
+                self?.syncProfileFromCurrentUser(syncDrafts: shouldSyncDrafts)
                 self?.refreshCurrentUserProfileFromServer(triggerSource: "onChange")
             }
             .store(in: &cancellables)
@@ -110,7 +121,7 @@ final class ProfileViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
-        syncProfileFromCurrentUser()
+        syncProfileFromCurrentUser(syncDrafts: true)
         refreshCurrentUserProfileFromServer(triggerSource: "init")
     }
 
@@ -118,22 +129,65 @@ final class ProfileViewModel: ObservableObject {
         refreshCurrentUserProfileFromServer(triggerSource: "onAppear")
     }
 
-    func updateNickname(_ nickname: String) {
-        guard settingsStore.hasResolvedServerSession == false else { return }
-        profile.nickname = nickname
-        profileStore.updateNickname(nickname)
-    }
+    func saveProfileEdits() {
+        guard isSavingProfile == false else {
+            print("[ProfileEdit] save blocked reason=disabled")
+            return
+        }
 
-    func updateBio(_ bio: String) {
-        guard settingsStore.hasResolvedServerSession == false else { return }
-        profile.bio = bio
-        profileStore.updateBio(bio)
-    }
+        guard hasProfileDraftChanges else {
+            print("[ProfileEdit] save blocked reason=noChanges")
+            return
+        }
 
-    func updateInstagram(_ instagramId: String) {
-        guard settingsStore.hasResolvedServerSession == false else { return }
-        profile.instagramId = instagramId
-        profileStore.updateInstagram(instagramId)
+        let trimmedNickname = nicknameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedBio = bioDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedInstagramId = instagramIdDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard let backendUserId = settingsStore.currentBackendUserId,
+              backendUserId.isEmpty == false else {
+            print("[ProfileEdit] save blocked reason=noUserId")
+            profileSaveErrorMessage = "현재 로그인 사용자 정보를 확인하지 못했어요."
+            return
+        }
+
+        guard trimmedNickname.isEmpty == false else {
+            print("[ProfileEdit] save blocked reason=emptyNickname")
+            profileSaveErrorMessage = "닉네임을 입력해 주세요."
+            return
+        }
+
+        profileSaveErrorMessage = nil
+        profileSaveSuccessMessage = nil
+        isSavingProfile = true
+
+        print("[ProfileEdit] start save userId=\(backendUserId)")
+        print("[ProfileEdit] request nickname=\(trimmedNickname) bioExists=\(trimmedBio.isEmpty == false) instagramExists=\(trimmedInstagramId.isEmpty == false)")
+
+        Task {
+            defer { isSavingProfile = false }
+
+            do {
+                let response = try await profileAPIService.updateUserProfile(
+                    userId: backendUserId,
+                    nickname: trimmedNickname,
+                    bio: trimmedBio,
+                    instagramId: trimmedInstagramId
+                )
+                let avatarData = await resolvedAvatarData(
+                    from: response,
+                    fallbackAvatarData: settingsStore.currentMateProfile()?.avatarData ?? profile.avatarData
+                )
+                applyServerProfile(response, avatarData: avatarData, forceDraftSync: true)
+                profileStore.save(profile: profile)
+                profileSaveSuccessMessage = "저장되었어요."
+                print("[ProfileEdit] success nickname=\(profile.nickname)")
+                print("[ProfileEdit] synced local profile")
+            } catch {
+                profileSaveErrorMessage = profileSaveErrorMessage(for: error)
+                print("[ProfileEdit] failed error=\(error.localizedDescription)")
+            }
+        }
     }
 
     func updateProfileLevel(_ level: JLPTLevel) {
@@ -173,6 +227,20 @@ final class ProfileViewModel: ObservableObject {
     var currentServerUserId: String? { settingsStore.serverUserId }
     var currentMateUserId: String { settingsStore.mateUserId }
     var currentProfile: UserProfile { profile }
+    var avatarImageURLForDisplay: String? {
+        cacheBustedImagePath(profile.profileImageUrl, token: avatarImageRefreshKey)
+    }
+    var hasProfileDraftChanges: Bool {
+        normalizeProfileField(nicknameDraft) != normalizeProfileField(profile.nickname)
+            || normalizeProfileField(bioDraft) != normalizeProfileField(profile.bio)
+            || normalizeProfileField(instagramIdDraft) != normalizeProfileField(profile.instagramId)
+    }
+    var canSaveProfile: Bool {
+        hasResolvedServerSession
+            && isSavingProfile == false
+            && nicknameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            && hasProfileDraftChanges
+    }
 
     var serverUserIdPrefix: String {
         let value = currentServerUserId ?? ""
@@ -432,6 +500,14 @@ final class ProfileViewModel: ObservableObject {
         appleSignInErrorMessage = nil
     }
 
+    func clearProfileSaveError() {
+        profileSaveErrorMessage = nil
+    }
+
+    func clearProfileSaveSuccessMessage() {
+        profileSaveSuccessMessage = nil
+    }
+
     func clearLocalResetNotice() {
         localResetNotice = nil
     }
@@ -454,9 +530,10 @@ final class ProfileViewModel: ObservableObject {
         isRandomMatchingEnabled = false
         localResetNotice = "로컬 상태를 초기화했어요."
         localAvatarPreviewData = nil
+        syncDraftsFromProfile()
     }
 
-    private func syncProfileFromCurrentUser() {
+    private func syncProfileFromCurrentUser(syncDrafts: Bool = false) {
         if let mateProfile = settingsStore.currentMateProfile() {
             profileSourceText = "source: local fallback"
             profileRefreshErrorMessage = nil
@@ -480,6 +557,10 @@ final class ProfileViewModel: ObservableObject {
             selectedLearningLevel = settingsStore.settings.homeDeckLevel
             isRandomMatchingEnabled = false
         }
+        profileStore.save(profile: profile)
+        if syncDrafts {
+            syncDraftsFromProfile()
+        }
     }
 
     private func refreshCurrentUserProfileFromServer(triggerSource: String, force: Bool = false) {
@@ -488,7 +569,8 @@ final class ProfileViewModel: ObservableObject {
         }
     }
 
-    private func applyServerProfile(_ response: ServerUserProfileResponse, avatarData: Data?) {
+    private func applyServerProfile(_ response: ServerUserProfileResponse, avatarData: Data?, forceDraftSync: Bool = false) {
+        let shouldSyncDrafts = forceDraftSync || hasProfileDraftChanges == false
         let currentUserId = settingsStore.mateUserId
         let cachedProfile = settingsStore.currentMateProfile()
 
@@ -510,17 +592,17 @@ final class ProfileViewModel: ObservableObject {
         print("[Profile] decoded instagram=\(response.instagramId ?? "nil")")
         print("[Profile] decoded learningLevel=\(response.learningLevel?.rawValue ?? "nil")")
 
-        let resolvedNickname = resolveServerText(
+        let resolvedNickname = resolveServerEditableText(
             serverValue: response.nickname,
             fallbackValue: cachedProfile?.displayName,
             fieldName: "nickname"
         ) ?? "하루"
-        let resolvedBio = resolveServerText(
+        let resolvedBio = resolveServerEditableText(
             serverValue: response.bio,
             fallbackValue: cachedProfile?.bio,
             fieldName: "bio"
         ) ?? ""
-        let resolvedInstagramId = resolveServerText(
+        let resolvedInstagramId = resolveServerEditableText(
             serverValue: response.instagramId,
             fallbackValue: cachedProfile?.instagramId,
             fieldName: "instagramId"
@@ -531,6 +613,10 @@ final class ProfileViewModel: ObservableObject {
         ) ?? .n5
         let resolvedRandomMatchingEnabled = response.randomMatchingEnabled ?? settingsStore.currentMateRandomMatchingEnabled()
         let resolvedProfileImageUrl = trimmedNonEmpty(response.profileImageUrl)
+        if resolvedProfileImageUrl != nil {
+            avatarImageRefreshKey = UUID().uuidString
+            print("[ProfileImage] server profileImageUrl=\(resolvedProfileImageUrl ?? "nil")")
+        }
 
         let didUpdateStore = settingsStore.applyServerProfile(
             userId: currentUserId,
@@ -549,24 +635,36 @@ final class ProfileViewModel: ObservableObject {
         }
         profileSourceText = "source: server"
         profileRefreshErrorMessage = nil
-        syncProfileFromCurrentUser()
+        syncProfileFromCurrentUser(syncDrafts: shouldSyncDrafts)
         localAvatarPreviewData = nil
         profileSourceText = "source: server"
     }
 
-    private func resolveServerText(serverValue: String?, fallbackValue: String?, fieldName: String) -> String? {
-        if let serverValue = trimmedNonEmpty(serverValue) {
-            print("[Profile] using server \(fieldName)=\(serverValue)")
-            return serverValue
+    private func resolveServerEditableText(serverValue: String?, fallbackValue: String?, fieldName: String) -> String? {
+        if let serverValue {
+            let trimmed = serverValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            print("[Profile] using server \(fieldName)=\(trimmed.isEmpty ? "<empty>" : trimmed)")
+            return trimmed
         }
 
-        if let fallbackValue = trimmedNonEmpty(fallbackValue) {
+        if let fallbackValue {
+            let trimmed = fallbackValue.trimmingCharacters(in: .whitespacesAndNewlines)
             print("[Profile] fallback to local \(fieldName)")
-            return fallbackValue
+            return trimmed
         }
 
         print("[Profile] using placeholder \(fieldName)")
         return nil
+    }
+
+    private func syncDraftsFromProfile() {
+        nicknameDraft = profile.nickname
+        bioDraft = profile.bio
+        instagramIdDraft = profile.instagramId
+    }
+
+    private func normalizeProfileField(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func resolveLearningLevel(serverValue: JLPTLevel?, fallbackValue: JLPTLevel?) -> JLPTLevel? {
@@ -620,6 +718,8 @@ final class ProfileViewModel: ObservableObject {
         let compressed = compressImageData(data)
         localAvatarPreviewData = compressed
         profile.avatarData = compressed
+        avatarImageRefreshKey = UUID().uuidString
+        print("[ProfileImage] local preview updated size=\(compressed?.count ?? data.count)")
     }
 
     private func renderImageToJPEGData(_ image: Image) -> Data? {
@@ -643,16 +743,21 @@ final class ProfileViewModel: ObservableObject {
 
         do {
             print("[ProfileImage] upload start userId=\(backendUserId)")
-            let response = try await profileAPIService.uploadProfileImage(
+            _ = try await profileAPIService.uploadProfileImage(
                 userId: backendUserId,
                 imageData: compressed,
                 fileName: "profile.jpg",
                 mimeType: "image/jpeg"
             )
-            print("[ProfileImage] upload success url=\(response.profileImageUrl ?? "nil")")
+            print("[ProfileImage] upload success")
             print("[ProfileImage] refresh profile after upload")
             hasLoadedProfile = false
-            await refreshCurrentUserProfileFromServerNow(triggerSource: "profileImageUpload", force: true)
+            avatarImageRefreshKey = UUID().uuidString
+            await refreshCurrentUserProfileFromServerNow(
+                triggerSource: "profileImageUpload",
+                force: true,
+                cacheBustImage: true
+            )
         } catch {
             print("[ProfileImage] upload failed error=\(error.localizedDescription)")
             localAvatarPreviewData = nil
@@ -661,7 +766,11 @@ final class ProfileViewModel: ObservableObject {
         }
     }
 
-    private func refreshCurrentUserProfileFromServerNow(triggerSource: String, force: Bool = false) async {
+    private func refreshCurrentUserProfileFromServerNow(
+        triggerSource: String,
+        force: Bool = false,
+        cacheBustImage: Bool = false
+    ) async {
         print("[Profile] trigger source=\(triggerSource)")
         let mateUserId = settingsStore.mateUserId
         guard mateUserId.isEmpty == false else {
@@ -701,7 +810,8 @@ final class ProfileViewModel: ObservableObject {
             let response = try await profileAPIService.fetchUserProfile(userId: backendUserId)
             let avatarData = await resolvedAvatarData(
                 from: response,
-                fallbackAvatarData: settingsStore.currentMateProfile()?.avatarData
+                fallbackAvatarData: settingsStore.currentMateProfile()?.avatarData,
+                cacheBustImage: cacheBustImage
             )
             hasLoadedProfile = true
             applyServerProfile(response, avatarData: avatarData)
@@ -713,21 +823,25 @@ final class ProfileViewModel: ObservableObject {
         }
     }
 
-    private func resolvedAvatarData(from response: ServerUserProfileResponse, fallbackAvatarData: Data?) async -> Data? {
+    private func resolvedAvatarData(
+        from response: ServerUserProfileResponse,
+        fallbackAvatarData: Data?,
+        cacheBustImage: Bool = false
+    ) async -> Data? {
         if let avatarData = decodeAvatarData(from: response.avatarBase64) {
             return avatarData
         }
 
         if let profileImageUrl = trimmedNonEmpty(response.profileImageUrl),
-           let avatarData = await downloadImageData(from: profileImageUrl) {
+           let avatarData = await downloadImageData(from: profileImageUrl, cacheBust: cacheBustImage) {
             return avatarData
         }
 
         return fallbackAvatarData
     }
 
-    private func downloadImageData(from path: String) async -> Data? {
-        guard let url = resolvedImageURL(from: path) else { return nil }
+    private func downloadImageData(from path: String, cacheBust: Bool = false) async -> Data? {
+        guard let url = resolvedImageURL(from: path, cacheBust: cacheBust) else { return nil }
         do {
             let (data, response) = try await URLSession.shared.data(from: url)
             guard let httpResponse = response as? HTTPURLResponse,
@@ -741,13 +855,43 @@ final class ProfileViewModel: ObservableObject {
         }
     }
 
-    private func resolvedImageURL(from path: String) -> URL? {
+    private func resolvedImageURL(from path: String, cacheBust: Bool = false) -> URL? {
         if let url = URL(string: path), url.scheme != nil {
-            return url
+            return cacheBust ? appendCacheBust(to: url) : url
         }
 
         let trimmedPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        return APIConfiguration.baseURL.appendingPathComponent(trimmedPath)
+        let resolvedURL = APIConfiguration.baseURL.appendingPathComponent(trimmedPath)
+        return cacheBust ? appendCacheBust(to: resolvedURL) : resolvedURL
+    }
+
+    private func cacheBustedImagePath(_ path: String?, token: String?) -> String? {
+        guard let path = trimmedNonEmpty(path),
+              let token = trimmedNonEmpty(token) else {
+            return path
+        }
+
+        if var components = URLComponents(string: path), components.scheme != nil {
+            var items = components.queryItems ?? []
+            items.removeAll { $0.name == "t" }
+            items.append(URLQueryItem(name: "t", value: token))
+            components.queryItems = items
+            return components.url?.absoluteString ?? path
+        }
+
+        let separator = path.contains("?") ? "&" : "?"
+        return "\(path)\(separator)t=\(token)"
+    }
+
+    private func appendCacheBust(to url: URL) -> URL {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return url
+        }
+        var items = components.queryItems ?? []
+        items.removeAll { $0.name == "t" }
+        items.append(URLQueryItem(name: "t", value: avatarImageRefreshKey))
+        components.queryItems = items
+        return components.url ?? url
     }
 
     private func applyLearningLevelLocally(_ level: JLPTLevel) {
@@ -757,6 +901,20 @@ final class ProfileViewModel: ObservableObject {
             settingsStore.updateHomeDeckLevel(level)
         }
         selectedLearningLevel = level
+    }
+
+    private func profileSaveErrorMessage(for error: Error) -> String {
+        if let apiError = error as? APIError {
+            switch apiError {
+            case .server(_, let message):
+                if let message, message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+                    return message
+                }
+            default:
+                break
+            }
+        }
+        return "프로필을 저장하지 못했어요. 잠시 후 다시 시도해주세요."
     }
 
     private func identityTokenString(from data: Data?) throws -> String {
