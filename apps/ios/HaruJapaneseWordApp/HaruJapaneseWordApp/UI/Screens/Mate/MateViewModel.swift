@@ -217,7 +217,7 @@ final class MateViewModel: ObservableObject {
     }
 
     var currentUserId: String {
-        settingsStore.currentBackendUserId ?? settingsStore.mateUserId
+        settingsStore.currentBackendUserId ?? ""
     }
 
     var settingsStoreForBuddyDetail: AppSettingsStore {
@@ -723,7 +723,7 @@ final class MateViewModel: ObservableObject {
         let level = serverProfile?.jlptLevel ?? response.jlptLevel
         let bio = serverProfile?.bio ?? response.bio
         let instagramId = serverProfile?.instagramId ?? response.instagramId
-        let profileImageUrl = serverProfile?.profileImageUrl
+        let profileImageUrl = serverProfile?.profileImageUrl ?? response.profileImageUrl
         let avatarData = resolvedRequestAvatarData(
             buddyUserId: response.requesterId,
             serverProfile: serverProfile,
@@ -737,7 +737,7 @@ final class MateViewModel: ObservableObject {
             requesterId: response.requesterId,
             displayName: displayName,
             jlptLevel: level,
-            recentAccessText: recentAccessText(from: response.lastActiveAt),
+            recentAccessText: recentAccessText(from: response.lastActiveAt, fallbackText: response.lastSeenText),
             bio: bio,
             instagramId: instagramId,
             profileImageUrl: profileImageUrl,
@@ -751,7 +751,7 @@ final class MateViewModel: ObservableObject {
         let level = serverProfile?.jlptLevel ?? response.jlptLevel
         let bio = serverProfile?.bio ?? response.bio
         let instagramId = serverProfile?.instagramId ?? response.instagramId
-        let profileImageUrl = serverProfile?.profileImageUrl
+        let profileImageUrl = serverProfile?.profileImageUrl ?? response.profileImageUrl
         let avatarData = resolvedCandidateAvatarData(
             buddyUserId: response.userId,
             serverProfile: serverProfile,
@@ -764,7 +764,7 @@ final class MateViewModel: ObservableObject {
             userId: response.userId,
             displayName: displayName,
             jlptLevel: level,
-            recentAccessText: recentAccessText(from: response.lastActiveAt),
+            recentAccessText: recentAccessText(from: response.lastActiveAt, fallbackText: response.lastSeenText),
             bio: bio,
             instagramId: instagramId,
             profileImageUrl: profileImageUrl,
@@ -825,9 +825,13 @@ final class MateViewModel: ObservableObject {
         }
     }
 
-    private func recentAccessText(from rawValue: String?) -> String {
+    private func recentAccessText(from rawValue: String?, fallbackText: String? = nil) -> String {
         guard let rawValue = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines),
               rawValue.isEmpty == false else {
+            if let fallbackText = fallbackText?.trimmingCharacters(in: .whitespacesAndNewlines),
+               fallbackText.isEmpty == false {
+                return fallbackText
+            }
             return "최근 접속일 정보 없음"
         }
 

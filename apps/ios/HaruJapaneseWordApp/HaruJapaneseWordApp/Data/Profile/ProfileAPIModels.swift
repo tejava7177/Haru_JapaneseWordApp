@@ -6,6 +6,7 @@ struct ServerUserProfileResponse: Decodable {
     let learningLevel: JLPTLevel?
     let bio: String?
     let instagramId: String?
+    let buddyCode: String?
     let profileImageUrl: String?
     let avatarBase64: String?
     let randomMatchingEnabled: Bool?
@@ -25,6 +26,7 @@ struct ServerUserProfileResponse: Decodable {
         case instagramId
         case instagram
         case instagramHandle
+        case buddyCode
         case profileImageUrl
         case profileImageURL
         case profileImage
@@ -44,6 +46,7 @@ struct ServerUserProfileResponse: Decodable {
         learningLevel: JLPTLevel?,
         bio: String?,
         instagramId: String?,
+        buddyCode: String?,
         profileImageUrl: String?,
         avatarBase64: String?,
         randomMatchingEnabled: Bool?
@@ -53,6 +56,7 @@ struct ServerUserProfileResponse: Decodable {
         self.learningLevel = learningLevel
         self.bio = bio
         self.instagramId = instagramId
+        self.buddyCode = buddyCode
         self.profileImageUrl = profileImageUrl
         self.avatarBase64 = avatarBase64
         self.randomMatchingEnabled = randomMatchingEnabled
@@ -67,6 +71,7 @@ struct ServerUserProfileResponse: Decodable {
         learningLevel = levelRaw.flatMap { JLPTLevel(rawValue: $0.uppercased()) }
         bio = try container.decodeFirstNonEmptyString(forKeys: [.bio, .introduction, .oneLineIntro])
         instagramId = try container.decodeFirstNonEmptyString(forKeys: [.instagramId, .instagram, .instagramHandle])
+        buddyCode = try container.decodeFirstNonEmptyString(forKeys: [.buddyCode])
         profileImageUrl = try container.decodeFirstNonEmptyString(forKeys: [.profileImageUrl, .profileImageURL, .profileImage, .imageUrl, .imageURL])
         avatarBase64 = try container.decodeFirstNonEmptyString(forKeys: [.avatarBase64, .avatarImageBase64, .avatar])
         randomMatchingEnabled = try container.decodeFlexibleBoolIfPresent(forKey: .randomMatchingEnabled)
@@ -137,6 +142,7 @@ struct ToggleRandomMatchingResponse: Decodable {
         case userId
         case enabled
         case isEnabled
+        case randomMatchingEnabled
     }
 
     init(userId: Int?, enabled: Bool?) {
@@ -147,7 +153,8 @@ struct ToggleRandomMatchingResponse: Decodable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         userId = try container.decodeFlexibleIntIfPresent(forKey: .userId)
-        enabled = try container.decodeFlexibleBoolIfPresent(forKey: .enabled)
+        enabled = try container.decodeFlexibleBoolIfPresent(forKey: .randomMatchingEnabled)
+            ?? container.decodeFlexibleBoolIfPresent(forKey: .enabled)
             ?? container.decodeFlexibleBoolIfPresent(forKey: .isEnabled)
     }
 }

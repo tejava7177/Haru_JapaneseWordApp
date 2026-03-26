@@ -10,6 +10,8 @@ final class HomeViewModel: ObservableObject {
     @Published var todayLyric: LyricEntry?
     @Published var lyricWordId: Int?
     @Published var hasError: Bool = false
+    @Published private(set) var isLoading: Bool = false
+    @Published var errorMessage: String?
     @Published var debugError: String?
     @Published private(set) var targetDateText: String = ""
     @Published private(set) var tsunTsunInboxSummary: TsunTsunInboxSummary?
@@ -17,6 +19,7 @@ final class HomeViewModel: ObservableObject {
     private let repository: DictionaryRepository
     private let settingsStore: AppSettingsStore
     private let lyricRepository: LyricRepository
+    private let homeAPIService: HomeAPIServiceProtocol
     private let buddyAPIService: BuddyAPIServiceProtocol
     private var cancellables: Set<AnyCancellable> = []
     private var hasLoadedDeck: Bool = false
@@ -29,11 +32,13 @@ final class HomeViewModel: ObservableObject {
     init(
         repository: DictionaryRepository,
         settingsStore: AppSettingsStore,
+        homeAPIService: HomeAPIServiceProtocol = HomeAPIService(),
         buddyAPIService: BuddyAPIServiceProtocol = BuddyAPIService()
     ) {
         self.repository = repository
         self.settingsStore = settingsStore
         self.lyricRepository = LyricRepository()
+        self.homeAPIService = homeAPIService
         self.buddyAPIService = buddyAPIService
 
         settingsStore.$settings
@@ -72,12 +77,14 @@ final class HomeViewModel: ObservableObject {
         }
 
         isLoadingDeck = true
+        isLoading = true
         lastDeckLoadKey = loadKey
         Task {
             async let deckLoad: Void = loadDeckFromPrimarySource()
             async let inboxLoad: Void = loadInboxSummaryFromPrimarySource(force: force)
             _ = await (deckLoad, inboxLoad)
             self.isLoadingDeck = false
+            self.isLoading = false
             self.hasLoadedDeck = true
         }
     }
@@ -104,6 +111,7 @@ final class HomeViewModel: ObservableObject {
 
     private func loadDeckFromPrimarySource() async {
         hasError = false
+        errorMessage = nil
         debugError = nil
 
         do {
@@ -111,7 +119,7 @@ final class HomeViewModel: ObservableObject {
             lyricWordId = nil
 
             if let currentUserId = settingsStore.currentBackendUserId {
-                let response = try await buddyAPIService.fetchDailyWords(userId: currentUserId)
+                let response = try await homeAPIService.fetchTodayDailyWords(userId: currentUserId)
                 let finalCards = try response.items
                     .sorted { $0.orderIndex < $1.orderIndex }
                     .map(makeWordSummary(from:))
@@ -124,6 +132,7 @@ final class HomeViewModel: ObservableObject {
                 targetDateText = ""
                 cards = finalCards
                 deckWordIds = finalCards.map { $0.id }
+                errorMessage = "로그인 전에는 로컬 추천 단어를 보여드려요."
                 debugError = "DailyWord API userId unavailable. Falling back to local recommendations."
             }
 
@@ -141,10 +150,12 @@ final class HomeViewModel: ObservableObject {
                 deckWordIds = finalCards.map { $0.id }
                 selectedIndex = 0
                 checkedWordIds = try repository.fetchCheckedStates(wordIds: deckWordIds)
+                errorMessage = "서버 연결이 불안정해 로컬 추천 단어를 대신 보여드려요."
                 debugError = "DailyWord API failed, fallback applied: \(error)"
                 hasError = finalCards.isEmpty
             } catch {
                 hasError = true
+                errorMessage = "오늘의 추천 단어를 불러오지 못했어요."
                 debugError = String(describing: error)
                 cards = []
                 deckWordIds = []

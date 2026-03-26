@@ -679,6 +679,8 @@ struct RandomCandidateResponse: Decodable, Identifiable, Equatable {
     let bio: String
     let instagramId: String
     let lastActiveAt: String?
+    let lastSeenText: String?
+    let profileImageUrl: String?
     let avatarBase64: String?
 
     private enum CodingKeys: String, CodingKey {
@@ -700,8 +702,13 @@ struct RandomCandidateResponse: Decodable, Identifiable, Equatable {
         case instagramHandle
         case lastActiveAt
         case lastSeenAt
+        case lastSeenText
         case recentAccessAt
         case recentLoginAt
+        case profileImageUrl
+        case profileImageURL
+        case imageUrl
+        case imageURL
         case avatarBase64
         case avatarImageBase64
         case avatar
@@ -715,6 +722,8 @@ struct RandomCandidateResponse: Decodable, Identifiable, Equatable {
         bio: String,
         instagramId: String,
         lastActiveAt: String?,
+        lastSeenText: String?,
+        profileImageUrl: String?,
         avatarBase64: String?
     ) {
         self.id = id
@@ -724,6 +733,8 @@ struct RandomCandidateResponse: Decodable, Identifiable, Equatable {
         self.bio = bio
         self.instagramId = instagramId
         self.lastActiveAt = lastActiveAt
+        self.lastSeenText = lastSeenText
+        self.profileImageUrl = profileImageUrl
         self.avatarBase64 = avatarBase64
     }
 
@@ -740,6 +751,8 @@ struct RandomCandidateResponse: Decodable, Identifiable, Equatable {
         bio = try container.decodeFirstNonEmptyString(forKeys: [.bio, .introduction, .oneLineIntro]) ?? ""
         instagramId = try container.decodeFirstNonEmptyString(forKeys: [.instagramId, .instagram, .instagramHandle]) ?? ""
         lastActiveAt = try container.decodeFirstNonEmptyString(forKeys: [.lastActiveAt, .lastSeenAt, .recentAccessAt, .recentLoginAt])
+        lastSeenText = try container.decodeFirstNonEmptyString(forKeys: [.lastSeenText])
+        profileImageUrl = try container.decodeFirstNonEmptyString(forKeys: [.profileImageUrl, .profileImageURL, .imageUrl, .imageURL])
         avatarBase64 = try container.decodeFirstNonEmptyString(forKeys: [.avatarBase64, .avatarImageBase64, .avatar])
     }
 }
@@ -754,6 +767,8 @@ struct BuddyRequestResponse: Decodable, Identifiable, Equatable {
     let bio: String
     let instagramId: String
     let lastActiveAt: String?
+    let lastSeenText: String?
+    let profileImageUrl: String?
     let avatarBase64: String?
     let status: String?
 
@@ -790,10 +805,15 @@ struct BuddyRequestResponse: Decodable, Identifiable, Equatable {
         case senderInstagramId
         case lastActiveAt
         case lastSeenAt
+        case lastSeenText
         case recentAccessAt
         case recentLoginAt
         case requesterLastActiveAt
         case senderLastActiveAt
+        case profileImageUrl
+        case profileImageURL
+        case imageUrl
+        case imageURL
         case avatarBase64
         case avatarImageBase64
         case avatar
@@ -812,6 +832,8 @@ struct BuddyRequestResponse: Decodable, Identifiable, Equatable {
         bio: String,
         instagramId: String,
         lastActiveAt: String?,
+        lastSeenText: String?,
+        profileImageUrl: String?,
         avatarBase64: String?,
         status: String?
     ) {
@@ -824,6 +846,8 @@ struct BuddyRequestResponse: Decodable, Identifiable, Equatable {
         self.bio = bio
         self.instagramId = instagramId
         self.lastActiveAt = lastActiveAt
+        self.lastSeenText = lastSeenText
+        self.profileImageUrl = profileImageUrl
         self.avatarBase64 = avatarBase64
         self.status = status
     }
@@ -858,6 +882,8 @@ struct BuddyRequestResponse: Decodable, Identifiable, Equatable {
         lastActiveAt = try container.decodeFirstNonEmptyString(
             forKeys: [.lastActiveAt, .lastSeenAt, .recentAccessAt, .recentLoginAt, .requesterLastActiveAt, .senderLastActiveAt]
         )
+        lastSeenText = try container.decodeFirstNonEmptyString(forKeys: [.lastSeenText])
+        profileImageUrl = try container.decodeFirstNonEmptyString(forKeys: [.profileImageUrl, .profileImageURL, .imageUrl, .imageURL])
         avatarBase64 = try container.decodeFirstNonEmptyString(
             forKeys: [.avatarBase64, .avatarImageBase64, .avatar, .requesterAvatarBase64, .senderAvatarBase64]
         )

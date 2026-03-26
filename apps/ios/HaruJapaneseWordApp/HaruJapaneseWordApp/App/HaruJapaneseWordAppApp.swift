@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 private struct DictionaryRepositoryKey: EnvironmentKey {
     static let defaultValue: DictionaryRepository = StubDictionaryRepository()
@@ -13,6 +14,7 @@ extension EnvironmentValues {
 
 @main
 struct HaruJapaneseWordAppApp: App {
+    @UIApplicationDelegateAdaptor(HaruAppDelegate.self) private var appDelegate
     private let repository: DictionaryRepository
 
     init() {

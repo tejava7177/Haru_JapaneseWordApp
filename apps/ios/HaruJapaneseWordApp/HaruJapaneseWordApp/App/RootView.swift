@@ -28,7 +28,7 @@ struct RootView: View {
             if settingsStore.hasSeenOnboarding {
                 mainTabView
             } else {
-                OnboardingView(isBuddyEnabled: settingsStore.isMateLoggedIn) {
+                OnboardingView(isBuddyEnabled: settingsStore.hasResolvedServerSession) {
                     selectedTab = .home
                     settingsStore.markOnboardingSeen()
                 }
@@ -36,9 +36,16 @@ struct RootView: View {
         }
         .preferredColorScheme(settingsStore.isDarkModeEnabled ? .dark : .light)
         .task {
+            PushRegistrationManager.shared.configure(settingsStore: settingsStore)
             await NotificationManager.shared.syncDailyLearningReminder(
                 isEnabled: settingsStore.settings.isLearningNotificationEnabled
             )
+            await PushRegistrationManager.shared.syncRegistrationState()
+        }
+        .onChange(of: settingsStore.serverUserId) { _ in
+            Task {
+                await PushRegistrationManager.shared.syncRegistrationState()
+            }
         }
     }
 
@@ -57,7 +64,7 @@ struct RootView: View {
                 .tag(RootTab.words)
 
             Group {
-                if settingsStore.isMateLoggedIn {
+                if settingsStore.hasResolvedServerSession {
                     MateView(viewModel: mateViewModel)
                 } else {
                     MateSignInRequiredView {

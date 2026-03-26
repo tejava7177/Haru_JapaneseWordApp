@@ -16,6 +16,7 @@ extension ProfileAPIServiceProtocol {
             learningLevel: nil,
             bio: nil,
             instagramId: nil,
+            buddyCode: nil,
             profileImageUrl: nil,
             avatarBase64: nil,
             randomMatchingEnabled: nil

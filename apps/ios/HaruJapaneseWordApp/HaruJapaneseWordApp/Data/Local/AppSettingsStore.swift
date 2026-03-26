@@ -9,6 +9,8 @@ final class AppSettingsStore: ObservableObject {
     @Published private(set) var appleUserId: String?
     @Published private(set) var appleEmail: String?
     @Published private(set) var appleDisplayName: String?
+    @Published private(set) var serverUserId: String?
+    @Published private(set) var apnsDeviceToken: String?
     @Published private(set) var profileRefreshTick: Int = 0
 
     private let userDefaults: UserDefaults
@@ -21,6 +23,10 @@ final class AppSettingsStore: ObservableObject {
     private let appleUserIdKey = "auth_apple_user_id"
     private let appleEmailKey = "auth_apple_email"
     private let appleDisplayNameKey = "auth_apple_display_name"
+    private let serverUserIdKey = "auth_server_user_id"
+    private let apnsDeviceTokenKey = "push_apns_device_token"
+    private let registeredAPNSDeviceTokenKey = "push_registered_apns_device_token"
+    private let registeredAPNSUserIdKey = "push_registered_apns_user_id"
     private let mateUserIdKey = "mate_user_id"
     private static let learningNotificationEnabledKey = "settings_learning_notification_enabled"
 
@@ -50,11 +56,16 @@ final class AppSettingsStore: ObservableObject {
         self.appleUserId = userDefaults.string(forKey: appleUserIdKey)
         self.appleEmail = userDefaults.string(forKey: appleEmailKey)
         self.appleDisplayName = userDefaults.string(forKey: appleDisplayNameKey)
+        self.serverUserId = userDefaults.string(forKey: serverUserIdKey)
+        self.apnsDeviceToken = userDefaults.string(forKey: apnsDeviceTokenKey)
 
-        if settings.mateUserId.isEmpty == false {
-            ensureProfileExists(for: settings.mateUserId)
+        migrateLegacyStoredServerUserIdIfNeeded()
+
+        if let activeServerUserId = serverUserId, activeServerUserId.isEmpty == false {
+            ensureProfileExists(for: activeServerUserId)
             var updated = settings
-            updated.homeDeckLevel = profileLevel(for: settings.mateUserId)
+            updated.mateUserId = activeServerUserId
+            updated.homeDeckLevel = profileLevel(for: activeServerUserId)
             settings = updated
             save(settings: updated)
         }
@@ -84,8 +95,19 @@ final class AppSettingsStore: ObservableObject {
         userDefaults.removeObject(forKey: legacyOnboardingKey)
     }
 
-    func signIn(appleUserId: String, email: String?, displayName: String?) {
+    func signIn(
+        appleUserId: String,
+        email: String?,
+        displayName: String?,
+        serverUserId: String,
+        nickname: String?,
+        learningLevel: JLPTLevel?
+    ) {
+        let trimmedServerUserId = serverUserId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedServerUserId.isEmpty == false else { return }
+
         self.appleUserId = appleUserId
+        self.serverUserId = trimmedServerUserId
         if let email {
             self.appleEmail = email
             userDefaults.set(email, forKey: appleEmailKey)
@@ -97,10 +119,27 @@ final class AppSettingsStore: ObservableObject {
         isSignedIn = true
         userDefaults.set(true, forKey: isSignedInKey)
         userDefaults.set(appleUserId, forKey: appleUserIdKey)
-        signInForMate(userId: appleUserId)
-        if let displayName, displayName.isEmpty == false {
-            updateCurrentMateDisplayName(displayName)
+        userDefaults.set(trimmedServerUserId, forKey: serverUserIdKey)
+
+        ensureProfileExists(for: trimmedServerUserId)
+        if let nickname, nickname.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+            userDefaults.set(nickname, forKey: mateProfileKey(userId: trimmedServerUserId, field: "display_name"))
+        } else if let displayName, displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+            userDefaults.set(displayName, forKey: mateProfileKey(userId: trimmedServerUserId, field: "display_name"))
         }
+        if let learningLevel {
+            userDefaults.set(learningLevel.rawValue, forKey: mateProfileKey(userId: trimmedServerUserId, field: "jlpt_level"))
+        }
+
+        let resolvedLevel = learningLevel ?? profileLevel(for: trimmedServerUserId)
+        let updated = AppSettings(
+            homeDeckLevel: resolvedLevel,
+            mateUserId: trimmedServerUserId,
+            isLearningNotificationEnabled: settings.isLearningNotificationEnabled
+        )
+        settings = updated
+        save(settings: updated)
+        notifyProfileDidChange()
         print("[AppleSignIn] state persisted")
     }
 
@@ -108,20 +147,26 @@ final class AppSettingsStore: ObservableObject {
         appleUserId = nil
         appleEmail = nil
         appleDisplayName = nil
+        serverUserId = nil
         isSignedIn = false
         userDefaults.set(false, forKey: isSignedInKey)
         userDefaults.removeObject(forKey: appleUserIdKey)
         userDefaults.removeObject(forKey: appleEmailKey)
         userDefaults.removeObject(forKey: appleDisplayNameKey)
+        userDefaults.removeObject(forKey: serverUserIdKey)
+        clearDeviceTokenServerRegistration()
         signOutForMate()
     }
 
     func signInForMate(userId: String) {
-        ensureProfileExists(for: userId)
-        let resolvedLevel = profileLevel(for: userId)
+        let resolvedServerUserId = resolvedServerUserId(for: userId) ?? userId
+        ensureProfileExists(for: resolvedServerUserId)
+        serverUserId = resolvedServerUserId
+        userDefaults.set(resolvedServerUserId, forKey: serverUserIdKey)
+        let resolvedLevel = profileLevel(for: resolvedServerUserId)
         let updated = AppSettings(
             homeDeckLevel: resolvedLevel,
-            mateUserId: userId,
+            mateUserId: resolvedServerUserId,
             isLearningNotificationEnabled: settings.isLearningNotificationEnabled
         )
         guard updated != settings else { return }
@@ -134,6 +179,8 @@ final class AppSettingsStore: ObservableObject {
     }
 
     func signOutForMate() {
+        serverUserId = nil
+        userDefaults.removeObject(forKey: serverUserIdKey)
         guard settings.mateUserId.isEmpty == false else { return }
         var updated = settings
         updated.mateUserId = ""
@@ -156,10 +203,51 @@ final class AppSettingsStore: ObservableObject {
         save(settings: updated)
     }
 
-    var isMateLoggedIn: Bool { settings.isMateLoggedIn }
+    func setAPNSDeviceToken(_ token: String?) {
+        let trimmedToken = token?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedToken = trimmedToken?.isEmpty == false ? trimmedToken : nil
+        guard apnsDeviceToken != normalizedToken else { return }
+
+        apnsDeviceToken = normalizedToken
+        if let normalizedToken {
+            userDefaults.set(normalizedToken, forKey: apnsDeviceTokenKey)
+        } else {
+            userDefaults.removeObject(forKey: apnsDeviceTokenKey)
+        }
+
+        if registeredDeviceToken != normalizedToken {
+            clearDeviceTokenServerRegistration()
+        }
+    }
+
+    func markDeviceTokenRegisteredToServer(token: String, userId: String) {
+        userDefaults.set(token, forKey: registeredAPNSDeviceTokenKey)
+        userDefaults.set(userId, forKey: registeredAPNSUserIdKey)
+    }
+
+    func clearDeviceTokenServerRegistration() {
+        userDefaults.removeObject(forKey: registeredAPNSDeviceTokenKey)
+        userDefaults.removeObject(forKey: registeredAPNSUserIdKey)
+    }
+
+    var registeredDeviceToken: String? {
+        userDefaults.string(forKey: registeredAPNSDeviceTokenKey)
+    }
+
+    var registeredDeviceTokenUserId: String? {
+        userDefaults.string(forKey: registeredAPNSUserIdKey)
+    }
+
+    func hasRegisteredDeviceTokenToServer(token: String, userId: String) -> Bool {
+        registeredDeviceToken == token && registeredDeviceTokenUserId == userId
+    }
+
+    var isMateLoggedIn: Bool { serverUserId?.isEmpty == false }
+    var hasAuthenticatedSession: Bool { isSignedIn || isMateLoggedIn }
+    var hasResolvedServerSession: Bool { serverUserId?.isEmpty == false }
     var mateUserId: String { settings.mateUserId }
     var currentBackendUserId: String? {
-        BackendUserIDMapper.backendUserId(for: settings.mateUserId, displayName: currentMateProfile()?.displayName)
+        serverUserId
     }
 
     func profileLevel(for userId: String) -> JLPTLevel {
@@ -351,6 +439,8 @@ final class AppSettingsStore: ObservableObject {
         appleUserId = userDefaults.string(forKey: appleUserIdKey)
         appleEmail = userDefaults.string(forKey: appleEmailKey)
         appleDisplayName = userDefaults.string(forKey: appleDisplayNameKey)
+        serverUserId = userDefaults.string(forKey: serverUserIdKey)
+        apnsDeviceToken = userDefaults.string(forKey: apnsDeviceTokenKey)
     }
 
     private static func loadSettings(userDefaults: UserDefaults) -> AppSettings {
@@ -446,11 +536,49 @@ final class AppSettingsStore: ObservableObject {
         let normalized = userId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard normalized.isEmpty == false else { return [] }
 
+        if normalized.allSatisfy(\.isNumber) {
+            return Array(Set([normalized] + BackendUserIDMapper.candidateRawUserIds(forBackendUserId: Int(normalized) ?? -1)))
+        }
+
         if let backendUserId = BackendUserIDMapper.backendUserId(for: normalized).flatMap(Int.init) {
             return Array(Set([normalized] + BackendUserIDMapper.candidateRawUserIds(forBackendUserId: backendUserId)))
         }
 
         return [normalized]
+    }
+
+    private func migrateLegacyStoredServerUserIdIfNeeded() {
+        if let storedServerUserId = serverUserId?.trimmingCharacters(in: .whitespacesAndNewlines),
+           storedServerUserId.isEmpty == false {
+            if settings.mateUserId != storedServerUserId {
+                var updated = settings
+                updated.mateUserId = storedServerUserId
+                settings = updated
+            }
+            return
+        }
+
+        let legacyUserId = settings.mateUserId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard legacyUserId.isEmpty == false, legacyUserId.allSatisfy(\.isNumber) else { return }
+
+        serverUserId = legacyUserId
+        userDefaults.set(legacyUserId, forKey: serverUserIdKey)
+
+        var updated = settings
+        updated.mateUserId = legacyUserId
+        settings = updated
+        save(settings: updated)
+    }
+
+    private func resolvedServerUserId(for rawValue: String?) -> String? {
+        guard let trimmed = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+              trimmed.isEmpty == false else {
+            return nil
+        }
+        if trimmed.allSatisfy(\.isNumber) {
+            return trimmed
+        }
+        return BackendUserIDMapper.backendUserId(for: trimmed)
     }
 
     private func firstStoredString(for userIds: [String], field: String) -> String? {

@@ -2,6 +2,7 @@ import Foundation
 
 enum APIError: LocalizedError {
     case invalidURL
+    case encodingFailed(Error)
     case requestFailed(Error)
     case invalidResponse
     case server(statusCode: Int, message: String?)
@@ -11,6 +12,8 @@ enum APIError: LocalizedError {
         switch self {
         case .invalidURL:
             return "API 주소가 올바르지 않아요."
+        case .encodingFailed:
+            return "요청 데이터를 만들지 못했어요."
         case .requestFailed:
             return "서버와 통신하지 못했어요."
         case .invalidResponse:
@@ -47,20 +50,7 @@ final class APIClient: @unchecked Sendable {
     }
 
     func get<Response: Decodable>(_ endpoint: APIEndpoint, responseType: Response.Type) async throws -> Response {
-        let request = try makeRequest(for: endpoint, body: Optional<Data>.none)
-        let data = try await perform(request)
-        logResponseBodyIfNeeded(data, request: request)
-        do {
-            return try decoder.decode(Response.self, from: data)
-        } catch {
-            logDecodingFailure(
-                error,
-                data: data,
-                modelName: String(describing: Response.self),
-                request: request
-            )
-            throw APIError.decodingFailed(error)
-        }
+        try await send(endpoint, responseType: responseType)
     }
 
     func post<Request: Encodable, Response: Decodable>(
@@ -68,28 +58,13 @@ final class APIClient: @unchecked Sendable {
         body: Request,
         responseType: Response.Type
     ) async throws -> Response {
-        let requestData = try encoder.encode(body)
-        let request = try makeRequest(for: endpoint, body: requestData)
-        let data = try await perform(request)
-        logResponseBodyIfNeeded(data, request: request)
-
-        do {
-            return try decoder.decode(Response.self, from: data)
-        } catch {
-            logDecodingFailure(
-                error,
-                data: data,
-                modelName: String(describing: Response.self),
-                request: request
-            )
-            throw APIError.decodingFailed(error)
-        }
+        let endpoint = try endpointWithJSONBody(endpoint, body: body)
+        return try await send(endpoint, responseType: responseType)
     }
 
     func post<Request: Encodable>(_ endpoint: APIEndpoint, body: Request) async throws {
-        let requestData = try encoder.encode(body)
-        let request = try makeRequest(for: endpoint, body: requestData)
-        _ = try await perform(request)
+        let endpoint = try endpointWithJSONBody(endpoint, body: body)
+        _ = try await sendWithoutResponseBody(endpoint)
     }
 
     func postMultipart<Response: Decodable>(
@@ -101,28 +76,17 @@ final class APIClient: @unchecked Sendable {
         responseType: Response.Type
     ) async throws -> Response {
         let boundary = "Boundary-\(UUID().uuidString)"
-        let body = makeMultipartBody(
+        let multipartBody = makeMultipartBody(
             boundary: boundary,
             fileData: fileData,
             fieldName: fieldName,
             fileName: fileName,
             mimeType: mimeType
         )
-        let request = try makeMultipartRequest(for: endpoint, body: body, boundary: boundary)
-        let data = try await perform(request)
-        logResponseBodyIfNeeded(data, request: request)
-
-        do {
-            return try decoder.decode(Response.self, from: data)
-        } catch {
-            logDecodingFailure(
-                error,
-                data: data,
-                modelName: String(describing: Response.self),
-                request: request
-            )
-            throw APIError.decodingFailed(error)
-        }
+        var endpoint = endpoint
+        endpoint.body = multipartBody
+        endpoint.headers["Content-Type"] = "multipart/form-data; boundary=\(boundary)"
+        return try await send(endpoint, responseType: responseType)
     }
 
     func patch<Request: Encodable, Response: Decodable>(
@@ -130,29 +94,46 @@ final class APIClient: @unchecked Sendable {
         body: Request,
         responseType: Response.Type
     ) async throws -> Response {
-        let requestData = try encoder.encode(body)
-        let request = try makeRequest(for: endpoint, body: requestData)
-        let data = try await perform(request)
-        logResponseBodyIfNeeded(data, request: request)
-
-        do {
-            return try decoder.decode(Response.self, from: data)
-        } catch {
-            logDecodingFailure(
-                error,
-                data: data,
-                modelName: String(describing: Response.self),
-                request: request
-            )
-            throw APIError.decodingFailed(error)
-        }
+        let endpoint = try endpointWithJSONBody(endpoint, body: body)
+        return try await send(endpoint, responseType: responseType)
     }
 
     func delete<Response: Decodable>(_ endpoint: APIEndpoint, responseType: Response.Type) async throws -> Response {
-        let request = try makeRequest(for: endpoint, body: Optional<Data>.none)
-        let data = try await perform(request)
-        logResponseBodyIfNeeded(data, request: request)
+        try await send(endpoint, responseType: responseType)
+    }
 
+    func delete(_ endpoint: APIEndpoint) async throws {
+        _ = try await sendWithoutResponseBody(endpoint)
+    }
+
+    private func endpointWithJSONBody<Request: Encodable>(_ endpoint: APIEndpoint, body: Request) throws -> APIEndpoint {
+        do {
+            var endpoint = endpoint
+            endpoint.body = try encoder.encode(body)
+            endpoint.headers["Content-Type"] = "application/json"
+            return endpoint
+        } catch {
+            throw APIError.encodingFailed(error)
+        }
+    }
+
+    private func send<Response: Decodable>(_ endpoint: APIEndpoint, responseType: Response.Type) async throws -> Response {
+        let request = try makeRequest(for: endpoint)
+        let (data, _) = try await perform(request)
+        return try decode(Response.self, from: data, request: request)
+    }
+
+    private func sendWithoutResponseBody(_ endpoint: APIEndpoint) async throws -> HTTPURLResponse {
+        let request = try makeRequest(for: endpoint)
+        let (_, response) = try await perform(request)
+        return response
+    }
+
+    private func decode<Response: Decodable>(
+        _ responseType: Response.Type,
+        from data: Data,
+        request: URLRequest
+    ) throws -> Response {
         do {
             return try decoder.decode(Response.self, from: data)
         } catch {
@@ -166,24 +147,7 @@ final class APIClient: @unchecked Sendable {
         }
     }
 
-    func delete(_ endpoint: APIEndpoint) async throws {
-        let request = try makeRequest(for: endpoint, body: Optional<Data>.none)
-        _ = try await perform(request)
-    }
-
-    private func makeRequest(for endpoint: APIEndpoint, body: Data?) throws -> URLRequest {
-        try makeRequest(for: endpoint, body: body, contentType: body == nil ? nil : "application/json")
-    }
-
-    private func makeMultipartRequest(for endpoint: APIEndpoint, body: Data, boundary: String) throws -> URLRequest {
-        try makeRequest(
-            for: endpoint,
-            body: body,
-            contentType: "multipart/form-data; boundary=\(boundary)"
-        )
-    }
-
-    private func makeRequest(for endpoint: APIEndpoint, body: Data?, contentType: String?) throws -> URLRequest {
+    private func makeRequest(for endpoint: APIEndpoint) throws -> URLRequest {
         guard var components = URLComponents(
             url: baseURL.appendingPathComponent(endpoint.path),
             resolvingAgainstBaseURL: false
@@ -202,12 +166,10 @@ final class APIClient: @unchecked Sendable {
         var request = URLRequest(url: url)
         request.httpMethod = endpoint.method.rawValue
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let body {
-            request.httpBody = body
-            if let contentType {
-                request.setValue(contentType, forHTTPHeaderField: "Content-Type")
-            }
+        endpoint.headers.forEach { key, value in
+            request.setValue(value, forHTTPHeaderField: key)
         }
+        request.httpBody = endpoint.body
         return request
     }
 
@@ -235,7 +197,7 @@ final class APIClient: @unchecked Sendable {
         return body
     }
 
-    private func perform(_ request: URLRequest) async throws -> Data {
+    private func perform(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         let data: Data
         let response: URLResponse
 
@@ -249,12 +211,14 @@ final class APIClient: @unchecked Sendable {
             throw APIError.invalidResponse
         }
 
+        logNetworkIfNeeded(request: request, response: httpResponse, data: data)
+
         guard (200..<300).contains(httpResponse.statusCode) else {
             let serverMessage = decodeServerMessage(from: data)
             throw APIError.server(statusCode: httpResponse.statusCode, message: serverMessage)
         }
 
-        return data
+        return (data, httpResponse)
     }
 
     private func decodeServerMessage(from data: Data) -> String? {
@@ -265,18 +229,27 @@ final class APIClient: @unchecked Sendable {
         return String(data: data, encoding: .utf8)
     }
 
-    private func logResponseBodyIfNeeded(_ data: Data, request: URLRequest) {
+    private func logNetworkIfNeeded(request: URLRequest, response: HTTPURLResponse, data: Data) {
+        #if DEBUG
         guard let url = request.url else { return }
-        let path = url.path
-        let shouldLogRawBody =
-            path == "/api/daily-words/today" ||
-            path == "/api/tsuntsun/today" ||
-            path == "/api/buddies" ||
-            path.hasPrefix("/api/users/")
-        guard shouldLogRawBody else { return }
 
-        let bodyText = String(data: data, encoding: .utf8) ?? "<non-utf8 body>"
-        print("[APIClient] Raw response path=\(path) body=\(bodyText)")
+        let requestSnippet = request.httpBody.flatMap(bodySnippet(from:)) ?? "-"
+        let responseSnippet = bodySnippet(from: data)
+
+        print(
+            "[APIClient] \(request.httpMethod ?? "GET") \(url.path) " +
+            "status=\(response.statusCode) request=\(requestSnippet) response=\(responseSnippet)"
+        )
+        #endif
+    }
+
+    private func bodySnippet(from data: Data) -> String {
+        guard data.isEmpty == false else { return "-" }
+        let text = String(data: data.prefix(240), encoding: .utf8) ?? "<non-utf8 body>"
+        if data.count > 240 {
+            return "\(text)..."
+        }
+        return text
     }
 
     private func logDecodingFailure(

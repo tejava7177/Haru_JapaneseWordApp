@@ -5,6 +5,20 @@ import Combine
 import UIKit
 import UniformTypeIdentifiers
 
+private enum AppleAuthFlowError: LocalizedError {
+    case missingIdentityToken
+    case missingServerUserId
+
+    var errorDescription: String? {
+        switch self {
+        case .missingIdentityToken:
+            return "Apple 로그인 토큰을 확인하지 못했어요. 다시 시도해 주세요."
+        case .missingServerUserId:
+            return "서버 계정을 확인하지 못했어요. 잠시 후 다시 시도해주세요."
+        }
+    }
+}
+
 @MainActor
 final class ProfileViewModel: ObservableObject {
     @Published var profile: UserProfile
@@ -35,11 +49,13 @@ final class ProfileViewModel: ObservableObject {
     @Published var localResetErrorMessage: String?
     @Published var isRefreshingServerProfile: Bool = false
     @Published var profileSourceText: String = "source: local fallback"
+    @Published var profileRefreshErrorMessage: String?
     @Published var avatarLoadErrorMessage: String?
     @Published private(set) var localAvatarPreviewData: Data?
 
     private let profileStore: UserProfileStore
     private let settingsStore: AppSettingsStore
+    private let authAPIService: AuthAPIServiceProtocol
     private let profileAPIService: ProfileAPIServiceProtocol
     private var cancellables: Set<AnyCancellable> = []
     private var hasLoadedProfile: Bool = false
@@ -48,10 +64,12 @@ final class ProfileViewModel: ObservableObject {
     init(
         settingsStore: AppSettingsStore,
         profileStore: UserProfileStore = UserProfileStore(),
+        authAPIService: AuthAPIServiceProtocol = AuthAPIService(),
         profileAPIService: ProfileAPIServiceProtocol = ProfileAPIService()
     ) {
         self.profileStore = profileStore
         self.settingsStore = settingsStore
+        self.authAPIService = authAPIService
         self.profileAPIService = profileAPIService
 
         let legacyProfile = profileStore.load()
@@ -101,19 +119,19 @@ final class ProfileViewModel: ObservableObject {
     }
 
     func updateNickname(_ nickname: String) {
-        guard settingsStore.isMateLoggedIn == false else { return }
+        guard settingsStore.hasResolvedServerSession == false else { return }
         profile.nickname = nickname
         profileStore.updateNickname(nickname)
     }
 
     func updateBio(_ bio: String) {
-        guard settingsStore.isMateLoggedIn == false else { return }
+        guard settingsStore.hasResolvedServerSession == false else { return }
         profile.bio = bio
         profileStore.updateBio(bio)
     }
 
     func updateInstagram(_ instagramId: String) {
-        guard settingsStore.isMateLoggedIn == false else { return }
+        guard settingsStore.hasResolvedServerSession == false else { return }
         profile.instagramId = instagramId
         profileStore.updateInstagram(instagramId)
     }
@@ -150,11 +168,14 @@ final class ProfileViewModel: ObservableObject {
     }
 
     var isMateLoggedIn: Bool { settingsStore.isMateLoggedIn }
+    var hasAuthenticatedSession: Bool { settingsStore.hasAuthenticatedSession }
+    var hasResolvedServerSession: Bool { settingsStore.hasResolvedServerSession }
+    var currentServerUserId: String? { settingsStore.serverUserId }
     var currentMateUserId: String { settingsStore.mateUserId }
     var currentProfile: UserProfile { profile }
 
-    var mateUserIdPrefix: String {
-        let value = currentMateUserId
+    var serverUserIdPrefix: String {
+        let value = currentServerUserId ?? ""
         guard value.isEmpty == false else { return "" }
         let prefixLength = min(8, value.count)
         return String(value.prefix(prefixLength))
@@ -176,16 +197,49 @@ final class ProfileViewModel: ObservableObject {
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 let resolvedDisplayName = displayName.isEmpty ? nil : displayName
 
+                print("[AppleAuth] start backend authentication")
+                print("[AppleAuth] identityToken exists=\(result.identityToken != nil)")
+                let identityToken = try identityTokenString(from: result.identityToken)
+                print("[AppleAuth] request appleUserId=\(result.userId)")
+
+                let response = try await authAPIService.authenticateWithApple(
+                    AppleAuthRequest(
+                        identityToken: identityToken,
+                        appleUserId: result.userId,
+                        email: result.email,
+                        displayName: resolvedDisplayName
+                    )
+                )
+
+                guard let userId = response.userId else {
+                    throw AppleAuthFlowError.missingServerUserId
+                }
+
+                print("[AppleAuth] success userId=\(userId) isNewUser=\(response.isNewUser ?? false)")
+
+                let resolvedLearningLevel = response.learningLevel
+                let resolvedEmail = response.email ?? result.email
+                let resolvedServerDisplayName = response.displayName ?? resolvedDisplayName
+                let resolvedNickname = response.nickname ?? resolvedServerDisplayName
+
                 settingsStore.signIn(
                     appleUserId: result.userId,
-                    email: result.email,
-                    displayName: resolvedDisplayName
+                    email: resolvedEmail,
+                    displayName: resolvedServerDisplayName,
+                    serverUserId: String(userId),
+                    nickname: resolvedNickname,
+                    learningLevel: resolvedLearningLevel
                 )
+
+                print("[AppleAuth] persisted serverUserId=\(userId)")
+                refreshCurrentUserProfileFromServer(triggerSource: "appleAuth", force: true)
                 appleSignInNotice = "Apple 로그인에 성공했어요."
-                print("[AppleSignIn] UI updated loggedIn=\(settingsStore.isSignedIn)")
+                print("[AppleAuth] UI updated signedIn=\(settingsStore.isSignedIn) serverUserId=\(settingsStore.serverUserId ?? "nil")")
             } catch {
-                appleSignInErrorMessage = "Apple 로그인에 실패했어요. 다시 시도해 주세요.\n\(error.localizedDescription)"
-                print("[AppleSignIn] UI updated loggedIn=\(settingsStore.isSignedIn)")
+                settingsStore.signOut()
+                appleSignInErrorMessage = errorMessage(for: error)
+                print("[AppleAuth] failed error=\(error.localizedDescription)")
+                print("[AppleAuth] UI updated signedIn=\(settingsStore.isSignedIn) serverUserId=\(settingsStore.serverUserId ?? "nil")")
             }
         }
     }
@@ -199,6 +253,10 @@ final class ProfileViewModel: ObservableObject {
     }
 
     func signOutForMate() {
+        let currentServerUserId = settingsStore.serverUserId
+        Task {
+            await PushRegistrationManager.shared.unregisterDeviceTokenIfNeeded(userId: currentServerUserId)
+        }
         settingsStore.signOut()
         print("[AppleSignIn] UI updated loggedIn=\(settingsStore.isSignedIn)")
     }
@@ -230,10 +288,12 @@ final class ProfileViewModel: ObservableObject {
                 settingsStore.setLearningNotificationEnabled(true)
                 isLearningNotificationEnabled = true
                 await NotificationManager.shared.scheduleDailyLearningReminder()
+                await PushRegistrationManager.shared.syncRegistrationState()
                 learningNotificationNotice = "매일 오후 8시에 학습 알림을 보내드릴게요."
                 return
             }
 
+            await PushRegistrationManager.shared.unregisterDeviceTokenIfNeeded(userId: settingsStore.serverUserId)
             settingsStore.setLearningNotificationEnabled(false)
             isLearningNotificationEnabled = false
             await NotificationManager.shared.cancelDailyLearningReminder()
@@ -399,6 +459,7 @@ final class ProfileViewModel: ObservableObject {
     private func syncProfileFromCurrentUser() {
         if let mateProfile = settingsStore.currentMateProfile() {
             profileSourceText = "source: local fallback"
+            profileRefreshErrorMessage = nil
             profile.nickname = mateProfile.displayName
             profile.bio = mateProfile.bio
             profile.instagramId = mateProfile.instagramId
@@ -410,6 +471,7 @@ final class ProfileViewModel: ObservableObject {
             let legacyProfile = profileStore.load()
             print("[Profile] fallback to legacy local profile store")
             profileSourceText = "source: local fallback"
+            profileRefreshErrorMessage = nil
             profile.nickname = legacyProfile.nickname
             profile.bio = legacyProfile.bio
             profile.instagramId = legacyProfile.instagramId
@@ -486,6 +548,7 @@ final class ProfileViewModel: ObservableObject {
             print("[Profile] store update skipped no changes")
         }
         profileSourceText = "source: server"
+        profileRefreshErrorMessage = nil
         syncProfileFromCurrentUser()
         localAvatarPreviewData = nil
         profileSourceText = "source: server"
@@ -604,6 +667,7 @@ final class ProfileViewModel: ObservableObject {
         guard mateUserId.isEmpty == false else {
             print("[Profile] currentBackendUserId=nil reason=mateUserId empty")
             profileSourceText = "source: local fallback"
+            profileRefreshErrorMessage = nil
             hasLoadedProfile = false
             lastLoadedBackendUserId = nil
             return
@@ -612,6 +676,7 @@ final class ProfileViewModel: ObservableObject {
         guard let backendUserId = settingsStore.currentBackendUserId else {
             print("[Profile] currentBackendUserId=nil reason=unmapped mateUserId=\(mateUserId)")
             profileSourceText = "source: local fallback"
+            profileRefreshErrorMessage = "서버 사용자 ID를 찾지 못해 로컬 프로필을 표시하고 있어요."
             hasLoadedProfile = false
             lastLoadedBackendUserId = nil
             return
@@ -643,6 +708,7 @@ final class ProfileViewModel: ObservableObject {
         } catch {
             hasLoadedProfile = false
             profileSourceText = "source: local fallback"
+            profileRefreshErrorMessage = "프로필 서버 동기화에 실패해 로컬 데이터를 표시하고 있어요."
             print("[Profile] fetch failed error=\(error.localizedDescription)")
         }
     }
@@ -691,5 +757,30 @@ final class ProfileViewModel: ObservableObject {
             settingsStore.updateHomeDeckLevel(level)
         }
         selectedLearningLevel = level
+    }
+
+    private func identityTokenString(from data: Data?) throws -> String {
+        guard let data,
+              let token = String(data: data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+              token.isEmpty == false else {
+            throw AppleAuthFlowError.missingIdentityToken
+        }
+        return token
+    }
+
+    private func errorMessage(for error: Error) -> String {
+        if let apiError = error as? APIError {
+            switch apiError {
+            case .server(_, let message):
+                return message ?? "서버 계정을 확인하지 못했어요. 잠시 후 다시 시도해주세요."
+            case .requestFailed, .invalidResponse:
+                return "서버 계정을 확인하지 못했어요. 잠시 후 다시 시도해주세요."
+            case .decodingFailed, .encodingFailed, .invalidURL:
+                return "로그인 응답을 처리하지 못했어요. 잠시 후 다시 시도해주세요."
+            }
+        }
+
+        return error.localizedDescription
     }
 }

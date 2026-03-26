@@ -1,5 +1,7 @@
 import Foundation
 
+// Legacy helper retained only for dev slots and old local-profile lookup.
+// Runtime Apple auth/session resolution must not depend on this mapper.
 enum BackendUserIDMapper {
     private static let mappings: [String: String] = [
         "juheun": "1",

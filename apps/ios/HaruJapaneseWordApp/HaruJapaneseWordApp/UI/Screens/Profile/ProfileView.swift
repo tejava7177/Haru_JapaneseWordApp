@@ -20,7 +20,7 @@ struct ProfileView: View {
     var body: some View {
         NavigationStack {
             Form {
-                if viewModel.isMateLoggedIn {
+                if viewModel.hasAuthenticatedSession {
                     loggedInContent
                 } else {
                     guestContent
@@ -193,10 +193,10 @@ struct ProfileView: View {
             )
 
             TextField("닉네임", text: nicknameBinding)
-                .disabled(viewModel.isMateLoggedIn)
+                .disabled(viewModel.hasResolvedServerSession)
 
             TextField("한 줄 소개", text: bioBinding)
-                .disabled(viewModel.isMateLoggedIn)
+                .disabled(viewModel.hasResolvedServerSession)
 
             HStack {
                 Text("@")
@@ -204,11 +204,26 @@ struct ProfileView: View {
                 TextField("인스타 아이디", text: instagramBinding)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                    .disabled(viewModel.isMateLoggedIn)
+                    .disabled(viewModel.hasResolvedServerSession)
             }
 
-            if viewModel.isMateLoggedIn {
+            if viewModel.hasResolvedServerSession {
                 Text("닉네임, 소개, 인스타는 현재 서버 값을 읽기 전용으로 표시해요.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            if viewModel.isRefreshingServerProfile {
+                ProgressView("프로필 동기화 중...")
+                    .font(.footnote)
+            }
+
+            Text(viewModel.profileSourceText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if let profileRefreshErrorMessage = viewModel.profileRefreshErrorMessage {
+                Text(profileRefreshErrorMessage)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -244,18 +259,18 @@ struct ProfileView: View {
             HStack {
                 Text("로그인 상태")
                 Spacer()
-                if viewModel.mateUserIdPrefix.isEmpty == false {
-                    Text(viewModel.mateUserIdPrefix)
+                if viewModel.serverUserIdPrefix.isEmpty == false {
+                    Text("server \(viewModel.serverUserIdPrefix)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("연결됨")
+                    Text("Apple 로그인됨")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
 
-            if viewModel.isMateLoggedIn {
+            if viewModel.hasResolvedServerSession {
                 Toggle(isOn: Binding(
                     get: { viewModel.isRandomMatchingEnabled },
                     set: { viewModel.updateRandomMatchingEnabled($0) }
@@ -272,6 +287,16 @@ struct ProfileView: View {
                 if viewModel.isUpdatingRandomMatching {
                     ProgressView("설정 저장 중...")
                         .font(.footnote)
+                }
+            }
+
+            if let serverUserId = viewModel.currentServerUserId {
+                HStack {
+                    Text("서버 사용자 ID")
+                    Spacer()
+                    Text(serverUserId)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -308,7 +333,7 @@ struct ProfileView: View {
                     .padding(.trailing, viewModel.selectedLearningLevel == .n1 ? edgePadding + edgeCompensation : edgePadding)
                     .padding(.vertical, 4)
                 }
-                .disabled(viewModel.isMateLoggedIn == false || viewModel.isUpdatingLearningLevel)
+                .disabled(viewModel.hasResolvedServerSession == false || viewModel.isUpdatingLearningLevel)
 
                 if viewModel.isUpdatingLearningLevel {
                     ProgressView("학습 레벨 저장 중...")

@@ -38,6 +38,12 @@ struct HomeView: View {
                             }
                         }
 
+                        if let errorMessage = viewModel.errorMessage {
+                            Text(errorMessage)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+
                         if viewModel.cards.isEmpty == false {
                             TabView(selection: $viewModel.selectedIndex) {
                                 ForEach(Array(viewModel.cards.enumerated()), id: \.element.id) { index, word in
@@ -56,6 +62,9 @@ struct HomeView: View {
                             }
                         } else if viewModel.hasError {
                             emptyStateView()
+                        } else if viewModel.isLoading {
+                            ProgressView("오늘의 추천을 불러오는 중...")
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         } else {
                             Text("오늘의 추천을 준비 중입니다.")
                                 .font(.body)
