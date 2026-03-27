@@ -15,6 +15,7 @@ struct WordListView: View {
     @State private var selectedTab: WordTab = .jlpt
     @State private var selectedWord: WordListItem?
     @State private var selectedNotebook: WordNotebook?
+    @AppStorage("words.showMeaning") private var showMeaning: Bool = true
 
     init(repository: DictionaryRepository, viewModel: WordListViewModel) {
         self.repository = repository
@@ -60,6 +61,8 @@ struct WordListView: View {
         }
         .sheet(isPresented: $isRangeSheetPresented) {
             LevelFilterSheetContent(
+                showMeaning: showMeaning,
+                onSetShowMeaning: { showMeaning = $0 },
                 showJLPTWords: viewModel.showJLPTWords,
                 onSetShowJLPTWords: { viewModel.setShowJLPTWords($0) },
                 showNotebookWords: viewModel.showNotebookWords,
@@ -112,7 +115,11 @@ private extension WordListView {
                         Button {
                             selectedWord = word
                         } label: {
-                            WordRow(word: word, isReviewWord: viewModel.isReviewWord(word))
+                            WordRow(
+                                word: word,
+                                isReviewWord: viewModel.isReviewWord(word),
+                                showMeaning: showMeaning
+                            )
                         }
                         .buttonStyle(.plain)
                         .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
@@ -468,6 +475,8 @@ private struct ShuffleHUD: View {
 }
 
 private struct LevelFilterSheetContent: View {
+    let showMeaning: Bool
+    let onSetShowMeaning: (Bool) -> Void
     let showJLPTWords: Bool
     let onSetShowJLPTWords: (Bool) -> Void
     let showNotebookWords: Bool
@@ -487,6 +496,13 @@ private struct LevelFilterSheetContent: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    Toggle("뜻 보기", isOn: Binding(
+                        get: { showMeaning },
+                        set: { onSetShowMeaning($0) }
+                    ))
+                }
+
                 Section("데이터 소스") {
                     Toggle("JLPT 단어", isOn: Binding(
                         get: { showJLPTWords },
@@ -591,6 +607,7 @@ private struct LevelFilterSheetPreview: View {
     @State private var selectedLevels: Set<JLPTLevel>
     @State private var reviewOnly: Bool
     @State private var shuffleLocked: Bool
+    @State private var showMeaning: Bool
     @State private var showJLPTWords: Bool
     @State private var showNotebookWords: Bool
     @State private var selectedNotebookIds: Set<UUID>
@@ -601,6 +618,7 @@ private struct LevelFilterSheetPreview: View {
         _selectedLevels = State(initialValue: initialLevels)
         _reviewOnly = State(initialValue: false)
         _shuffleLocked = State(initialValue: false)
+        _showMeaning = State(initialValue: true)
         _showJLPTWords = State(initialValue: true)
         _showNotebookWords = State(initialValue: true)
         let previewNotebooks = [
@@ -622,6 +640,8 @@ private struct LevelFilterSheetPreview: View {
 
     var body: some View {
         LevelFilterSheetContent(
+            showMeaning: showMeaning,
+            onSetShowMeaning: { showMeaning = $0 },
             showJLPTWords: showJLPTWords,
             onSetShowJLPTWords: { showJLPTWords = $0 },
             showNotebookWords: showNotebookWords,

@@ -148,6 +148,7 @@ struct WordDetailView: View {
     }
 }
 
+#if DEBUG
 #Preview {
     let sampleDetail = WordDetail(
         id: 1,
@@ -162,6 +163,7 @@ struct WordDetailView: View {
     )
     WordDetailView(wordId: 1, repository: PreviewDictionaryRepository(detail: sampleDetail))
 }
+#endif
 
 private struct WordHeaderCard: View {
     let expression: String

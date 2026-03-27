@@ -3,10 +3,11 @@ import SwiftUI
 struct WordRow: View {
     let word: WordListItem
     let isReviewWord: Bool
+    let showMeaning: Bool
 
     var body: some View {
         let meaningsText = word.meaning.isEmpty ? "—" : word.meaning
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: showMeaning ? 6 : 0) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(word.word)
                     .font(.headline)
@@ -35,9 +36,11 @@ struct WordRow: View {
                 }
             }
 
-            Text(meaningsText)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            if showMeaning {
+                Text(meaningsText)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
         }
         .contentShape(Rectangle())
         .padding(.horizontal, 16)
@@ -57,7 +60,8 @@ struct WordRow: View {
         word: WordListItem(
             wordSummary: WordSummary(id: 1, level: .n5, expression: "例", reading: "れい", meanings: "예 / 예시")
         ),
-        isReviewWord: true
+        isReviewWord: true,
+        showMeaning: true
     )
         .padding()
 }
