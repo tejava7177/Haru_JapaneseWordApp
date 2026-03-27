@@ -7,6 +7,7 @@ struct WordRow: View {
 
     var body: some View {
         let meaningsText = word.meaning.isEmpty ? "—" : word.meaning
+        let verticalPadding: CGFloat = showMeaning ? 12 : 15
         VStack(alignment: .leading, spacing: showMeaning ? 6 : 0) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(word.word)
@@ -44,7 +45,7 @@ struct WordRow: View {
         }
         .contentShape(Rectangle())
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.vertical, verticalPadding)
         .background(Color.white.opacity(0.96))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(

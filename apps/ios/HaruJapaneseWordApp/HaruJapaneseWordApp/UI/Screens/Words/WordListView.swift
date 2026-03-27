@@ -496,13 +496,6 @@ private struct LevelFilterSheetContent: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    Toggle("뜻 보기", isOn: Binding(
-                        get: { showMeaning },
-                        set: { onSetShowMeaning($0) }
-                    ))
-                }
-
                 Section("데이터 소스") {
                     Toggle("JLPT 단어", isOn: Binding(
                         get: { showJLPTWords },
@@ -577,6 +570,13 @@ private struct LevelFilterSheetContent: View {
                             }
                         }
                     }
+                }
+
+                Section {
+                    Toggle("뜻 보기", isOn: Binding(
+                        get: { showMeaning },
+                        set: { onSetShowMeaning($0) }
+                    ))
                 }
 
                 Section {
