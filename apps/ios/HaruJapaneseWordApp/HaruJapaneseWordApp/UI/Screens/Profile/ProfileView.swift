@@ -56,6 +56,11 @@ struct ProfileView: View {
             showToast(message: message)
             viewModel.clearLearningNotificationNotice()
         }
+        .onChange(of: viewModel.petalNotificationNotice) { message in
+            guard let message else { return }
+            showToast(message: message)
+            viewModel.clearPetalNotificationNotice()
+        }
         .onChange(of: viewModel.appleSignInNotice) { message in
             guard let message else { return }
             showToast(message: message)
@@ -105,6 +110,15 @@ struct ProfileView: View {
             Button("확인", role: .cancel) { }
         } message: {
             Text(viewModel.learningNotificationErrorMessage ?? "학습 알림 설정을 변경하지 못했어요.")
+        }
+        .alert("꽃잎 알림 설정 실패", isPresented: Binding(get: {
+            viewModel.petalNotificationErrorMessage != nil
+        }, set: { _ in
+            viewModel.clearPetalNotificationError()
+        })) {
+            Button("확인", role: .cancel) { }
+        } message: {
+            Text(viewModel.petalNotificationErrorMessage ?? "꽃잎 알림 설정을 변경하지 못했어요.")
         }
         .alert("Apple 로그인 실패", isPresented: Binding(get: {
             viewModel.appleSignInErrorMessage != nil
@@ -344,48 +358,22 @@ struct ProfileView: View {
 
     private var accountSection: some View {
         Section("계정") {
-            HStack {
-                Text("로그인 상태")
-                Spacer()
-                if viewModel.serverUserIdPrefix.isEmpty == false {
-                    Text("server \(viewModel.serverUserIdPrefix)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text("Apple 로그인됨")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
             if viewModel.hasResolvedServerSession {
-                Toggle(isOn: Binding(
-                    get: { viewModel.isRandomMatchingEnabled },
-                    set: { viewModel.updateRandomMatchingEnabled($0) }
-                )) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("랜덤 매칭에 노출하기")
-                        Text("켜두면 비슷한 레벨의 사용자에게 랜덤 후보로 보여져요.")
+                VStack(alignment: .leading, spacing: 10) {
+                    Toggle(isOn: Binding(
+                        get: { viewModel.isRandomMatchingEnabled },
+                        set: { viewModel.updateRandomMatchingEnabled($0) }
+                    )) {
+                        Text("랜덤 매칭 노출하기")
+                    }
+                    .disabled(viewModel.isUpdatingRandomMatching)
+
+                    if viewModel.isUpdatingRandomMatching {
+                        ProgressView("설정 저장 중...")
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
                     }
                 }
-                .disabled(viewModel.isUpdatingRandomMatching)
-
-                if viewModel.isUpdatingRandomMatching {
-                    ProgressView("설정 저장 중...")
-                        .font(.footnote)
-                }
-            }
-
-            if let serverUserId = viewModel.currentServerUserId {
-                HStack {
-                    Text("서버 사용자 ID")
-                    Spacer()
-                    Text(serverUserId)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                .padding(.vertical, 4)
             }
 
             Button(role: .destructive) {
@@ -393,6 +381,7 @@ struct ProfileView: View {
             } label: {
                 Text("로그아웃")
             }
+            .padding(.vertical, viewModel.hasResolvedServerSession ? 2 : 4)
         }
     }
 
@@ -497,6 +486,31 @@ struct ProfileView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
+            }
+
+            Toggle(isOn: Binding(
+                get: { viewModel.isPetalNotificationEnabled },
+                set: { viewModel.updatePetalNotificationEnabled($0) }
+            )) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("꽃잎 알림 받기")
+                    Text("버디가 꽃잎을 보내면 알림으로 받아요")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .disabled(viewModel.isUpdatingPetalNotification)
+
+            if viewModel.isUpdatingPetalNotification {
+                ProgressView("꽃잎 알림 설정 중...")
+                    .font(.footnote)
+            }
+
+            if viewModel.isPetalNotificationEnabled,
+               viewModel.learningNotificationAuthorizationStatus == .denied {
+                Text("알림 권한이 꺼져 있어요. 설정 앱에서 알림을 허용해 주세요.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
         }
     }

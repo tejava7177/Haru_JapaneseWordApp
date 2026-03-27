@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct BuddyDetailView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var viewModel: BuddyDetailViewModel
 
     init(viewModel: BuddyDetailViewModel) {
@@ -52,10 +53,15 @@ struct BuddyDetailView: View {
         .navigationTitle(viewModel.buddyName)
         .navigationBarTitleDisplayMode(.inline)
         .background(Color(uiColor: .systemGroupedBackground))
-        .task {
-            if viewModel.items.isEmpty {
-                viewModel.load()
-            }
+        .onAppear {
+            viewModel.onViewAppear()
+            viewModel.onScenePhaseChanged(scenePhase)
+        }
+        .onDisappear {
+            viewModel.onViewDisappear()
+        }
+        .onChange(of: scenePhase) { newPhase in
+            viewModel.onScenePhaseChanged(newPhase)
         }
         .safeAreaInset(edge: .bottom) {
             bottomActionBar
@@ -209,7 +215,7 @@ struct BuddyDetailView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             Button("다시 시도") {
-                viewModel.load()
+                viewModel.refresh(force: true, reason: "retry")
             }
             .buttonStyle(.borderedProminent)
         }

@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 
 struct MateView: View {
+    @Environment(\.scenePhase) private var scenePhase
     private let refreshIconAnimationDuration: Double = 0.8
 
     @StateObject private var viewModel: MateViewModel
@@ -93,6 +94,10 @@ struct MateView: View {
         }
         .onDisappear {
             viewModel.onViewDisappear()
+        }
+        .onChange(of: scenePhase) { newPhase in
+            guard newPhase == .active else { return }
+            viewModel.onSceneDidBecomeActive()
         }
         .onChange(of: viewModel.matchCelebration) { celebration in
             guard celebration != nil else { return }

@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import SwiftUI
 
 @MainActor
 final class BuddyDetailViewModel: ObservableObject {
@@ -36,6 +37,15 @@ final class BuddyDetailViewModel: ObservableObject {
     private var selectedItemId: Int?
     private var dailyWordsResponse: DailyWordsTodayResponse?
     private var tsunTsunTodayResponse: TsunTsunTodayResponse?
+    private var hasLoadedAtLeastOnce: Bool = false
+    private var isViewVisible: Bool = false
+    private var isAppActive: Bool = false
+    private var lastRefreshAt: Date?
+    private let minimumRefreshInterval: TimeInterval = 5
+    private let pollingInterval: TimeInterval = 20
+    private var refreshTask: Task<Void, Never>?
+    private var pollingTask: Task<Void, Never>?
+    private var pendingForcedRefresh: Bool = false
 
     init(
         buddyId: String,
@@ -78,7 +88,45 @@ final class BuddyDetailViewModel: ObservableObject {
     }
 
     func load() {
-        guard isLoading == false else { return }
+        refresh(force: false, reason: "load")
+    }
+
+    func onViewAppear() {
+        isViewVisible = true
+        let shouldForceRefresh = hasLoadedAtLeastOnce
+        refresh(force: shouldForceRefresh, reason: "onAppear")
+        updatePollingIfNeeded()
+    }
+
+    func onViewDisappear() {
+        isViewVisible = false
+        updatePollingIfNeeded()
+    }
+
+    func onScenePhaseChanged(_ phase: ScenePhase) {
+        isAppActive = phase == .active
+        if phase == .active {
+            refresh(force: true, reason: "sceneActive")
+        }
+        updatePollingIfNeeded()
+    }
+
+    func refresh(force: Bool, reason: String) {
+        if force,
+           let lastRefreshAt,
+           Date().timeIntervalSince(lastRefreshAt) < minimumRefreshInterval {
+            print("[BuddyDetail] refresh throttled reason=\(reason)")
+            return
+        }
+
+        if refreshTask != nil {
+            if force {
+                pendingForcedRefresh = true
+            }
+            print("[BuddyDetail] refresh skipped in-flight reason=\(reason)")
+            return
+        }
+
         guard let myUserId = resolvedMyUserId else {
             items = []
             totalCount = 0
@@ -102,33 +150,43 @@ final class BuddyDetailViewModel: ObservableObject {
         print("[BuddyDetail] dailyWordsRequestUserId=\(dailyWordsUserId)")
         print("[BuddyDetail] tsuntsunTodayRequest userId=\(tsunTsunUserId) buddyId=\(tsunTsunBuddyId)")
 
-        Task {
+        refreshTask = Task { [weak self] in
+            guard let self else { return }
             do {
                 let dailyWords = try await service.fetchDailyWords(userId: dailyWordsUserId)
 
                 do {
-                    let tsunTsunToday = try await service.fetchTsunTsunToday(
+                    let tsunTsunToday = try await self.service.fetchTsunTsunToday(
                         userId: tsunTsunUserId,
                         buddyId: tsunTsunBuddyId
                     )
-                    apply(dailyWords: dailyWords, tsunTsunToday: tsunTsunToday)
+                    self.apply(dailyWords: dailyWords, tsunTsunToday: tsunTsunToday)
                 } catch {
-                    logTsunTsunFailure(error, userId: tsunTsunUserId, buddyId: tsunTsunBuddyId)
-                    applyFallback(dailyWords: dailyWords)
+                    self.logTsunTsunFailure(error, userId: tsunTsunUserId, buddyId: tsunTsunBuddyId)
+                    self.applyFallback(dailyWords: dailyWords)
                 }
-                isLoading = false
+                self.isLoading = false
             } catch {
-                items = []
-                totalCount = 0
-                sentCount = 0
-                progressCount = 0
-                progressGoal = 10
-                pairCompletedToday = false
-                receivedCount = 0
-                targetDateText = ""
-                nonFatalMessage = nil
-                errorMessage = error.localizedDescription
-                isLoading = false
+                self.items = []
+                self.totalCount = 0
+                self.sentCount = 0
+                self.progressCount = 0
+                self.progressGoal = 10
+                self.pairCompletedToday = false
+                self.receivedCount = 0
+                self.targetDateText = ""
+                self.nonFatalMessage = nil
+                self.errorMessage = error.localizedDescription
+                self.isLoading = false
+            }
+
+            self.hasLoadedAtLeastOnce = true
+            self.lastRefreshAt = Date()
+            self.refreshTask = nil
+
+            if self.pendingForcedRefresh {
+                self.pendingForcedRefresh = false
+                self.refresh(force: true, reason: "pendingForcedRefresh")
             }
         }
     }
@@ -171,7 +229,8 @@ final class BuddyDetailViewModel: ObservableObject {
                 )
                 selectedItemId = nil
                 sendSuccessMessage = "꽃잎을 날렸어요."
-                await refreshTsunTsunStatus()
+                NotificationCenter.default.post(name: .buddyPetalStatusDidChange, object: nil)
+                refresh(force: true, reason: "sendSuccess")
                 isSending = false
             } catch {
                 if let alert = userAlert(for: error) {
@@ -185,6 +244,7 @@ final class BuddyDetailViewModel: ObservableObject {
     }
 
     func refreshTsunTsunStatus() async {
+        guard refreshTask == nil else { return }
         guard let myUserId = resolvedMyUserId else {
             errorMessage = "현재 로그인 사용자 ID를 확인하지 못했어요."
             return
@@ -211,6 +271,29 @@ final class BuddyDetailViewModel: ObservableObject {
             tsunTsunTodayResponse = nil
             nonFatalMessage = "꽃잎 상태를 불러오지 못해 기본 상태로 표시했어요."
             rebuildItems()
+        }
+    }
+
+    private func updatePollingIfNeeded() {
+        let shouldPoll = isViewVisible && isAppActive
+
+        if shouldPoll == false {
+            pollingTask?.cancel()
+            pollingTask = nil
+            return
+        }
+
+        guard pollingTask == nil else { return }
+
+        pollingTask = Task { [weak self] in
+            guard let self else { return }
+            while Task.isCancelled == false {
+                try? await Task.sleep(nanoseconds: UInt64(self.pollingInterval * 1_000_000_000))
+                guard Task.isCancelled == false else { break }
+                await MainActor.run {
+                    self.refresh(force: true, reason: "polling")
+                }
+            }
         }
     }
 

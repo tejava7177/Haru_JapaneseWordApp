@@ -47,6 +47,10 @@ final class ProfileViewModel: ObservableObject {
     @Published var isUpdatingLearningNotification: Bool = false
     @Published var learningNotificationNotice: String?
     @Published var learningNotificationErrorMessage: String?
+    @Published var isPetalNotificationEnabled: Bool
+    @Published var isUpdatingPetalNotification: Bool = false
+    @Published var petalNotificationNotice: String?
+    @Published var petalNotificationErrorMessage: String?
     @Published private(set) var learningNotificationAuthorizationStatus: UNAuthorizationStatus = .notDetermined
     @Published var isSigningInWithApple: Bool = false
     @Published var appleSignInNotice: String?
@@ -92,6 +96,7 @@ final class ProfileViewModel: ObservableObject {
         self.isDarkModeEnabled = settingsStore.isDarkModeEnabled
         self.isLearningNotificationEnabled = settingsStore.settings.isLearningNotificationEnabled
         self.learningNotificationSettings = settingsStore.settings.learningNotificationSettings
+        self.isPetalNotificationEnabled = settingsStore.settings.isPetalNotificationEnabled
 
         settingsStore.$settings
             .receive(on: RunLoop.main)
@@ -100,6 +105,7 @@ final class ProfileViewModel: ObservableObject {
                 self?.settings = value
                 self?.isLearningNotificationEnabled = value.isLearningNotificationEnabled
                 self?.learningNotificationSettings = value.learningNotificationSettings
+                self?.isPetalNotificationEnabled = value.isPetalNotificationEnabled
                 self?.syncProfileFromCurrentUser(syncDrafts: shouldSyncDrafts)
                 self?.refreshCurrentUserProfileFromServer(triggerSource: "onChange")
             }
@@ -233,8 +239,6 @@ final class ProfileViewModel: ObservableObject {
     var isMateLoggedIn: Bool { settingsStore.isMateLoggedIn }
     var hasAuthenticatedSession: Bool { settingsStore.hasAuthenticatedSession }
     var hasResolvedServerSession: Bool { settingsStore.hasResolvedServerSession }
-    var currentServerUserId: String? { settingsStore.serverUserId }
-    var currentMateUserId: String { settingsStore.mateUserId }
     var currentProfile: UserProfile { profile }
     var avatarImageURLForDisplay: String? {
         cacheBustedImagePath(profile.profileImageUrl, token: avatarImageRefreshKey)
@@ -249,13 +253,6 @@ final class ProfileViewModel: ObservableObject {
             && isSavingProfile == false
             && nicknameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
             && hasProfileDraftChanges
-    }
-
-    var serverUserIdPrefix: String {
-        let value = currentServerUserId ?? ""
-        guard value.isEmpty == false else { return "" }
-        let prefixLength = min(8, value.count)
-        return String(value.prefix(prefixLength))
     }
 
     func signInWithApple() {
@@ -353,6 +350,12 @@ final class ProfileViewModel: ObservableObject {
         var updated = learningNotificationSettings
         updated.notificationTimeMinutes = LearningNotificationSettings.minutes(from: date)
         commitLearningNotificationSettings(updated)
+    }
+
+    func updatePetalNotificationEnabled(_ enabled: Bool) {
+        print("[Notification] petal toggle changed enabled=\(enabled)")
+        let updated = PetalNotificationSettings(isEnabled: enabled)
+        commitPetalNotificationSettings(updated)
     }
 
     func updateLearningNotificationRepeating(_ enabled: Bool) {
@@ -536,6 +539,14 @@ final class ProfileViewModel: ObservableObject {
         learningNotificationErrorMessage = nil
     }
 
+    func clearPetalNotificationNotice() {
+        petalNotificationNotice = nil
+    }
+
+    func clearPetalNotificationError() {
+        petalNotificationErrorMessage = nil
+    }
+
     func clearAppleSignInNotice() {
         appleSignInNotice = nil
     }
@@ -572,6 +583,7 @@ final class ProfileViewModel: ObservableObject {
         selectedLearningLevel = settingsStore.settings.homeDeckLevel
         isLearningNotificationEnabled = settingsStore.settings.isLearningNotificationEnabled
         learningNotificationSettings = settingsStore.settings.learningNotificationSettings
+        isPetalNotificationEnabled = settingsStore.settings.isPetalNotificationEnabled
         isRandomMatchingEnabled = false
         localResetNotice = "로컬 상태를 초기화했어요."
         localAvatarPreviewData = nil
@@ -634,7 +646,7 @@ final class ProfileViewModel: ObservableObject {
         learningNotificationNotice = nil
         isUpdatingLearningNotification = true
 
-        let previousSettings = learningNotificationSettings
+        let previousHadAnyPushNotification = settingsStore.settings.isAnyPushNotificationEnabled
 
         Task {
             defer { isUpdatingLearningNotification = false }
@@ -657,10 +669,10 @@ final class ProfileViewModel: ObservableObject {
                 settingsStore.updateLearningNotificationSettings(updatedSettings)
                 learningNotificationSettings = updatedSettings
                 isLearningNotificationEnabled = true
-
-                if previousSettings.isEnabled == false {
-                    await PushRegistrationManager.shared.syncRegistrationState()
-                }
+                await syncPushRegistrationStateIfNeeded(
+                    previousHadAnyPushNotification: previousHadAnyPushNotification,
+                    updatedHadAnyPushNotification: settingsStore.settings.isAnyPushNotificationEnabled
+                )
 
                 if showToggleNotice {
                     learningNotificationNotice = updatedSettings.isRepeating
@@ -674,14 +686,56 @@ final class ProfileViewModel: ObservableObject {
             settingsStore.updateLearningNotificationSettings(updatedSettings)
             learningNotificationSettings = updatedSettings
             isLearningNotificationEnabled = false
-
-            if previousSettings.isEnabled {
-                await PushRegistrationManager.shared.unregisterDeviceTokenIfNeeded(userId: settingsStore.serverUserId)
-            }
+            await syncPushRegistrationStateIfNeeded(
+                previousHadAnyPushNotification: previousHadAnyPushNotification,
+                updatedHadAnyPushNotification: settingsStore.settings.isAnyPushNotificationEnabled
+            )
 
             if showToggleNotice {
                 learningNotificationNotice = "학습 알림을 껐어요."
             }
+        }
+    }
+
+    private func commitPetalNotificationSettings(_ updatedSettings: PetalNotificationSettings) {
+        guard isUpdatingPetalNotification == false else { return }
+        guard updatedSettings != settings.petalNotificationSettings else { return }
+
+        petalNotificationErrorMessage = nil
+        petalNotificationNotice = nil
+        isUpdatingPetalNotification = true
+
+        let previousHadAnyPushNotification = settingsStore.settings.isAnyPushNotificationEnabled
+
+        Task {
+            defer { isUpdatingPetalNotification = false }
+
+            if updatedSettings.isEnabled {
+                let granted = await NotificationManager.shared.requestAuthorizationIfNeeded()
+                await refreshLearningNotificationAuthorizationStatus()
+
+                guard granted else {
+                    petalNotificationNotice = "알림 권한이 꺼져 있어요. 설정에서 알림을 허용해 주세요."
+                    return
+                }
+
+                settingsStore.updatePetalNotificationSettings(updatedSettings)
+                isPetalNotificationEnabled = true
+                await syncPushRegistrationStateIfNeeded(
+                    previousHadAnyPushNotification: previousHadAnyPushNotification,
+                    updatedHadAnyPushNotification: settingsStore.settings.isAnyPushNotificationEnabled
+                )
+                petalNotificationNotice = "꽃잎 알림을 켰어요."
+                return
+            }
+
+            settingsStore.updatePetalNotificationSettings(updatedSettings)
+            isPetalNotificationEnabled = false
+            await syncPushRegistrationStateIfNeeded(
+                previousHadAnyPushNotification: previousHadAnyPushNotification,
+                updatedHadAnyPushNotification: settingsStore.settings.isAnyPushNotificationEnabled
+            )
+            petalNotificationNotice = "꽃잎 알림을 껐어요."
         }
     }
 
@@ -707,6 +761,20 @@ final class ProfileViewModel: ObservableObject {
             await NotificationManager.shared.cancelLearningReminders()
         @unknown default:
             await NotificationManager.shared.cancelLearningReminders()
+        }
+    }
+
+    private func syncPushRegistrationStateIfNeeded(
+        previousHadAnyPushNotification: Bool,
+        updatedHadAnyPushNotification: Bool
+    ) async {
+        if updatedHadAnyPushNotification {
+            await PushRegistrationManager.shared.syncRegistrationState()
+            return
+        }
+
+        if previousHadAnyPushNotification {
+            await PushRegistrationManager.shared.unregisterDeviceTokenIfNeeded(userId: settingsStore.serverUserId)
         }
     }
 

@@ -34,6 +34,7 @@ final class AppSettingsStore: ObservableObject {
     private static let learningNotificationRepeatStartMinutesKey = "settings_learning_notification_repeat_start_minutes"
     private static let learningNotificationRepeatEndMinutesKey = "settings_learning_notification_repeat_end_minutes"
     private static let learningNotificationRepeatIntervalMinutesKey = "settings_learning_notification_repeat_interval_minutes"
+    private static let petalNotificationEnabledKey = "settings_petal_notification_enabled"
 
     private let legacyProfileLevelsByUserIdKey = "settings_profile_levels_by_user_id"
     private let mateProfilePrefix = "mate_profile"
@@ -97,6 +98,7 @@ final class AppSettingsStore: ObservableObject {
         userDefaults.set(settings.learningNotificationSettings.repeatStartMinutes, forKey: Self.learningNotificationRepeatStartMinutesKey)
         userDefaults.set(settings.learningNotificationSettings.repeatEndMinutes, forKey: Self.learningNotificationRepeatEndMinutesKey)
         userDefaults.set(settings.learningNotificationSettings.repeatInterval.rawValue, forKey: Self.learningNotificationRepeatIntervalMinutesKey)
+        userDefaults.set(settings.isPetalNotificationEnabled, forKey: Self.petalNotificationEnabledKey)
     }
 
     func markOnboardingSeen() {
@@ -145,7 +147,10 @@ final class AppSettingsStore: ObservableObject {
         let updated = AppSettings(
             homeDeckLevel: resolvedLevel,
             mateUserId: trimmedServerUserId,
-            isLearningNotificationEnabled: settings.isLearningNotificationEnabled
+            isLearningNotificationEnabled: settings.isLearningNotificationEnabled,
+            learningNotificationSettings: settings.learningNotificationSettings,
+            isPetalNotificationEnabled: settings.isPetalNotificationEnabled,
+            petalNotificationSettings: settings.petalNotificationSettings
         )
         settings = updated
         save(settings: updated)
@@ -177,7 +182,10 @@ final class AppSettingsStore: ObservableObject {
         let updated = AppSettings(
             homeDeckLevel: resolvedLevel,
             mateUserId: resolvedServerUserId,
-            isLearningNotificationEnabled: settings.isLearningNotificationEnabled
+            isLearningNotificationEnabled: settings.isLearningNotificationEnabled,
+            learningNotificationSettings: settings.learningNotificationSettings,
+            isPetalNotificationEnabled: settings.isPetalNotificationEnabled,
+            petalNotificationSettings: settings.petalNotificationSettings
         )
         guard updated != settings else { return }
         settings = updated
@@ -217,6 +225,14 @@ final class AppSettingsStore: ObservableObject {
         guard settings.learningNotificationSettings != learningNotificationSettings else { return }
         var updated = settings
         updated.learningNotificationSettings = learningNotificationSettings
+        settings = updated
+        save(settings: updated)
+    }
+
+    func updatePetalNotificationSettings(_ petalNotificationSettings: PetalNotificationSettings) {
+        guard settings.petalNotificationSettings != petalNotificationSettings else { return }
+        var updated = settings
+        updated.petalNotificationSettings = petalNotificationSettings
         settings = updated
         save(settings: updated)
     }
@@ -425,7 +441,10 @@ final class AppSettingsStore: ObservableObject {
             let updated = AppSettings(
                 homeDeckLevel: jlptLevel,
                 mateUserId: settings.mateUserId,
-                isLearningNotificationEnabled: settings.isLearningNotificationEnabled
+                isLearningNotificationEnabled: settings.isLearningNotificationEnabled,
+                learningNotificationSettings: settings.learningNotificationSettings,
+                isPetalNotificationEnabled: settings.isPetalNotificationEnabled,
+                petalNotificationSettings: settings.petalNotificationSettings
             )
             if updated != settings {
                 settings = updated
@@ -476,6 +495,7 @@ final class AppSettingsStore: ObservableObject {
         let repeatIntervalMinutes = userDefaults.object(forKey: Self.learningNotificationRepeatIntervalMinutesKey) as? Int
             ?? LearningNotificationSettings.RepeatInterval.oneHour.rawValue
         let repeatInterval = LearningNotificationSettings.RepeatInterval(rawValue: repeatIntervalMinutes) ?? .oneHour
+        let isPetalNotificationEnabled = userDefaults.bool(forKey: Self.petalNotificationEnabledKey)
         let learningNotificationSettings = LearningNotificationSettings(
             isEnabled: isLearningNotificationEnabled,
             notificationTimeMinutes: notificationTimeMinutes,
@@ -487,7 +507,8 @@ final class AppSettingsStore: ObservableObject {
         return AppSettings(
             homeDeckLevel: level,
             mateUserId: mateUserId,
-            learningNotificationSettings: learningNotificationSettings
+            learningNotificationSettings: learningNotificationSettings,
+            petalNotificationSettings: PetalNotificationSettings(isEnabled: isPetalNotificationEnabled)
         )
     }
 
@@ -514,7 +535,10 @@ final class AppSettingsStore: ObservableObject {
             let updated = AppSettings(
                 homeDeckLevel: level,
                 mateUserId: settings.mateUserId,
-                isLearningNotificationEnabled: settings.isLearningNotificationEnabled
+                isLearningNotificationEnabled: settings.isLearningNotificationEnabled,
+                learningNotificationSettings: settings.learningNotificationSettings,
+                isPetalNotificationEnabled: settings.isPetalNotificationEnabled,
+                petalNotificationSettings: settings.petalNotificationSettings
             )
             if updated != settings {
                 settings = updated

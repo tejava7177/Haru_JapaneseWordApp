@@ -27,7 +27,7 @@ final class PushRegistrationManager {
     func syncRegistrationState() async {
         let settingsStore = activeSettingsStore()
 
-        guard settingsStore.settings.isLearningNotificationEnabled else {
+        guard settingsStore.settings.isAnyPushNotificationEnabled else {
             return
         }
 
@@ -71,7 +71,7 @@ final class PushRegistrationManager {
     @MainActor
     func registerDeviceTokenToServerIfPossible() async {
         let settingsStore = activeSettingsStore()
-        guard settingsStore.settings.isLearningNotificationEnabled else { return }
+        guard settingsStore.settings.isAnyPushNotificationEnabled else { return }
         guard isRegisteringTokenToServer == false else { return }
 
         guard let userId = settingsStore.serverUserId, userId.isEmpty == false else {

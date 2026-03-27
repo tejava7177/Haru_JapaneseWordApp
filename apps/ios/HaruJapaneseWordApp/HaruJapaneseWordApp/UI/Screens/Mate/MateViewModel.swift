@@ -185,6 +185,8 @@ final class MateViewModel: ObservableObject {
     private var lastLoadedBackendUserId: String?
     private var isLoadingBuddyData: Bool = false
     private var serverProfileByUserId: [Int: BuddyServerProfile] = [:]
+    private var lastBuddyRefreshAt: Date?
+    private let minimumBuddyRefreshInterval: TimeInterval = 3
 
     init(
         settingsStore: AppSettingsStore,
@@ -208,6 +210,20 @@ final class MateViewModel: ObservableObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 self?.load(triggerSource: "profileRefresh", force: true)
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: .tsunTsunInboxDidChange)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.load(triggerSource: "tsunTsunInboxDidChange", force: true)
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: .buddyPetalStatusDidChange)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.load(triggerSource: "buddyPetalStatusDidChange", force: true)
             }
             .store(in: &cancellables)
     }
@@ -240,10 +256,14 @@ final class MateViewModel: ObservableObject {
     }
 
     func onViewAppear() {
-        load(triggerSource: "onAppear")
+        load(triggerSource: "onAppear", force: hasLoadedBuddyData)
     }
 
     func onViewDisappear() { }
+
+    func onSceneDidBecomeActive() {
+        load(triggerSource: "sceneActive", force: true)
+    }
 
     func load(triggerSource: String = "manual", force: Bool = false) {
         print("[Buddy] trigger source=\(triggerSource)")
@@ -263,6 +283,7 @@ final class MateViewModel: ObservableObject {
             lastLoadedBackendUserId = nil
             isLoadingBuddyData = false
             serverProfileByUserId = [:]
+            lastBuddyRefreshAt = nil
             return
         }
 
@@ -272,8 +293,15 @@ final class MateViewModel: ObservableObject {
             currentRandomCandidateIndex = 0
         }
 
-        if isLoadingBuddyData, force == false {
-            print("[Buddy] fetch skipped already loaded")
+        if isLoadingBuddyData {
+            print("[Buddy] fetch skipped loading in progress")
+            return
+        }
+
+        if force,
+           let lastBuddyRefreshAt,
+           Date().timeIntervalSince(lastBuddyRefreshAt) < minimumBuddyRefreshInterval {
+            print("[Buddy] forced fetch throttled")
             return
         }
 
@@ -292,6 +320,7 @@ final class MateViewModel: ObservableObject {
             await loadRandomCandidatesIfNeeded(userId: backendUserId)
             self.isLoadingBuddyData = false
             self.hasLoadedBuddyData = true
+            self.lastBuddyRefreshAt = Date()
         }
     }
 
