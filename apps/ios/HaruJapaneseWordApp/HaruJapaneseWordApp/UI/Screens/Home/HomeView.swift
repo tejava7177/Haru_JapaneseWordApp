@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct HomeView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var viewModel: HomeViewModel
     @State private var isShowingTsunTsunInbox: Bool = false
     @State private var isTodayPhraseExpanded: Bool = false
@@ -89,7 +90,14 @@ struct HomeView: View {
             }
         }
         .task {
-            viewModel.loadDeck(triggerSource: "task")
+            viewModel.refreshDeckIfNeeded(triggerSource: "task")
+        }
+        .onAppear {
+            viewModel.refreshDeckIfNeeded(triggerSource: "onAppear")
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase == .active else { return }
+            viewModel.refreshDeckIfNeeded(triggerSource: "scenePhaseActive")
         }
     }
 

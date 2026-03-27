@@ -89,6 +89,12 @@ final class HomeViewModel: ObservableObject {
         }
     }
 
+    func refreshDeckIfNeeded(triggerSource: String) {
+        let currentLoadKey = makeDeckLoadKey()
+        let shouldForceReload = hasLoadedDeck && lastDeckLoadKey != currentLoadKey
+        loadDeck(triggerSource: triggerSource, force: shouldForceReload)
+    }
+
     func loadInboxSummary(triggerSource: String = "manual", force: Bool = false) {
         print("[Home] trigger source=\(triggerSource)")
         let userId = settingsStore.currentBackendUserId
@@ -246,9 +252,10 @@ final class HomeViewModel: ObservableObject {
     }
 
     private func makeDeckLoadKey() -> String {
+        let todayKey = DateKey.kstDailyWordsKey(from: Date())
         if let backendUserId = settingsStore.currentBackendUserId {
-            return "server:\(backendUserId)"
+            return "server:\(backendUserId):\(todayKey)"
         }
-        return "local:\(settingsStore.settings.homeDeckLevel.rawValue)"
+        return "local:\(settingsStore.settings.homeDeckLevel.rawValue):\(todayKey)"
     }
 }
