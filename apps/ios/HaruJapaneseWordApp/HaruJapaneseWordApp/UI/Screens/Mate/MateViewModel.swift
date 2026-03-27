@@ -867,12 +867,17 @@ final class MateViewModel: ObservableObject {
         if let date = ISO8601DateFormatter.fractionalOrInternet.date(from: rawValue) {
             let days = DateKey.daysBetweenKST(from: date, to: Date())
             if days <= 0 {
-                return "최근 접속 오늘"
+                return "오늘 접속"
             }
-            return "최근 접속 \(days)일 전"
+            return "\(days)일 전"
         }
 
-        return "최근 접속 \(rawValue)"
+        if let fallbackText = fallbackText?.trimmingCharacters(in: .whitespacesAndNewlines),
+           fallbackText.isEmpty == false {
+            return fallbackText
+        }
+
+        return "최근 접속일 정보 없음"
     }
 
     private func tikiTakaStatusText(for count: Int?) -> String {
