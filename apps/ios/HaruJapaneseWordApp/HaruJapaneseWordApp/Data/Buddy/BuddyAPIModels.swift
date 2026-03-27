@@ -463,14 +463,14 @@ struct TsunTsunInboxSummary: Equatable {
     let promptText: String
 
     var arrivalText: String {
-        "지금 \(unansweredCount)개의 츤츤이 도착했어요"
+        "지금 \(unansweredCount)장의 꽃잎이 도착했어요"
     }
 
     var senderHeadline: String {
         if senderName.isEmpty {
-            return "버디가 츤츤을 보냈어요"
+            return "버디가 꽃잎을 날렸어요"
         }
-        return "\(senderName)이 츤츤을 보냈어요"
+        return "\(senderName)이 꽃잎을 날렸어요"
     }
 
     static func fromInbox(

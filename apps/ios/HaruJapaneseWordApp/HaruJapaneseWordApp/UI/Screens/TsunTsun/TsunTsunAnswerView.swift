@@ -60,7 +60,7 @@ struct TsunTsunAnswerView: View {
 
     private var headerView: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(viewModel.item.senderName.isEmpty ? "버디가 보낸 츤츤" : "\(viewModel.item.senderName)이 보낸 츤츤")
+            Text(viewModel.item.senderName.isEmpty ? "버디가 날린 꽃잎" : "\(viewModel.item.senderName)이 날린 꽃잎")
                 .font(.headline)
                 .foregroundStyle(.secondary)
 
@@ -189,7 +189,7 @@ struct TsunTsunAnswerView: View {
     }
 
     private var primaryActionTitle: String {
-        canNavigateToBuddyDetail ? "\(senderDisplayName)에게 츤츤 보내러 가기" : "받은 츤츤으로 돌아가기"
+        canNavigateToBuddyDetail ? "\(senderDisplayName)에게 꽃잎 날리러 가기" : "도착한 꽃잎으로 돌아가기"
     }
 
     private func primaryAction() {

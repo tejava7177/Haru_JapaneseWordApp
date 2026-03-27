@@ -69,7 +69,7 @@ final class BuddyDetailViewModel: ObservableObject {
     var pendingAnswerMessage: String? {
         switch currentSendBlockReason {
         case .pendingIncomingAnswer:
-            return "받은 츤츤에 답해야 새 츤츤을 보낼 수 있어요."
+            return "도착한 꽃잎에 답해야 새 꽃잎을 날릴 수 있어요."
         case .pendingOutgoingAnswer:
             return "상대가 아직 답변 중이에요"
         case nil:
@@ -170,7 +170,7 @@ final class BuddyDetailViewModel: ObservableObject {
                     dailyWordItemId: selectedItem.dailyWordItemId
                 )
                 selectedItemId = nil
-                sendSuccessMessage = "つんつん을 보냈어요."
+                sendSuccessMessage = "꽃잎을 날렸어요."
                 await refreshTsunTsunStatus()
                 isSending = false
             } catch {
@@ -209,7 +209,7 @@ final class BuddyDetailViewModel: ObservableObject {
             pairCompletedToday = false
             receivedCount = 0
             tsunTsunTodayResponse = nil
-            nonFatalMessage = "층츤 상태를 불러오지 못해 기본 상태로 표시했어요."
+            nonFatalMessage = "꽃잎 상태를 불러오지 못해 기본 상태로 표시했어요."
             rebuildItems()
         }
     }
@@ -240,7 +240,7 @@ final class BuddyDetailViewModel: ObservableObject {
         pairCompletedToday = false
         receivedCount = 0
         totalCount = dailyWords.items.count
-        nonFatalMessage = "층츤 상태를 불러오지 못해 기본 상태로 표시했어요."
+        nonFatalMessage = "꽃잎 상태를 불러오지 못해 기본 상태로 표시했어요."
         print("[BuddyDetail] tsuntsun fallback applied sentCount=0 receivedCount=0 status=NONE")
         rebuildItems()
     }
@@ -305,7 +305,7 @@ final class BuddyDetailViewModel: ObservableObject {
 
                 return UserAlert(
                     title: "잠시 기다려주세요",
-                    message: "받은 츤츤의 답변을 완료해주세요."
+                    message: "도착한 꽃잎의 답변을 먼저 완료해주세요."
                 )
             }
 
@@ -332,12 +332,12 @@ final class BuddyDetailViewModel: ObservableObject {
         case .pendingIncomingAnswer:
             return UserAlert(
                 title: "먼저 답변이 필요해요",
-                message: "아직 받은 츤츤에 답하지 않았어요.\n받은 츤츤에 답해야 새 츤츤을 보낼 수 있어요."
+                message: "아직 도착한 꽃잎에 답하지 않았어요.\n답변을 마쳐야 새 꽃잎을 날릴 수 있어요."
             )
         case .pendingOutgoingAnswer:
             return UserAlert(
                 title: "잠시 기다려주세요",
-                message: "아직 \(buddyName)이 츤츤에 답하지 않았어요.\n답변 후 다음 츤츤을 보낼 수 있어요."
+                message: "아직 \(buddyName)이 꽃잎에 답하지 않았어요.\n답변 후 다음 꽃잎을 날릴 수 있어요."
             )
         }
     }

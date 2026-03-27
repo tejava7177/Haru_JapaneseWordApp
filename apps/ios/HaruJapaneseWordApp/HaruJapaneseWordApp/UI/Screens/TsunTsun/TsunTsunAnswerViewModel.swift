@@ -58,7 +58,7 @@ final class TsunTsunAnswerViewModel: ObservableObject {
         }
 
         if submittedMeaningId == -1 {
-            return "정답을 확인하고 바로 다음 츤츤을 보내보세요."
+            return "정답을 확인하고 다음 꽃잎을 날려보세요."
         }
 
         switch isCorrect {

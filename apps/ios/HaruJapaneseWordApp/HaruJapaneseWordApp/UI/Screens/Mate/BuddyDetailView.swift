@@ -107,36 +107,56 @@ struct BuddyDetailView: View {
                     }
                 }
 
-                TsunTsunProgressGauge(
-                    currentCount: clampedProgressCount,
-                    goal: resolvedProgressGoal
-                )
+                HStack {
+                    Spacer(minLength: 0)
+                    PetalProgressView(
+                        totalCount: resolvedProgressGoal,
+                        completedCount: clampedProgressCount
+                    )
+                    Spacer(minLength: 0)
+                }
+                .padding(.top, 2)
+                .padding(.bottom, 4)
 
                 if viewModel.receivedCount > 0 {
-                    Text("받은 츤츤 \(viewModel.receivedCount)개")
+                    Text("도착한 꽃잎 \(viewModel.receivedCount)장")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
-            .padding(16)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Color(uiColor: .secondarySystemBackground))
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white,
+                                Color(red: 0.99, green: 0.96, blue: 0.93)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color.black.opacity(0.05), lineWidth: 1)
             )
 
             if isPerfectCompletion {
                 HStack(spacing: 8) {
-                    Text("🎉")
-                    Text("오늘의 츤츤 완료!")
+                    Image(systemName: "sparkles")
+                    Text("오늘의 꽃이 피었어요")
                         .font(.subheadline.weight(.semibold))
                 }
-                .foregroundStyle(.orange)
+                .foregroundStyle(Color(red: 0.82, green: 0.57, blue: 0.48))
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 .background(
                     Capsule(style: .continuous)
-                        .fill(Color.orange.opacity(0.12))
+                        .fill(Color(red: 0.97, green: 0.9, blue: 0.84))
                 )
                 .transition(.scale.combined(with: .opacity))
             }
@@ -156,7 +176,7 @@ struct BuddyDetailView: View {
                         ProgressView()
                             .tint(.white)
                     }
-                    Text("つんつん 보내기")
+                    Text("꽃잎 날리기")
                         .font(.headline)
                 }
                 .frame(maxWidth: .infinity)
@@ -209,27 +229,6 @@ private extension BuddyDetailView {
 
     var isPerfectCompletion: Bool {
         viewModel.pairCompletedToday && clampedProgressCount == resolvedProgressGoal
-    }
-}
-
-private struct TsunTsunProgressGauge: View {
-    let currentCount: Int
-    let goal: Int
-
-    var body: some View {
-        HStack(spacing: 6) {
-            ForEach(0..<goal, id: \.self) { index in
-                Capsule(style: .continuous)
-                    .fill(index < currentCount ? Color.black : Color(uiColor: .systemGray5))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 10)
-                    .scaleEffect(y: index < currentCount ? 1 : 0.88)
-                    .animation(.easeInOut(duration: 0.4), value: currentCount)
-            }
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("오늘 츤츤 진행도")
-        .accessibilityValue("\(currentCount)/\(goal)")
     }
 }
 

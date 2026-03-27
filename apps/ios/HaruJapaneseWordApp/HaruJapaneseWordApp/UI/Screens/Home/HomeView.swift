@@ -297,7 +297,7 @@ private struct TsunTsunInboxSummaryCard: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("받은 츤츤")
+                        Text("도착한 꽃잎")
                             .font(.headline)
                             .foregroundStyle(.primary)
                         Text(summary.senderHeadline)

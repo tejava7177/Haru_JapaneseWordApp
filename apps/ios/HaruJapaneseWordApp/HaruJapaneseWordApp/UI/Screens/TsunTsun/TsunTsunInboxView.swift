@@ -47,7 +47,7 @@ struct TsunTsunInboxView: View {
             }
         }
         .background(Color(uiColor: .systemGroupedBackground))
-        .navigationTitle("받은 츤츤")
+        .navigationTitle("도착한 꽃잎")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             viewModel.load()
@@ -56,7 +56,7 @@ struct TsunTsunInboxView: View {
 
     private var headerView: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("답변이 필요한 츤츤만 모아봤어요.")
+            Text("답변이 필요한 꽃잎만 모아봤어요.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             Text(viewModel.unansweredCountText)
@@ -71,9 +71,9 @@ struct TsunTsunInboxView: View {
             Image(systemName: "tray")
                 .font(.system(size: 28))
                 .foregroundStyle(.secondary)
-            Text("받은 츤츤이 없어요")
+            Text("도착한 꽃잎이 없어요")
                 .font(.headline)
-            Text("새로 받은 츤츤이 생기면 여기에서 바로 답할 수 있어요.")
+            Text("새 꽃잎이 도착하면 여기에서 바로 답할 수 있어요.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -84,7 +84,7 @@ struct TsunTsunInboxView: View {
 
     private func errorStateView(message: String) -> some View {
         VStack(spacing: 12) {
-            Text("받은 츤츤을 불러오지 못했어요")
+            Text("도착한 꽃잎을 불러오지 못했어요")
                 .font(.headline)
             Text(message)
                 .font(.subheadline)
@@ -138,7 +138,7 @@ private struct TsunTsunInboxRow: View {
                     .foregroundStyle(.secondary)
 
                 HStack {
-                    Text("답하기")
+                    Text("꽃잎 답하기")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.orange)
                     Spacer(minLength: 8)
