@@ -13,6 +13,7 @@ private enum ProfileEditField: String, Hashable {
 struct ProfileView: View {
     @StateObject private var viewModel: ProfileViewModel
     @State private var isGuidePresented: Bool = false
+    @State private var isTimeRangeSheetPresented: Bool = false
     @State private var isShowingToast: Bool = false
     @State private var toastMessage: String = ""
     @State private var errorMessage: String?
@@ -116,6 +117,23 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $isGuidePresented) {
             GuideView()
+        }
+        .sheet(isPresented: $isTimeRangeSheetPresented) {
+            LearningNotificationRangeSheet(
+                startTime: viewModel.learningNotificationSettings.isRepeating
+                    ? viewModel.learningNotificationSettings.repeatStartTime
+                    : viewModel.learningNotificationSettings.notificationTime,
+                endTime: viewModel.learningNotificationSettings.repeatEndTime,
+                isRepeating: viewModel.learningNotificationSettings.isRepeating,
+                selectedInterval: viewModel.learningNotificationSettings.repeatInterval,
+                onApply: { start, end, interval in
+                    if viewModel.learningNotificationSettings.isRepeating {
+                        viewModel.updateLearningNotificationRange(start: start, end: end, interval: interval)
+                    } else {
+                        viewModel.updateLearningNotificationTime(start)
+                    }
+                }
+            )
         }
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
@@ -450,6 +468,36 @@ struct ProfileView: View {
                 ProgressView("알림 설정 중...")
                     .font(.footnote)
             }
+
+            if viewModel.isLearningNotificationEnabled {
+                Toggle(isOn: Binding(
+                    get: { viewModel.learningNotificationSettings.isRepeating },
+                    set: { viewModel.updateLearningNotificationRepeating($0) }
+                )) {
+                    Text("반복 알림")
+                }
+                .disabled(viewModel.isUpdatingLearningNotification)
+
+                Button {
+                    isTimeRangeSheetPresented = true
+                } label: {
+                    HStack {
+                        Text("알림 시간")
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        Text(viewModel.learningNotificationSummaryText)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(viewModel.isUpdatingLearningNotification)
+
+                if viewModel.learningNotificationAuthorizationStatus == .denied {
+                    Text("알림 권한이 꺼져 있어요. 설정 앱에서 알림을 허용해 주세요.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
     }
 
@@ -526,6 +574,97 @@ struct ProfileView: View {
                 isShowingToast = false
             }
         }
+    }
+}
+
+private struct LearningNotificationRangeSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var startTime: Date
+    @State private var endTime: Date
+    @State private var selectedInterval: LearningNotificationSettings.RepeatInterval?
+    let isRepeating: Bool
+    let onApply: (Date, Date, LearningNotificationSettings.RepeatInterval?) -> Void
+
+    init(
+        startTime: Date,
+        endTime: Date,
+        isRepeating: Bool,
+        selectedInterval: LearningNotificationSettings.RepeatInterval,
+        onApply: @escaping (Date, Date, LearningNotificationSettings.RepeatInterval?) -> Void
+    ) {
+        _startTime = State(initialValue: startTime)
+        _endTime = State(initialValue: endTime)
+        _selectedInterval = State(initialValue: selectedInterval)
+        self.isRepeating = isRepeating
+        self.onApply = onApply
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                DatePicker("시작 시간", selection: $startTime, displayedComponents: .hourAndMinute)
+
+                if isRepeating {
+                    DatePicker("종료 시간", selection: $endTime, displayedComponents: .hourAndMinute)
+
+                    Picker("반복 간격", selection: Binding(
+                        get: { selectedInterval },
+                        set: { selectedInterval = $0 }
+                    )) {
+                        ForEach(availableIntervals) { interval in
+                            Text(interval.title).tag(Optional(interval))
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .disabled(availableIntervals.isEmpty)
+
+                    if availableIntervals.isEmpty {
+                        Text("시간 범위를 더 넓혀야 반복 간격을 선택할 수 있어요.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .navigationTitle("알림 시간")
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("닫기") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("적용") {
+                        onApply(startTime, endTime, selectedInterval)
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .onAppear {
+            selectedInterval = resolvedInterval(for: selectedInterval)
+        }
+        .onChange(of: startTime) { _ in
+            selectedInterval = resolvedInterval(for: selectedInterval)
+        }
+        .onChange(of: endTime) { _ in
+            selectedInterval = resolvedInterval(for: selectedInterval)
+        }
+    }
+
+    private var availableIntervals: [LearningNotificationSettings.RepeatInterval] {
+        LearningNotificationSettings.availableRepeatIntervals(
+            startMinutes: LearningNotificationSettings.minutes(from: startTime),
+            endMinutes: LearningNotificationSettings.minutes(from: endTime)
+        )
+    }
+
+    private func resolvedInterval(
+        for current: LearningNotificationSettings.RepeatInterval?
+    ) -> LearningNotificationSettings.RepeatInterval? {
+        if let current, availableIntervals.contains(current) {
+            return current
+        }
+        return LearningNotificationSettings.preferredInterval(from: availableIntervals)
     }
 }
 

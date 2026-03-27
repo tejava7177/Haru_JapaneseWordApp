@@ -4,6 +4,7 @@ import SwiftUI
 import Combine
 import UIKit
 import UniformTypeIdentifiers
+import UserNotifications
 
 private enum AppleAuthFlowError: LocalizedError {
     case missingIdentityToken
@@ -42,9 +43,11 @@ final class ProfileViewModel: ObservableObject {
     @Published var randomMatchingErrorMessage: String?
     @Published var randomMatchingNotice: String?
     @Published var isLearningNotificationEnabled: Bool
+    @Published var learningNotificationSettings: LearningNotificationSettings
     @Published var isUpdatingLearningNotification: Bool = false
     @Published var learningNotificationNotice: String?
     @Published var learningNotificationErrorMessage: String?
+    @Published private(set) var learningNotificationAuthorizationStatus: UNAuthorizationStatus = .notDetermined
     @Published var isSigningInWithApple: Bool = false
     @Published var appleSignInNotice: String?
     @Published var appleSignInErrorMessage: String?
@@ -88,6 +91,7 @@ final class ProfileViewModel: ObservableObject {
         self.selectedLearningLevel = settingsStore.settings.homeDeckLevel
         self.isDarkModeEnabled = settingsStore.isDarkModeEnabled
         self.isLearningNotificationEnabled = settingsStore.settings.isLearningNotificationEnabled
+        self.learningNotificationSettings = settingsStore.settings.learningNotificationSettings
 
         settingsStore.$settings
             .receive(on: RunLoop.main)
@@ -95,6 +99,7 @@ final class ProfileViewModel: ObservableObject {
                 let shouldSyncDrafts = self?.settings.mateUserId != value.mateUserId
                 self?.settings = value
                 self?.isLearningNotificationEnabled = value.isLearningNotificationEnabled
+                self?.learningNotificationSettings = value.learningNotificationSettings
                 self?.syncProfileFromCurrentUser(syncDrafts: shouldSyncDrafts)
                 self?.refreshCurrentUserProfileFromServer(triggerSource: "onChange")
             }
@@ -127,6 +132,10 @@ final class ProfileViewModel: ObservableObject {
 
     func onViewAppear() {
         refreshCurrentUserProfileFromServer(triggerSource: "onAppear")
+        Task {
+            await refreshLearningNotificationAuthorizationStatus()
+            await resyncLearningNotificationScheduleIfNeeded()
+        }
     }
 
     func saveProfileEdits() {
@@ -335,38 +344,73 @@ final class ProfileViewModel: ObservableObject {
 
     func updateLearningNotificationEnabled(_ enabled: Bool) {
         print("[Notification] toggle changed enabled=\(enabled)")
-        guard isUpdatingLearningNotification == false else { return }
+        var updated = learningNotificationSettings
+        updated.isEnabled = enabled
+        commitLearningNotificationSettings(updated, showToggleNotice: true)
+    }
 
-        learningNotificationErrorMessage = nil
-        learningNotificationNotice = nil
-        isUpdatingLearningNotification = true
+    func updateLearningNotificationTime(_ date: Date) {
+        var updated = learningNotificationSettings
+        updated.notificationTimeMinutes = LearningNotificationSettings.minutes(from: date)
+        commitLearningNotificationSettings(updated)
+    }
 
-        Task {
-            defer { isUpdatingLearningNotification = false }
-
-            if enabled {
-                let granted = await NotificationManager.shared.requestAuthorizationIfNeeded()
-                guard granted else {
-                    settingsStore.setLearningNotificationEnabled(false)
-                    isLearningNotificationEnabled = false
-                    learningNotificationNotice = "알림 권한이 꺼져 있어요. 설정에서 알림을 허용해 주세요."
-                    return
-                }
-
-                settingsStore.setLearningNotificationEnabled(true)
-                isLearningNotificationEnabled = true
-                await NotificationManager.shared.scheduleDailyLearningReminder()
-                await PushRegistrationManager.shared.syncRegistrationState()
-                learningNotificationNotice = "매일 오후 8시에 학습 알림을 보내드릴게요."
-                return
-            }
-
-            await PushRegistrationManager.shared.unregisterDeviceTokenIfNeeded(userId: settingsStore.serverUserId)
-            settingsStore.setLearningNotificationEnabled(false)
-            isLearningNotificationEnabled = false
-            await NotificationManager.shared.cancelDailyLearningReminder()
-            learningNotificationNotice = "학습 알림을 껐어요."
+    func updateLearningNotificationRepeating(_ enabled: Bool) {
+        var updated = learningNotificationSettings
+        updated.isRepeating = enabled
+        if enabled, let preferredInterval = LearningNotificationSettings.preferredInterval(from: updated.availableRepeatIntervals) {
+            updated.repeatInterval = preferredInterval
         }
+        commitLearningNotificationSettings(updated)
+    }
+
+    func updateLearningNotificationRange(start: Date, end: Date) {
+        var updated = learningNotificationSettings
+        updated.repeatStartMinutes = LearningNotificationSettings.minutes(from: start)
+        updated.repeatEndMinutes = LearningNotificationSettings.minutes(from: end)
+        if let preferredInterval = resolvedRepeatInterval(for: updated) {
+            updated.repeatInterval = preferredInterval
+        }
+        commitLearningNotificationSettings(updated)
+    }
+
+    func updateLearningNotificationRange(
+        start: Date,
+        end: Date,
+        interval: LearningNotificationSettings.RepeatInterval?
+    ) {
+        var updated = learningNotificationSettings
+        updated.repeatStartMinutes = LearningNotificationSettings.minutes(from: start)
+        updated.repeatEndMinutes = LearningNotificationSettings.minutes(from: end)
+        if let interval {
+            updated.repeatInterval = interval
+        }
+        if let preferredInterval = resolvedRepeatInterval(for: updated) {
+            updated.repeatInterval = preferredInterval
+        }
+        commitLearningNotificationSettings(updated)
+    }
+
+    func updateLearningNotificationInterval(_ interval: LearningNotificationSettings.RepeatInterval) {
+        var updated = learningNotificationSettings
+        updated.repeatInterval = interval
+        commitLearningNotificationSettings(updated)
+    }
+
+    var availableLearningNotificationIntervals: [LearningNotificationSettings.RepeatInterval] {
+        learningNotificationSettings.availableRepeatIntervals
+    }
+
+    var learningNotificationSummaryText: String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "hh:mm a"
+
+        if learningNotificationSettings.isRepeating {
+            return "\(formatter.string(from: learningNotificationSettings.repeatStartTime)) ~ \(formatter.string(from: learningNotificationSettings.repeatEndTime))"
+        }
+
+        return formatter.string(from: learningNotificationSettings.notificationTime)
     }
 
     func loadAvatar(from item: PhotosPickerItem?) async {
@@ -527,6 +571,7 @@ final class ProfileViewModel: ObservableObject {
         settings = settingsStore.settings
         selectedLearningLevel = settingsStore.settings.homeDeckLevel
         isLearningNotificationEnabled = settingsStore.settings.isLearningNotificationEnabled
+        learningNotificationSettings = settingsStore.settings.learningNotificationSettings
         isRandomMatchingEnabled = false
         localResetNotice = "로컬 상태를 초기화했어요."
         localAvatarPreviewData = nil
@@ -567,6 +612,111 @@ final class ProfileViewModel: ObservableObject {
         Task {
             await refreshCurrentUserProfileFromServerNow(triggerSource: triggerSource, force: force)
         }
+    }
+
+    private func commitLearningNotificationSettings(_ updatedSettings: LearningNotificationSettings, showToggleNotice: Bool = false) {
+        guard isUpdatingLearningNotification == false else { return }
+        guard updatedSettings.isRepeating == false || updatedSettings.hasValidRepeatingRange else {
+            learningNotificationErrorMessage = "시작 시간은 종료 시간보다 늦을 수 없어요."
+            return
+        }
+        guard updatedSettings.isRepeating == false || updatedSettings.availableRepeatIntervals.isEmpty == false else {
+            learningNotificationErrorMessage = "시간 범위를 더 넓혀서 반복 간격을 선택해 주세요."
+            return
+        }
+        guard updatedSettings.isRepeating == false || updatedSettings.availableRepeatIntervals.contains(updatedSettings.repeatInterval) else {
+            learningNotificationErrorMessage = "현재 시간 범위에서 사용할 수 없는 반복 간격이에요."
+            return
+        }
+        guard updatedSettings != learningNotificationSettings else { return }
+
+        learningNotificationErrorMessage = nil
+        learningNotificationNotice = nil
+        isUpdatingLearningNotification = true
+
+        let previousSettings = learningNotificationSettings
+
+        Task {
+            defer { isUpdatingLearningNotification = false }
+
+            if updatedSettings.isEnabled {
+                let granted = await NotificationManager.shared.requestAuthorizationIfNeeded()
+                await refreshLearningNotificationAuthorizationStatus()
+
+                guard granted else {
+                    learningNotificationNotice = "알림 권한이 꺼져 있어요. 설정에서 알림을 허용해 주세요."
+                    return
+                }
+
+                let didSchedule = await NotificationManager.shared.scheduleLearningReminders(using: updatedSettings)
+                guard didSchedule else {
+                    learningNotificationErrorMessage = "학습 알림을 적용하지 못했어요."
+                    return
+                }
+
+                settingsStore.updateLearningNotificationSettings(updatedSettings)
+                learningNotificationSettings = updatedSettings
+                isLearningNotificationEnabled = true
+
+                if previousSettings.isEnabled == false {
+                    await PushRegistrationManager.shared.syncRegistrationState()
+                }
+
+                if showToggleNotice {
+                    learningNotificationNotice = updatedSettings.isRepeating
+                        ? "반복 학습 알림을 켰어요."
+                        : "매일 설정한 시간에 학습 알림을 보내드릴게요."
+                }
+                return
+            }
+
+            await NotificationManager.shared.cancelLearningReminders()
+            settingsStore.updateLearningNotificationSettings(updatedSettings)
+            learningNotificationSettings = updatedSettings
+            isLearningNotificationEnabled = false
+
+            if previousSettings.isEnabled {
+                await PushRegistrationManager.shared.unregisterDeviceTokenIfNeeded(userId: settingsStore.serverUserId)
+            }
+
+            if showToggleNotice {
+                learningNotificationNotice = "학습 알림을 껐어요."
+            }
+        }
+    }
+
+    private func refreshLearningNotificationAuthorizationStatus() async {
+        learningNotificationAuthorizationStatus = await NotificationManager.shared.authorizationStatus()
+    }
+
+    private func resyncLearningNotificationScheduleIfNeeded() async {
+        let storedSettings = settingsStore.settings.learningNotificationSettings
+
+        guard storedSettings.isEnabled else {
+            await NotificationManager.shared.cancelLearningReminders()
+            return
+        }
+
+        let authorizationStatus = await NotificationManager.shared.authorizationStatus()
+        learningNotificationAuthorizationStatus = authorizationStatus
+
+        switch authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            _ = await NotificationManager.shared.scheduleLearningReminders(using: storedSettings)
+        case .denied, .notDetermined:
+            await NotificationManager.shared.cancelLearningReminders()
+        @unknown default:
+            await NotificationManager.shared.cancelLearningReminders()
+        }
+    }
+
+    private func resolvedRepeatInterval(for settings: LearningNotificationSettings) -> LearningNotificationSettings.RepeatInterval? {
+        let availableIntervals = settings.availableRepeatIntervals
+        guard availableIntervals.isEmpty == false else { return nil }
+        if availableIntervals.contains(settings.repeatInterval) {
+            return settings.repeatInterval
+        }
+        return LearningNotificationSettings.preferredInterval(from: availableIntervals)
     }
 
     private func applyServerProfile(_ response: ServerUserProfileResponse, avatarData: Data?, forceDraftSync: Bool = false) {

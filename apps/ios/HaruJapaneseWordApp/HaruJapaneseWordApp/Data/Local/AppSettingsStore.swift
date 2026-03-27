@@ -29,6 +29,11 @@ final class AppSettingsStore: ObservableObject {
     private let registeredAPNSUserIdKey = "push_registered_apns_user_id"
     private let mateUserIdKey = "mate_user_id"
     private static let learningNotificationEnabledKey = "settings_learning_notification_enabled"
+    private static let learningNotificationTimeMinutesKey = "settings_learning_notification_time_minutes"
+    private static let learningNotificationRepeatEnabledKey = "settings_learning_notification_repeat_enabled"
+    private static let learningNotificationRepeatStartMinutesKey = "settings_learning_notification_repeat_start_minutes"
+    private static let learningNotificationRepeatEndMinutesKey = "settings_learning_notification_repeat_end_minutes"
+    private static let learningNotificationRepeatIntervalMinutesKey = "settings_learning_notification_repeat_interval_minutes"
 
     private let legacyProfileLevelsByUserIdKey = "settings_profile_levels_by_user_id"
     private let mateProfilePrefix = "mate_profile"
@@ -87,6 +92,11 @@ final class AppSettingsStore: ObservableObject {
         userDefaults.set(settings.homeDeckLevel.rawValue, forKey: homeDeckLevelKey)
         userDefaults.set(settings.mateUserId, forKey: mateUserIdKey)
         userDefaults.set(settings.isLearningNotificationEnabled, forKey: Self.learningNotificationEnabledKey)
+        userDefaults.set(settings.learningNotificationSettings.notificationTimeMinutes, forKey: Self.learningNotificationTimeMinutesKey)
+        userDefaults.set(settings.learningNotificationSettings.isRepeating, forKey: Self.learningNotificationRepeatEnabledKey)
+        userDefaults.set(settings.learningNotificationSettings.repeatStartMinutes, forKey: Self.learningNotificationRepeatStartMinutesKey)
+        userDefaults.set(settings.learningNotificationSettings.repeatEndMinutes, forKey: Self.learningNotificationRepeatEndMinutesKey)
+        userDefaults.set(settings.learningNotificationSettings.repeatInterval.rawValue, forKey: Self.learningNotificationRepeatIntervalMinutesKey)
     }
 
     func markOnboardingSeen() {
@@ -199,6 +209,14 @@ final class AppSettingsStore: ObservableObject {
         guard settings.isLearningNotificationEnabled != enabled else { return }
         var updated = settings
         updated.isLearningNotificationEnabled = enabled
+        settings = updated
+        save(settings: updated)
+    }
+
+    func updateLearningNotificationSettings(_ learningNotificationSettings: LearningNotificationSettings) {
+        guard settings.learningNotificationSettings != learningNotificationSettings else { return }
+        var updated = settings
+        updated.learningNotificationSettings = learningNotificationSettings
         settings = updated
         save(settings: updated)
     }
@@ -448,10 +466,28 @@ final class AppSettingsStore: ObservableObject {
         let level = JLPTLevel(rawValue: levelRaw) ?? .n5
         let mateUserId = userDefaults.string(forKey: "mate_user_id") ?? ""
         let isLearningNotificationEnabled = userDefaults.bool(forKey: Self.learningNotificationEnabledKey)
+        let notificationTimeMinutes = userDefaults.object(forKey: Self.learningNotificationTimeMinutesKey) as? Int
+            ?? (20 * 60)
+        let isRepeating = userDefaults.bool(forKey: Self.learningNotificationRepeatEnabledKey)
+        let repeatStartMinutes = userDefaults.object(forKey: Self.learningNotificationRepeatStartMinutesKey) as? Int
+            ?? (9 * 60)
+        let repeatEndMinutes = userDefaults.object(forKey: Self.learningNotificationRepeatEndMinutesKey) as? Int
+            ?? (21 * 60)
+        let repeatIntervalMinutes = userDefaults.object(forKey: Self.learningNotificationRepeatIntervalMinutesKey) as? Int
+            ?? LearningNotificationSettings.RepeatInterval.oneHour.rawValue
+        let repeatInterval = LearningNotificationSettings.RepeatInterval(rawValue: repeatIntervalMinutes) ?? .oneHour
+        let learningNotificationSettings = LearningNotificationSettings(
+            isEnabled: isLearningNotificationEnabled,
+            notificationTimeMinutes: notificationTimeMinutes,
+            isRepeating: isRepeating,
+            repeatStartMinutes: repeatStartMinutes,
+            repeatEndMinutes: repeatEndMinutes,
+            repeatInterval: repeatInterval
+        )
         return AppSettings(
             homeDeckLevel: level,
             mateUserId: mateUserId,
-            isLearningNotificationEnabled: isLearningNotificationEnabled
+            learningNotificationSettings: learningNotificationSettings
         )
     }
 
