@@ -759,18 +759,13 @@ private struct ProfileSummaryCardView<AvatarContent: View>: View {
                 avatarView()
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(nickname)
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(Color.textPrimary)
+                    HStack(alignment: .center, spacing: 8) {
+                        Text(nickname)
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(Color.textPrimary)
+                            .lineLimit(1)
+                            .layoutPriority(2)
 
-                    if let bio {
-                        Text(bio)
-                            .font(.footnote)
-                            .foregroundStyle(Color.textSecondary)
-                            .lineLimit(2)
-                    }
-
-                    HStack(spacing: 8) {
                         Text(learningLevelTitle)
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(Color.textSecondary)
@@ -779,21 +774,36 @@ private struct ProfileSummaryCardView<AvatarContent: View>: View {
                             .background(Color.surfaceSecondary)
                             .clipShape(Capsule())
                             .overlay(Capsule().stroke(Color.divider, lineWidth: 1))
+                    }
 
-                        if let instagramId {
-                            Label("@\(instagramId)", systemImage: "camera")
+                    if let bio {
+                        Text(bio)
+                            .font(.footnote)
+                            .foregroundStyle(Color.textSecondary)
+                            .lineLimit(2)
+                            .layoutPriority(1)
+                    }
+
+                    if let instagramId {
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            Image(systemName: "camera")
+                                .font(.caption2)
+                                .foregroundStyle(Color.iconSecondary.opacity(0.8))
+                            Text("@\(instagramId)")
                                 .font(.caption)
                                 .foregroundStyle(Color.textSecondary)
-                                .lineLimit(1)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 Spacer(minLength: 8)
 
                 Button("수정", action: onEdit)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.chipActive)
+                    .padding(.top, 2)
             }
         }
         .padding(14)
