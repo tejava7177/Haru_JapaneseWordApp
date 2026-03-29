@@ -17,6 +17,10 @@ struct ProfileView: View {
     @State private var isShowingToast: Bool = false
     @State private var toastMessage: String = ""
     @State private var errorMessage: String?
+    @State private var isNicknameExpanded: Bool = false
+    @State private var isBioExpanded: Bool = false
+    @State private var isInstagramExpanded: Bool = false
+    @State private var hasInitializedProfileSections: Bool = false
     @FocusState private var focusedField: ProfileEditField?
 
     private let levelOptions: [JLPTLevel] = [.n5, .n4, .n3, .n2, .n1]
@@ -29,6 +33,7 @@ struct ProfileView: View {
         navigationContent
         .onAppear {
             viewModel.onViewAppear()
+            initializeProfileSectionsIfNeeded()
         }
         .onChange(of: viewModel.selectedPhotoItem) { newItem in
             guard newItem != nil else { return }
@@ -40,6 +45,12 @@ struct ProfileView: View {
         }
         .onChange(of: focusedField) { field in
             print("[ProfileEdit] focus changed field=\(field?.rawValue ?? "nil")")
+        }
+        .onChange(of: viewModel.profileSaveSuccessMessage) { message in
+            guard let message else { return }
+            collapseProfileSections()
+            showToast(message: message)
+            viewModel.profileSaveSuccessMessage = nil
         }
         .onChange(of: viewModel.learningLevelNotice) { message in
             guard let message else { return }
@@ -152,11 +163,6 @@ struct ProfileView: View {
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
-                Button("저장") {
-                    handleSaveButtonTap()
-                }
-                .disabled(viewModel.isSavingProfile)
-
                 Button("완료") {
                     dismissKeyboard()
                 }
@@ -257,66 +263,69 @@ struct ProfileView: View {
             }
             .padding(.vertical, 8)
 
-            ProfileInputField(
+            ProfileEditableSectionView(
                 title: "닉네임",
-                prompt: "닉네임을 입력해 주세요",
-                text: $viewModel.nicknameDraft,
-                focusedField: $focusedField,
-                field: .nickname
-            )
-
-            ProfileInputField(
-                title: "한 줄 소개",
-                prompt: "매일 한 문장씩 일본어 연습 중",
-                text: $viewModel.bioDraft,
-                axis: .vertical,
-                focusedField: $focusedField,
-                field: .bio
-            )
-
-            ProfileInputField(
-                title: "인스타 아이디",
-                prompt: "@haru_jp",
-                text: $viewModel.instagramIdDraft,
-                keyboardType: .asciiCapable,
-                focusedField: $focusedField,
-                field: .instagramId
-            )
-
-            VStack(spacing: 8) {
-                Button {
-                    handleSaveButtonTap()
-                } label: {
-                    HStack {
-                        if viewModel.isSavingProfile {
-                            ProgressView()
-                                .controlSize(.small)
-                                .tint(.secondary)
-                        }
-                        Text(viewModel.isSavingProfile ? "저장 중..." : "저장")
-                            .fontWeight(.semibold)
-                            .font(.system(size: 15))
-                    }
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .foregroundStyle(viewModel.hasProfileDraftChanges ? Color.blue : Color.gray)
-                }
-                .buttonStyle(.plain)
-                .disabled(viewModel.isSavingProfile || viewModel.canSaveProfile == false)
-                .opacity(viewModel.isSavingProfile ? 0.6 : 1.0)
+                valueText: sectionValueText(for: .nickname),
+                hasValue: sectionHasValue(for: .nickname),
+                isExpanded: $isNicknameExpanded,
+                isSaving: viewModel.isSavingProfile,
+                canSave: canSaveSection(.nickname),
+                onToggle: { toggleProfileSection(.nickname) },
+                onSave: { saveProfileSection(.nickname) }
+            ) {
+                ProfileInputField(
+                    title: "닉네임",
+                    prompt: "닉네임을 입력해 주세요",
+                    text: $viewModel.nicknameDraft,
+                    focusedField: $focusedField,
+                    field: .nickname
+                )
             }
-            .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.top, 6)
 
-            if viewModel.isSavingProfile {
-                Text("프로필 저장 중...")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+            ProfileEditableSectionView(
+                title: "한줄 소개",
+                valueText: sectionValueText(for: .bio),
+                hasValue: sectionHasValue(for: .bio),
+                isExpanded: $isBioExpanded,
+                isSaving: viewModel.isSavingProfile,
+                canSave: canSaveSection(.bio),
+                onToggle: { toggleProfileSection(.bio) },
+                onSave: { saveProfileSection(.bio) }
+            ) {
+                ProfileInputField(
+                    title: "한 줄 소개",
+                    prompt: "매일 한 문장씩 일본어 연습 중",
+                    text: $viewModel.bioDraft,
+                    axis: .vertical,
+                    focusedField: $focusedField,
+                    field: .bio
+                )
+            }
+
+            ProfileEditableSectionView(
+                title: "인스타",
+                valueText: sectionValueText(for: .instagramId),
+                hasValue: sectionHasValue(for: .instagramId),
+                isExpanded: $isInstagramExpanded,
+                isSaving: viewModel.isSavingProfile,
+                canSave: canSaveSection(.instagramId),
+                onToggle: { toggleProfileSection(.instagramId) },
+                onSave: { saveProfileSection(.instagramId) }
+            ) {
+                ProfileInputField(
+                    title: "인스타 아이디",
+                    prompt: "@haru_jp",
+                    text: $viewModel.instagramIdDraft,
+                    keyboardType: .asciiCapable,
+                    focusedField: $focusedField,
+                    field: .instagramId
+                )
             }
 
             if let profileSaveErrorMessage = viewModel.profileSaveErrorMessage {
                 Text(profileSaveErrorMessage)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.textSecondary)
             }
 
             if viewModel.isRefreshingServerProfile {
@@ -400,7 +409,8 @@ struct ProfileView: View {
                         ForEach(levelOptions) { level in
                             LevelSelectionChip(
                                 level: level,
-                                isSelected: viewModel.selectedLearningLevel == level
+                                isSelected: viewModel.selectedLearningLevel == level,
+                                isSaving: viewModel.isUpdatingLearningLevel && viewModel.selectedLearningLevel == level
                             ) {
                                 viewModel.updateProfileLevel(level)
                             }
@@ -411,11 +421,6 @@ struct ProfileView: View {
                     .padding(.vertical, 4)
                 }
                 .disabled(viewModel.hasResolvedServerSession == false || viewModel.isUpdatingLearningLevel)
-
-                if viewModel.isUpdatingLearningLevel {
-                    ProgressView("학습 레벨 저장 중...")
-                        .font(.footnote)
-                }
 
                 LevelDescriptionCard(level: viewModel.selectedLearningLevel)
             }
@@ -578,6 +583,99 @@ struct ProfileView: View {
         }
     }
 
+    private func initializeProfileSectionsIfNeeded() {
+        guard hasInitializedProfileSections == false else { return }
+        hasInitializedProfileSections = true
+        isNicknameExpanded = sectionHasValue(for: .nickname) == false
+        isBioExpanded = sectionHasValue(for: .bio) == false
+        isInstagramExpanded = sectionHasValue(for: .instagramId) == false
+    }
+
+    private func toggleProfileSection(_ field: ProfileEditField) {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            switch field {
+            case .nickname:
+                let next = isNicknameExpanded == false
+                isNicknameExpanded = next
+                if next {
+                    isBioExpanded = false
+                    isInstagramExpanded = false
+                }
+            case .bio:
+                let next = isBioExpanded == false
+                isBioExpanded = next
+                if next {
+                    isNicknameExpanded = false
+                    isInstagramExpanded = false
+                }
+            case .instagramId:
+                let next = isInstagramExpanded == false
+                isInstagramExpanded = next
+                if next {
+                    isNicknameExpanded = false
+                    isBioExpanded = false
+                }
+            }
+        }
+    }
+
+    private func collapseProfileSections() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            isNicknameExpanded = false
+            isBioExpanded = false
+            isInstagramExpanded = false
+        }
+    }
+
+    private func sectionHasValue(for field: ProfileEditField) -> Bool {
+        switch field {
+        case .nickname:
+            return viewModel.currentProfile.nickname.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+        case .bio:
+            return viewModel.currentProfile.bio.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+        case .instagramId:
+            return viewModel.currentProfile.instagramId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+        }
+    }
+
+    private func sectionValueText(for field: ProfileEditField) -> String {
+        switch field {
+        case .nickname:
+            let value = viewModel.currentProfile.nickname.trimmingCharacters(in: .whitespacesAndNewlines)
+            return value.isEmpty ? "아직 입력하지 않았어요" : value
+        case .bio:
+            let value = viewModel.currentProfile.bio.trimmingCharacters(in: .whitespacesAndNewlines)
+            return value.isEmpty ? "한줄 소개를 추가해 보세요" : value
+        case .instagramId:
+            let value = viewModel.currentProfile.instagramId.trimmingCharacters(in: .whitespacesAndNewlines)
+            return value.isEmpty ? "인스타 아이디를 연결해 보세요" : value
+        }
+    }
+
+    private func canSaveSection(_ field: ProfileEditField) -> Bool {
+        guard viewModel.isSavingProfile == false else { return false }
+
+        switch field {
+        case .nickname:
+            let draft = viewModel.nicknameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+            let current = viewModel.currentProfile.nickname.trimmingCharacters(in: .whitespacesAndNewlines)
+            return draft.isEmpty == false && draft != current && viewModel.hasResolvedServerSession
+        case .bio:
+            let draft = viewModel.bioDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+            let current = viewModel.currentProfile.bio.trimmingCharacters(in: .whitespacesAndNewlines)
+            return draft != current && viewModel.hasResolvedServerSession
+        case .instagramId:
+            let draft = viewModel.instagramIdDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+            let current = viewModel.currentProfile.instagramId.trimmingCharacters(in: .whitespacesAndNewlines)
+            return draft != current && viewModel.hasResolvedServerSession
+        }
+    }
+
+    private func saveProfileSection(_ field: ProfileEditField) {
+        focusedField = field
+        handleSaveButtonTap()
+    }
+
     private func showToast(message: String) {
         toastMessage = message
         withAnimation(.easeOut(duration: 0.2)) {
@@ -695,12 +793,12 @@ private struct ProfileInputField: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.textSecondary)
 
             TextField(
                 "",
                 text: $text,
-                prompt: Text(prompt).foregroundStyle(.tertiary),
+                prompt: Text(prompt).foregroundStyle(Color.textTertiary),
                 axis: axis
             )
             .keyboardType(keyboardType)
@@ -710,8 +808,13 @@ private struct ProfileInputField: View {
             .focused(focusedField, equals: field)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .background(Color(uiColor: .secondarySystemBackground))
+            .foregroundStyle(Color.textPrimary)
+            .background(Color.surfaceSecondary)
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.divider, lineWidth: 1)
+            )
         }
         .padding(.vertical, 2)
     }
@@ -720,31 +823,42 @@ private struct ProfileInputField: View {
 private struct LevelSelectionChip: View {
     let level: JLPTLevel
     let isSelected: Bool
+    let isSaving: Bool
     let onTap: () -> Void
 
     var body: some View {
-        let extraTrailingForCheck: CGFloat = 16
+        let trailingAccessoryWidth: CGFloat = 18
         Button(action: onTap) {
             Text(level.title)
                 .font(.callout)
                 .fontWeight(isSelected ? .semibold : .regular)
-                .foregroundStyle(isSelected ? .white : .primary)
+                .foregroundStyle(isSelected ? .white : Color.textPrimary)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .padding(.trailing, isSelected ? extraTrailingForCheck : 0)
-                .background(isSelected ? Color.accentColor : Color.clear)
+                .padding(.trailing, isSelected ? trailingAccessoryWidth : 0)
+                .background(isSelected ? Color.chipActive : Color.surfaceSecondary)
                 .overlay(
                     Capsule()
-                        .stroke(isSelected ? Color.accentColor : Color(uiColor: .systemGray3), lineWidth: 1)
+                        .stroke(isSelected ? Color.chipActive : Color.divider, lineWidth: 1)
                 )
                 .clipShape(Capsule())
                 .overlay(alignment: .trailing) {
                     if isSelected {
-                        Image(systemName: "checkmark")
-                            .font(.caption2)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.white)
-                            .padding(.trailing, 8)
+                        ZStack {
+                            Image(systemName: "checkmark")
+                                .font(.caption2)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.white)
+                                .opacity(isSaving ? 0 : 1)
+
+                            if isSaving {
+                                ProgressView()
+                                    .controlSize(.mini)
+                                    .tint(.white)
+                            }
+                        }
+                        .frame(width: trailingAccessoryWidth, alignment: .center)
+                        .padding(.trailing, 4)
                     }
                 }
         }
@@ -752,6 +866,87 @@ private struct LevelSelectionChip: View {
         .accessibilityLabel("\(level.title) 레벨")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .animation(.easeInOut(duration: 0.15), value: isSelected)
+    }
+}
+
+private struct ProfileEditableSectionView<Content: View>: View {
+    let title: String
+    let valueText: String
+    let hasValue: Bool
+    @Binding var isExpanded: Bool
+    let isSaving: Bool
+    let canSave: Bool
+    let onToggle: () -> Void
+    let onSave: () -> Void
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button(action: onToggle) {
+                HStack(alignment: .center, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(title)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Color.textPrimary)
+
+                        Text(valueText)
+                            .font(.footnote)
+                            .foregroundStyle(hasValue ? Color.textSecondary : Color.textTertiary)
+                            .lineLimit(isExpanded ? 2 : 1)
+                    }
+
+                    Spacer(minLength: 12)
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.iconSecondary)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 10) {
+                    content()
+
+                    HStack {
+                        Spacer()
+
+                        Button(action: onSave) {
+                            ZStack {
+                                Text("저장")
+                                    .font(.subheadline.weight(.semibold))
+                                    .opacity(isSaving ? 0 : 1)
+
+                                if isSaving {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                        .tint(.white)
+                                }
+                            }
+                            .foregroundStyle(.white)
+                            .frame(width: 72, height: 36)
+                            .background(canSave || isSaving ? Color.chipActive : Color.textTertiary)
+                            .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(canSave == false && isSaving == false)
+                        .opacity(isSaving || canSave ? 1 : 0.65)
+                    }
+                }
+                .padding(.top, 12)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .padding(14)
+        .background(Color.surfacePrimary)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.divider, lineWidth: 1)
+        )
+        .animation(.easeInOut(duration: 0.2), value: isExpanded)
     }
 }
 
