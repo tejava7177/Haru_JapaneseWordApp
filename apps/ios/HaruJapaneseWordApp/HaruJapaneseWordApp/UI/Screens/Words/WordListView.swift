@@ -173,10 +173,12 @@ private extension WordListView {
             } label: {
                 Image(systemName: "plus")
                     .font(.headline.weight(.bold))
+                    .foregroundStyle(Color.iconPrimary)
                     .frame(width: 38, height: 38)
-                    .background(Color.white.opacity(0.96))
+                    .background(Color.surfaceSecondary)
                     .clipShape(Circle())
-                    .shadow(color: Color.black.opacity(0.10), radius: 10, x: 0, y: 4)
+                    .overlay(Circle().stroke(Color.divider, lineWidth: 1))
+                    .shadow(color: Color.appShadow, radius: 10, x: 0, y: 4)
             }
             .buttonStyle(.plain)
 
@@ -185,7 +187,12 @@ private extension WordListView {
             } label: {
                 Image(systemName: "line.3.horizontal.decrease.circle")
                     .font(.title3)
-                    .foregroundStyle(selectedTab == .jlpt ? .primary : .secondary)
+                    .foregroundStyle(selectedTab == .jlpt ? Color.iconPrimary : Color.iconSecondary)
+                    .frame(width: 38, height: 38)
+                    .background(Color.surfaceSecondary)
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(Color.divider, lineWidth: 1))
+                    .shadow(color: Color.appShadow, radius: 10, x: 0, y: 4)
             }
             .buttonStyle(.plain)
             .disabled(selectedTab != .jlpt)
@@ -217,6 +224,7 @@ private extension WordListView {
         HStack(spacing: 12) {
             Text("단어")
                 .font(.largeTitle.weight(.bold))
+                .foregroundStyle(Color.textPrimary)
 
             Spacer()
 
@@ -229,31 +237,26 @@ private extension WordListView {
     var searchContent: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.iconSecondary)
 
-            TextField("검색", text: $viewModel.searchText)
+            TextField("", text: $viewModel.searchText, prompt: Text("검색").foregroundStyle(Color.textTertiary))
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+                .foregroundStyle(Color.textPrimary)
 
             if viewModel.searchText.isEmpty == false {
                 Button {
                     viewModel.searchText = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.iconSecondary)
                 }
                 .buttonStyle(.plain)
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .background(Color.white.opacity(0.82))
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.black.opacity(0.04), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.035), radius: 8, x: 0, y: 3)
+        .appSecondarySurfaceStyle(cornerRadius: 16)
     }
 
     var tabContent: some View {
@@ -277,7 +280,7 @@ private extension WordListView {
                 .font(.headline)
             Text("잠시 후 다시 시도해 주세요")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.textSecondary)
             Button("다시 시도") {
                 viewModel.load()
             }
@@ -287,7 +290,7 @@ private extension WordListView {
             if let debugError = viewModel.debugError {
                 Text(debugError)
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.textTertiary)
                     .multilineTextAlignment(.center)
                     .padding(.top, 4)
             }
@@ -311,14 +314,14 @@ private extension WordListView {
         VStack(spacing: 10) {
             Image(systemName: "line.3.horizontal.decrease.circle")
                 .font(.system(size: 28))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.iconSecondary)
 
             Text("선택한 조건에 맞는 단어가 없어요")
                 .font(.headline)
 
             Text("데이터 소스나 레벨, 단어장을 다시 선택해 보세요")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.textSecondary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -329,7 +332,7 @@ private extension WordListView {
     }
 
     var screenBackground: some View {
-        Color(uiColor: .systemGroupedBackground)
+        Color.appBackground
     }
 }
 
@@ -342,16 +345,16 @@ private struct WordTabButton: View {
         Button(action: action) {
             Text(title)
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(isSelected ? .white : .primary)
+                .foregroundStyle(isSelected ? Color.white : Color.textSecondary)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .background(isSelected ? Color.primary : Color.white.opacity(0.78))
+                .background(isSelected ? Color.chipActive : Color.chipInactive)
                 .overlay(
                     Capsule()
-                        .stroke(Color.black.opacity(0.04), lineWidth: 1)
+                        .stroke(isSelected ? Color.chipActive.opacity(0.65) : Color.divider, lineWidth: 1)
                 )
                 .clipShape(Capsule())
-                .shadow(color: Color.black.opacity(isSelected ? 0.05 : 0.03), radius: 6, x: 0, y: 2)
+                .shadow(color: Color.appShadow.opacity(isSelected ? 0.9 : 0.55), radius: 6, x: 0, y: 2)
         }
         .buttonStyle(.plain)
     }
@@ -370,12 +373,12 @@ private struct LevelToggleButton: View {
                 .font(.callout)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .foregroundStyle(isOn ? .white : Color(uiColor: .darkGray))
+                .foregroundStyle(isOn ? Color.white : Color.textSecondary)
                 .frame(minWidth: chipMinWidth, minHeight: chipHeight)
-                .background(isOn ? Color.accentColor : Color(uiColor: .systemGray5))
+                .background(isOn ? Color.chipActive : Color.chipInactive)
                 .overlay(
                     Capsule()
-                        .stroke(isOn ? Color.accentColor : Color(uiColor: .systemGray3), lineWidth: 1)
+                        .stroke(isOn ? Color.chipActive : Color.divider, lineWidth: 1)
                 )
                 .clipShape(Capsule())
         }
@@ -390,18 +393,18 @@ private struct BookChip: View {
     private let chipMinWidth: CGFloat = 46
 
     var body: some View {
-        let activeColor: Color = .orange
+        let activeColor: Color = .chipActive
         Button(action: onTap) {
             Image(systemName: "book.fill")
                 .font(.callout)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .foregroundStyle(isOn ? .white : Color(uiColor: .darkGray))
+                .foregroundStyle(isOn ? Color.white : Color.textSecondary)
                 .frame(minWidth: chipMinWidth, minHeight: chipHeight)
-                .background(isOn ? activeColor : Color(uiColor: .systemGray5))
+                .background(isOn ? activeColor : Color.chipInactive)
                 .overlay(
                     Capsule()
-                        .stroke(isOn ? activeColor : Color(uiColor: .systemGray3), lineWidth: 1)
+                        .stroke(isOn ? activeColor : Color.divider, lineWidth: 1)
                 )
                 .clipShape(Capsule())
         }
@@ -439,11 +442,13 @@ private struct ShuffleHUD: View {
                 .animation(action == .shuffled ? .linear(duration: 0.8).repeatForever(autoreverses: false) : .default, value: isAnimating)
             Text(message)
                 .font(.footnote)
+                .foregroundStyle(Color.textSecondary)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
-        .background(Color.black.opacity(0.06))
+        .background(Color.surfaceSecondary)
         .clipShape(Capsule())
+        .overlay(Capsule().stroke(Color.divider, lineWidth: 1))
         .onAppear {
             isAnimating = true
         }

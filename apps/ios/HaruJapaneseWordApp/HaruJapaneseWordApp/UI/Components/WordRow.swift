@@ -12,16 +12,17 @@ struct WordRow: View {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(word.word)
                     .font(.headline)
+                    .foregroundStyle(Color.textPrimary)
 
                 Spacer(minLength: 8)
 
                 if let level = word.jlptLevel {
                     Text(level.title)
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.textSecondary)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Color.black.opacity(0.04))
+                        .background(Color.chipInactive)
                         .clipShape(Capsule())
                 }
 
@@ -33,26 +34,20 @@ struct WordRow: View {
                 if isReviewWord {
                     Image(systemName: "book.fill")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.chipActive)
                 }
             }
 
             if showMeaning {
                 Text(meaningsText)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.textSecondary)
             }
         }
         .contentShape(Rectangle())
         .padding(.horizontal, 16)
         .padding(.vertical, verticalPadding)
-        .background(Color.white.opacity(0.96))
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.black.opacity(0.04), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: 4)
+        .appCardStyle(cornerRadius: 16)
     }
 }
 

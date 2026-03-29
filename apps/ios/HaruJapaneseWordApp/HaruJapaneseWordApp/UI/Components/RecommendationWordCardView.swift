@@ -17,17 +17,18 @@ struct RecommendationWordCardView: View {
                     Text(expression)
                         .font(.largeTitle)
                         .fontWeight(.semibold)
+                        .foregroundStyle(Color.textPrimary)
 
                     if reading.isEmpty == false {
                         Text(reading)
                             .font(.title3)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.textSecondary)
                     }
 
                     if meanings.isEmpty == false {
                         Text(meanings)
                             .font(.body)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.textSecondary)
                             .lineLimit(2)
                     }
                 }
@@ -42,13 +43,13 @@ struct RecommendationWordCardView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .contentShape(RoundedRectangle(cornerRadius: cornerRadius))
             .padding(10)
-            .background(Color.white)
+            .background(Color.surfacePrimary)
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius)
-                    .stroke(isExcluded ? Color.black.opacity(0.16) : Color.black.opacity(0.08), lineWidth: 1)
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(isExcluded ? Color.chipActive.opacity(0.55) : Color.divider, lineWidth: 1)
             )
-            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
-            .shadow(color: Color.black.opacity(0.04), radius: 5, x: 0, y: 2)
+            .shadow(color: Color.appShadow, radius: 8, x: 0, y: 3)
         }
         .overlay(alignment: .topTrailing) {
             Group {
@@ -69,7 +70,7 @@ struct RecommendationWordCardView: View {
     private var checkIcon: some View {
         Image(systemName: isExcluded ? "checkmark.circle.fill" : "circle")
             .font(.title3)
-            .foregroundStyle(isExcluded ? .primary : .secondary)
+            .foregroundStyle(isExcluded ? Color.chipActive : Color.iconSecondary)
             .frame(width: 44, height: 44)
             .contentShape(Rectangle())
     }
@@ -85,5 +86,5 @@ struct RecommendationWordCardView: View {
     )
     .frame(height: 228)
     .padding()
-    .background(Color(uiColor: .systemGroupedBackground))
+    .background(Color.appBackground)
 }

@@ -35,14 +35,14 @@ private extension NotebookListView {
         VStack(spacing: 10) {
             Image(systemName: "books.vertical")
                 .font(.system(size: 30))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.iconSecondary)
 
             Text("아직 만든 단어장이 없어요")
                 .font(.headline)
 
             Text("+ 버튼으로 첫 단어장을 만들어 보세요")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.textSecondary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -58,8 +58,8 @@ private extension NotebookListView {
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color.orange.opacity(0.20),
-                            Color.yellow.opacity(0.12)
+                            Color.brandSoft,
+                            Color.surfaceSecondary
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -68,7 +68,7 @@ private extension NotebookListView {
                 .frame(width: 48, height: 48)
                 .overlay(
                     Image(systemName: "text.book.closed")
-                        .foregroundStyle(Color.orange.opacity(0.95))
+                        .foregroundStyle(Color.chipActive)
                 )
 
             VStack(alignment: .leading, spacing: 6) {
@@ -77,7 +77,7 @@ private extension NotebookListView {
 
                 Text("\(notebook.items.count)개 단어 · \(notebook.createdAt.formatted(date: .abbreviated, time: .omitted))")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.textSecondary)
             }
 
             Spacer(minLength: 12)
@@ -85,13 +85,7 @@ private extension NotebookListView {
         .contentShape(Rectangle())
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(Color.white.opacity(0.96))
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.black.opacity(0.04), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.07), radius: 12, x: 0, y: 4)
+        .appCardStyle(cornerRadius: 16, shadowRadius: 12, shadowY: 4)
     }
 }
 

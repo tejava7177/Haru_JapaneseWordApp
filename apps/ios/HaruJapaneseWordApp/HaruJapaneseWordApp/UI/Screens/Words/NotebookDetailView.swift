@@ -47,7 +47,7 @@ struct NotebookDetailView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .background(Color(uiColor: .systemGroupedBackground))
+        .background(Color.appBackground)
         .navigationTitle(notebook?.title ?? "단어장")
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(item: $selectedItem) { item in
@@ -61,10 +61,12 @@ struct NotebookDetailView: View {
                     } label: {
                         Image(systemName: "plus")
                             .font(.headline.weight(.bold))
+                            .foregroundStyle(Color.iconPrimary)
                             .frame(width: 36, height: 36)
-                            .background(Color.white.opacity(0.96))
+                            .background(Color.surfaceSecondary)
                             .clipShape(Circle())
-                            .shadow(color: Color.black.opacity(0.10), radius: 10, x: 0, y: 4)
+                            .overlay(Circle().stroke(Color.divider, lineWidth: 1))
+                            .shadow(color: Color.appShadow, radius: 10, x: 0, y: 4)
                     }
 
                     Menu {
@@ -115,7 +117,7 @@ private extension NotebookDetailView {
                descriptionText.isEmpty == false {
                 Text(descriptionText)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.textSecondary)
             }
         }
         .padding(.horizontal, 20)
@@ -130,26 +132,20 @@ private extension NotebookDetailView {
         VStack(spacing: 12) {
             Image(systemName: "text.book.closed")
                 .font(.system(size: 30))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.iconSecondary)
 
             Text("아직 단어가 없어요")
                 .font(.headline)
 
             Text("첫 단어를 추가해보세요")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.textSecondary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 20)
         .padding(.vertical, 72)
-        .background(Color.white.opacity(0.92))
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.black.opacity(0.04), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.02), radius: 4, x: 0, y: 1)
+        .appCardStyle(cornerRadius: 16, shadowRadius: 4, shadowY: 1)
         .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
         .listRowSeparator(.hidden)
         .listRowBackground(Color.clear)
@@ -163,19 +159,13 @@ private extension NotebookDetailView {
 
             Text(item.meaning)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.textSecondary)
         }
         .contentShape(Rectangle())
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
-        .background(Color.white.opacity(0.94))
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.black.opacity(0.04), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.015), radius: 2, x: 0, y: 1)
+        .appCardStyle(cornerRadius: 16, shadowRadius: 4, shadowY: 1)
     }
 }
 

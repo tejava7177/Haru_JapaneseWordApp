@@ -35,14 +35,14 @@ struct HomeView: View {
                             if viewModel.targetDateText.isEmpty == false {
                                 Text(viewModel.targetDateText)
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.textTertiary)
                             }
                         }
 
                         if let errorMessage = viewModel.errorMessage {
                             Text(errorMessage)
                                 .font(.footnote)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.textSecondary)
                         }
 
                         if viewModel.cards.isEmpty == false {
@@ -69,7 +69,7 @@ struct HomeView: View {
                         } else {
                             Text("오늘의 추천을 준비 중입니다.")
                                 .font(.body)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.textSecondary)
                         }
                     }
 
@@ -80,7 +80,7 @@ struct HomeView: View {
                 .padding(.bottom, 16)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .background(Color(uiColor: .systemGroupedBackground))
+            .background(Color.appBackground)
             .navigationTitle("하루")
             .navigationDestination(for: Int.self) { wordId in
                 WordDetailView(wordId: wordId, repository: repository)
@@ -142,7 +142,7 @@ struct HomeView: View {
         } else {
             Text("오늘의 프레이즈를 준비 중입니다.")
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.textSecondary)
         }
     }
 
@@ -153,33 +153,27 @@ struct HomeView: View {
             HStack(spacing: 10) {
                 Image(systemName: "music.note")
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color.orange.opacity(0.95))
+                    .foregroundStyle(Color.chipActive)
                     .frame(width: 28, height: 28)
                     .background(
                         Circle()
-                            .fill(Color.orange.opacity(0.12))
+                            .fill(Color.brandSoft)
                     )
 
                 Text("今日のフレーズ")
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color.textPrimary)
 
                 Spacer(minLength: 8)
 
                 Image(systemName: "chevron.down")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.iconSecondary)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 11)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(Color.white)
-            )
-            .overlay(
-                Capsule(style: .continuous)
-                    .stroke(Color.black.opacity(0.06), lineWidth: 1)
-            )
+            .background(Capsule(style: .continuous).fill(Color.surfacePrimary))
+            .overlay(Capsule(style: .continuous).stroke(Color.divider, lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
@@ -195,7 +189,7 @@ struct HomeView: View {
                     if lyric.inspiredBy.isEmpty == false {
                         Text(lyric.inspiredBy)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.textTertiary)
                     }
                 }
 
@@ -210,32 +204,25 @@ struct HomeView: View {
                         Image(systemName: "chevron.up")
                             .font(.caption.weight(.semibold))
                     }
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.textSecondary)
                 }
                 .buttonStyle(.plain)
             }
 
             Text(lyric.jaLine)
                 .font(.body)
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color.textPrimary)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             if lyric.koLine.isEmpty == false {
                 Text(lyric.koLine)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.textSecondary)
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.white)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.black.opacity(0.06), lineWidth: 1)
-        )
+        .appCardStyle(cornerRadius: 16, shadowRadius: 6, shadowY: 2)
     }
 
     private func togglePhraseCard() {
@@ -248,7 +235,7 @@ struct HomeView: View {
         HStack(spacing: 8) {
             ForEach(0..<count, id: \.self) { index in
                 Circle()
-                    .fill(index == viewModel.selectedIndex ? Color.black.opacity(0.6) : Color.black.opacity(0.2))
+                    .fill(index == viewModel.selectedIndex ? Color.iconPrimary : Color.iconSecondary.opacity(0.28))
                     .frame(width: 6, height: 6)
             }
         }
@@ -256,7 +243,7 @@ struct HomeView: View {
         .padding(.horizontal, 12)
         .background(
             Capsule()
-                .fill(Color.black.opacity(0.08))
+                .fill(Color.surfaceSecondary)
         )
     }
 
@@ -267,7 +254,7 @@ struct HomeView: View {
                 .font(.headline)
             Text("잠시 후 다시 시도해 주세요")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.textSecondary)
             Button("다시 시도") {
                 viewModel.loadDeck()
             }
@@ -277,7 +264,7 @@ struct HomeView: View {
             if let debugError = viewModel.debugError {
                 Text(debugError)
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.textTertiary)
                     .multilineTextAlignment(.center)
                     .padding(.top, 4)
             }
@@ -299,41 +286,41 @@ private struct TsunTsunInboxSummaryCard: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("도착한 꽃잎")
                             .font(.headline)
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(Color.textPrimary)
                         Text(summary.senderHeadline)
                             .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(Color.textPrimary)
                     }
 
                     Spacer(minLength: 12)
 
                     Image(systemName: "chevron.right")
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.iconSecondary)
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(summary.promptText)
                         .font(.body.weight(.semibold))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Color.textPrimary)
 
                     if summary.reading.isEmpty == false {
                         Text(summary.reading)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.textSecondary)
                     }
                 }
 
                 HStack(spacing: 8) {
                     Label(summary.arrivalText, systemImage: "sparkles")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.orange.opacity(0.9))
+                        .foregroundStyle(Color.chipActive)
 
                     Spacer(minLength: 8)
 
                     Text("미답변 \(summary.unansweredCount)개")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.textSecondary)
                 }
             }
             .padding(16)

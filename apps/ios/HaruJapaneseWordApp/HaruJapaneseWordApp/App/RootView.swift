@@ -16,6 +16,7 @@ struct RootView: View {
 
     init(repository: DictionaryRepository) {
         self.repository = repository
+        AppTheme.configureTabBarAppearance()
         let settingsStore = AppSettingsStore()
         _settingsStore = StateObject(wrappedValue: settingsStore)
         _mateViewModel = StateObject(wrappedValue: MateViewModel(settingsStore: settingsStore))
@@ -83,6 +84,7 @@ struct RootView: View {
                 }
                 .tag(RootTab.profile)
         }
+        .background(Color.appBackground.ignoresSafeArea())
     }
 }
 
