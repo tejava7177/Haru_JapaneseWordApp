@@ -17,10 +17,7 @@ struct ProfileView: View {
     @State private var isShowingToast: Bool = false
     @State private var toastMessage: String = ""
     @State private var errorMessage: String?
-    @State private var isNicknameExpanded: Bool = false
-    @State private var isBioExpanded: Bool = false
-    @State private var isInstagramExpanded: Bool = false
-    @State private var hasInitializedProfileSections: Bool = false
+    @State private var isEditingProfile: Bool = false
     @FocusState private var focusedField: ProfileEditField?
 
     private let levelOptions: [JLPTLevel] = [.n5, .n4, .n3, .n2, .n1]
@@ -33,7 +30,6 @@ struct ProfileView: View {
         navigationContent
         .onAppear {
             viewModel.onViewAppear()
-            initializeProfileSectionsIfNeeded()
         }
         .onChange(of: viewModel.selectedPhotoItem) { newItem in
             guard newItem != nil else { return }
@@ -48,7 +44,8 @@ struct ProfileView: View {
         }
         .onChange(of: viewModel.profileSaveSuccessMessage) { message in
             guard let message else { return }
-            collapseProfileSections()
+            isEditingProfile = false
+            dismissKeyboard()
             showToast(message: message)
             viewModel.profileSaveSuccessMessage = nil
         }
@@ -225,100 +222,36 @@ struct ProfileView: View {
 
     private var profileSection: some View {
         Section("프로필") {
-            HStack(spacing: 16) {
-                PhotosPicker(selection: $viewModel.selectedPhotoItem, matching: .images) {
-                    avatarView
-                }
-                .buttonStyle(.plain)
-                .simultaneousGesture(
-                    TapGesture().onEnded {
-                        dismissKeyboard()
-                        print("[ProfileImage] picker opened")
-                    }
-                )
-
-                VStack(alignment: .leading, spacing: 6) {
-                    let nickname = viewModel.currentProfile.nickname
-                    let bio = viewModel.currentProfile.bio.trimmingCharacters(in: .whitespacesAndNewlines)
-
-                    Text(nickname.isEmpty ? "하루" : nickname)
-                        .font(.title3)
-                        .fontWeight(.semibold)
-
-                    if bio.isEmpty == false {
-                        Text(bio)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                    }
-
-                    Text("현재 학습 레벨 \(viewModel.selectedLearningLevel.title)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(Color(uiColor: .tertiarySystemFill))
-                        .clipShape(Capsule())
-                }
-            }
-            .padding(.vertical, 8)
-
-            ProfileEditableSectionView(
-                title: "닉네임",
-                valueText: sectionValueText(for: .nickname),
-                hasValue: sectionHasValue(for: .nickname),
-                isExpanded: $isNicknameExpanded,
-                isSaving: viewModel.isSavingProfile,
-                canSave: canSaveSection(.nickname),
-                onToggle: { toggleProfileSection(.nickname) },
-                onSave: { saveProfileSection(.nickname) }
-            ) {
-                ProfileInputField(
-                    title: "닉네임",
-                    prompt: "닉네임을 입력해 주세요",
-                    text: $viewModel.nicknameDraft,
+            if isEditingProfile {
+                ProfileEditCardView(
+                    nickname: $viewModel.nicknameDraft,
+                    bio: $viewModel.bioDraft,
+                    instagramId: $viewModel.instagramIdDraft,
+                    isSaving: viewModel.isSavingProfile,
+                    canSave: viewModel.canSaveProfile,
                     focusedField: $focusedField,
-                    field: .nickname
+                    onSave: handleSaveButtonTap,
+                    onCancel: cancelProfileEditing
                 )
-            }
-
-            ProfileEditableSectionView(
-                title: "한줄 소개",
-                valueText: sectionValueText(for: .bio),
-                hasValue: sectionHasValue(for: .bio),
-                isExpanded: $isBioExpanded,
-                isSaving: viewModel.isSavingProfile,
-                canSave: canSaveSection(.bio),
-                onToggle: { toggleProfileSection(.bio) },
-                onSave: { saveProfileSection(.bio) }
-            ) {
-                ProfileInputField(
-                    title: "한 줄 소개",
-                    prompt: "매일 한 문장씩 일본어 연습 중",
-                    text: $viewModel.bioDraft,
-                    axis: .vertical,
-                    focusedField: $focusedField,
-                    field: .bio
-                )
-            }
-
-            ProfileEditableSectionView(
-                title: "인스타",
-                valueText: sectionValueText(for: .instagramId),
-                hasValue: sectionHasValue(for: .instagramId),
-                isExpanded: $isInstagramExpanded,
-                isSaving: viewModel.isSavingProfile,
-                canSave: canSaveSection(.instagramId),
-                onToggle: { toggleProfileSection(.instagramId) },
-                onSave: { saveProfileSection(.instagramId) }
-            ) {
-                ProfileInputField(
-                    title: "인스타 아이디",
-                    prompt: "@haru_jp",
-                    text: $viewModel.instagramIdDraft,
-                    keyboardType: .asciiCapable,
-                    focusedField: $focusedField,
-                    field: .instagramId
+            } else {
+                ProfileSummaryCardView(
+                    nickname: profileSummaryNickname,
+                    bio: profileSummaryBio,
+                    instagramId: profileSummaryInstagram,
+                    learningLevelTitle: viewModel.selectedLearningLevel.title,
+                    avatarView: {
+                        PhotosPicker(selection: $viewModel.selectedPhotoItem, matching: .images) {
+                            avatarView
+                        }
+                        .buttonStyle(.plain)
+                        .simultaneousGesture(
+                            TapGesture().onEnded {
+                                dismissKeyboard()
+                                print("[ProfileImage] picker opened")
+                            }
+                        )
+                    },
+                    onEdit: beginProfileEditing
                 )
             }
 
@@ -583,97 +516,40 @@ struct ProfileView: View {
         }
     }
 
-    private func initializeProfileSectionsIfNeeded() {
-        guard hasInitializedProfileSections == false else { return }
-        hasInitializedProfileSections = true
-        isNicknameExpanded = sectionHasValue(for: .nickname) == false
-        isBioExpanded = sectionHasValue(for: .bio) == false
-        isInstagramExpanded = sectionHasValue(for: .instagramId) == false
+    private var profileSummaryNickname: String {
+        let nickname = viewModel.currentProfile.nickname.trimmingCharacters(in: .whitespacesAndNewlines)
+        return nickname.isEmpty ? "하루" : nickname
     }
 
-    private func toggleProfileSection(_ field: ProfileEditField) {
+    private var profileSummaryBio: String? {
+        let bio = viewModel.currentProfile.bio.trimmingCharacters(in: .whitespacesAndNewlines)
+        return bio.isEmpty ? nil : bio
+    }
+
+    private var profileSummaryInstagram: String? {
+        let instagram = viewModel.currentProfile.instagramId.trimmingCharacters(in: .whitespacesAndNewlines)
+        return instagram.isEmpty ? nil : instagram
+    }
+
+    private func beginProfileEditing() {
+        viewModel.nicknameDraft = viewModel.currentProfile.nickname
+        viewModel.bioDraft = viewModel.currentProfile.bio
+        viewModel.instagramIdDraft = viewModel.currentProfile.instagramId
+        viewModel.clearProfileSaveError()
         withAnimation(.easeInOut(duration: 0.2)) {
-            switch field {
-            case .nickname:
-                let next = isNicknameExpanded == false
-                isNicknameExpanded = next
-                if next {
-                    isBioExpanded = false
-                    isInstagramExpanded = false
-                }
-            case .bio:
-                let next = isBioExpanded == false
-                isBioExpanded = next
-                if next {
-                    isNicknameExpanded = false
-                    isInstagramExpanded = false
-                }
-            case .instagramId:
-                let next = isInstagramExpanded == false
-                isInstagramExpanded = next
-                if next {
-                    isNicknameExpanded = false
-                    isBioExpanded = false
-                }
-            }
+            isEditingProfile = true
         }
     }
 
-    private func collapseProfileSections() {
+    private func cancelProfileEditing() {
+        dismissKeyboard()
+        viewModel.nicknameDraft = viewModel.currentProfile.nickname
+        viewModel.bioDraft = viewModel.currentProfile.bio
+        viewModel.instagramIdDraft = viewModel.currentProfile.instagramId
+        viewModel.clearProfileSaveError()
         withAnimation(.easeInOut(duration: 0.2)) {
-            isNicknameExpanded = false
-            isBioExpanded = false
-            isInstagramExpanded = false
+            isEditingProfile = false
         }
-    }
-
-    private func sectionHasValue(for field: ProfileEditField) -> Bool {
-        switch field {
-        case .nickname:
-            return viewModel.currentProfile.nickname.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-        case .bio:
-            return viewModel.currentProfile.bio.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-        case .instagramId:
-            return viewModel.currentProfile.instagramId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-        }
-    }
-
-    private func sectionValueText(for field: ProfileEditField) -> String {
-        switch field {
-        case .nickname:
-            let value = viewModel.currentProfile.nickname.trimmingCharacters(in: .whitespacesAndNewlines)
-            return value.isEmpty ? "아직 입력하지 않았어요" : value
-        case .bio:
-            let value = viewModel.currentProfile.bio.trimmingCharacters(in: .whitespacesAndNewlines)
-            return value.isEmpty ? "한줄 소개를 추가해 보세요" : value
-        case .instagramId:
-            let value = viewModel.currentProfile.instagramId.trimmingCharacters(in: .whitespacesAndNewlines)
-            return value.isEmpty ? "인스타 아이디를 연결해 보세요" : value
-        }
-    }
-
-    private func canSaveSection(_ field: ProfileEditField) -> Bool {
-        guard viewModel.isSavingProfile == false else { return false }
-
-        switch field {
-        case .nickname:
-            let draft = viewModel.nicknameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-            let current = viewModel.currentProfile.nickname.trimmingCharacters(in: .whitespacesAndNewlines)
-            return draft.isEmpty == false && draft != current && viewModel.hasResolvedServerSession
-        case .bio:
-            let draft = viewModel.bioDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-            let current = viewModel.currentProfile.bio.trimmingCharacters(in: .whitespacesAndNewlines)
-            return draft != current && viewModel.hasResolvedServerSession
-        case .instagramId:
-            let draft = viewModel.instagramIdDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-            let current = viewModel.currentProfile.instagramId.trimmingCharacters(in: .whitespacesAndNewlines)
-            return draft != current && viewModel.hasResolvedServerSession
-        }
-    }
-
-    private func saveProfileSection(_ field: ProfileEditField) {
-        focusedField = field
-        handleSaveButtonTap()
     }
 
     private func showToast(message: String) {
@@ -869,74 +745,55 @@ private struct LevelSelectionChip: View {
     }
 }
 
-private struct ProfileEditableSectionView<Content: View>: View {
-    let title: String
-    let valueText: String
-    let hasValue: Bool
-    @Binding var isExpanded: Bool
-    let isSaving: Bool
-    let canSave: Bool
-    let onToggle: () -> Void
-    let onSave: () -> Void
-    @ViewBuilder let content: () -> Content
+private struct ProfileSummaryCardView<AvatarContent: View>: View {
+    let nickname: String
+    let bio: String?
+    let instagramId: String?
+    let learningLevelTitle: String
+    @ViewBuilder let avatarView: () -> AvatarContent
+    let onEdit: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Button(action: onToggle) {
-                HStack(alignment: .center, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(title)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(Color.textPrimary)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 14) {
+                avatarView()
 
-                        Text(valueText)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(nickname)
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(Color.textPrimary)
+
+                    if let bio {
+                        Text(bio)
                             .font(.footnote)
-                            .foregroundStyle(hasValue ? Color.textSecondary : Color.textTertiary)
-                            .lineLimit(isExpanded ? 2 : 1)
+                            .foregroundStyle(Color.textSecondary)
+                            .lineLimit(2)
                     }
 
-                    Spacer(minLength: 12)
-
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.iconSecondary)
-                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            if isExpanded {
-                VStack(alignment: .leading, spacing: 10) {
-                    content()
-
-                    HStack {
-                        Spacer()
-
-                        Button(action: onSave) {
-                            ZStack {
-                                Text("저장")
-                                    .font(.subheadline.weight(.semibold))
-                                    .opacity(isSaving ? 0 : 1)
-
-                                if isSaving {
-                                    ProgressView()
-                                        .controlSize(.small)
-                                        .tint(.white)
-                                }
-                            }
-                            .foregroundStyle(.white)
-                            .frame(width: 72, height: 36)
-                            .background(canSave || isSaving ? Color.chipActive : Color.textTertiary)
+                    HStack(spacing: 8) {
+                        Text(learningLevelTitle)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color.textSecondary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(Color.surfaceSecondary)
                             .clipShape(Capsule())
+                            .overlay(Capsule().stroke(Color.divider, lineWidth: 1))
+
+                        if let instagramId {
+                            Label("@\(instagramId)", systemImage: "camera")
+                                .font(.caption)
+                                .foregroundStyle(Color.textSecondary)
+                                .lineLimit(1)
                         }
-                        .buttonStyle(.plain)
-                        .disabled(canSave == false && isSaving == false)
-                        .opacity(isSaving || canSave ? 1 : 0.65)
                     }
                 }
-                .padding(.top, 12)
-                .transition(.opacity.combined(with: .move(edge: .top)))
+
+                Spacer(minLength: 8)
+
+                Button("수정", action: onEdit)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.chipActive)
             }
         }
         .padding(14)
@@ -946,7 +803,91 @@ private struct ProfileEditableSectionView<Content: View>: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(Color.divider, lineWidth: 1)
         )
-        .animation(.easeInOut(duration: 0.2), value: isExpanded)
+    }
+}
+
+private struct ProfileEditCardView: View {
+    @Binding var nickname: String
+    @Binding var bio: String
+    @Binding var instagramId: String
+    let isSaving: Bool
+    let canSave: Bool
+    var focusedField: FocusState<ProfileEditField?>.Binding
+    let onSave: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("프로필 수정")
+                .font(.headline)
+                .foregroundStyle(Color.textPrimary)
+
+            ProfileInputField(
+                title: "닉네임",
+                prompt: "닉네임을 입력해 주세요",
+                text: $nickname,
+                focusedField: focusedField,
+                field: .nickname
+            )
+
+            ProfileInputField(
+                title: "한 줄 소개",
+                prompt: "매일 한 문장씩 일본어 연습 중",
+                text: $bio,
+                axis: .vertical,
+                focusedField: focusedField,
+                field: .bio
+            )
+
+            ProfileInputField(
+                title: "인스타 아이디",
+                prompt: "@haru_jp",
+                text: $instagramId,
+                keyboardType: .asciiCapable,
+                focusedField: focusedField,
+                field: .instagramId
+            )
+
+            HStack(spacing: 10) {
+                Button("취소", action: onCancel)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.textSecondary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 38)
+                    .background(Color.surfaceSecondary)
+                    .clipShape(Capsule())
+                    .overlay(Capsule().stroke(Color.divider, lineWidth: 1))
+
+                Button(action: onSave) {
+                    ZStack {
+                        Text("저장")
+                            .font(.subheadline.weight(.semibold))
+                            .opacity(isSaving ? 0 : 1)
+
+                        if isSaving {
+                            ProgressView()
+                                .controlSize(.small)
+                                .tint(.white)
+                        }
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 38)
+                    .background(canSave || isSaving ? Color.chipActive : Color.textTertiary)
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(canSave == false && isSaving == false)
+                .opacity(isSaving || canSave ? 1 : 0.65)
+            }
+        }
+        .padding(14)
+        .background(Color.surfacePrimary)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.divider, lineWidth: 1)
+        )
     }
 }
 
