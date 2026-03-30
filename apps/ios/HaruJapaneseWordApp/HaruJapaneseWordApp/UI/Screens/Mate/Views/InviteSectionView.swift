@@ -10,14 +10,21 @@ struct InviteSectionView: View {
     let isBusy: Bool
     let errorMessage: String?
     @State private var hasAttemptedSubmit: Bool = false
+    @State private var shouldRenderContent: Bool = false
+    @State private var isClosingCollapsed: Bool = false
+    @State private var contentOpacity: Double = 0
+    @State private var contentScale: CGFloat = 0.985
+
+    private let expandDuration: Double = 0.22
+    private let fadeOutDuration: Double = 0.14
+    private let collapseDuration: Double = 0.18
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            headerButton
+            headerRow
 
-            contentWrapper
+            contentArea
         }
-        .animation(.easeInOut(duration: 0.22), value: isExpanded)
         .padding(14)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -30,16 +37,47 @@ struct InviteSectionView: View {
         .onChange(of: inviteCodeInput) { _, _ in
             hasAttemptedSubmit = false
         }
+        .onAppear {
+            if isExpanded {
+                shouldRenderContent = true
+                contentOpacity = 1
+                contentScale = 1
+                isClosingCollapsed = false
+            }
+        }
+        .onChange(of: isExpanded) { _, expanded in
+            updateExpansionState(expanded)
+        }
+    }
+
+    private var contentArea: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Divider()
+                .overlay(Color(uiColor: .separator).opacity(0.18))
+                .opacity(shouldRenderContent ? 1 : 0)
+                .padding(.top, shouldRenderContent ? 12 : 0)
+
+            contentWrapper
+        }
+        .animation(.easeInOut(duration: expandDuration), value: shouldRenderContent)
+        .animation(.easeInOut(duration: fadeOutDuration), value: contentOpacity)
+        .animation(.easeInOut(duration: fadeOutDuration), value: contentScale)
+        .animation(.easeInOut(duration: collapseDuration), value: isClosingCollapsed)
     }
 
     private var contentWrapper: some View {
-        inviteContent
-            .padding(.top, isExpanded ? 12 : 0)
-            .opacity(isExpanded ? 1 : 0)
-            .frame(height: isExpanded ? nil : 0, alignment: .top)
-            .clipped()
-            .allowsHitTesting(isExpanded)
-            .accessibilityHidden(isExpanded == false)
+        Group {
+            if shouldRenderContent {
+                inviteContent
+                    .padding(.top, isClosingCollapsed ? 0 : 12)
+                    .opacity(contentOpacity)
+                    .scaleEffect(contentScale, anchor: .top)
+            }
+        }
+        .frame(height: isClosingCollapsed ? 0 : nil, alignment: .top)
+        .clipped()
+        .allowsHitTesting(isExpanded)
+        .accessibilityHidden(isExpanded == false)
     }
 
     private var inviteContent: some View {
@@ -49,15 +87,13 @@ struct InviteSectionView: View {
         }
     }
 
-    private var headerButton: some View {
+    private var headerRow: some View {
         Button {
             if isExpanded == false, myInviteCode.isEmpty {
                 onShowInviteCode()
             }
 
-            withAnimation(.easeInOut(duration: 0.22)) {
-                isExpanded.toggle()
-            }
+            isExpanded.toggle()
         } label: {
             HStack(spacing: 10) {
                 Text("초대코드")
@@ -70,12 +106,15 @@ struct InviteSectionView: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .rotationEffect(.degrees(isExpanded ? 180 : 0))
-                    .animation(.easeInOut(duration: 0.22), value: isExpanded)
+                    .animation(.easeInOut(duration: expandDuration), value: isExpanded)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .transaction { transaction in
+            transaction.animation = nil
+        }
     }
 
     private var myInviteCodeBlock: some View {
@@ -186,5 +225,35 @@ struct InviteSectionView: View {
         guard trimmedInput.isEmpty == false else { return }
 
         onJoin(inviteCodeInput)
+    }
+
+    private func updateExpansionState(_ expanded: Bool) {
+        if expanded {
+            shouldRenderContent = true
+            isClosingCollapsed = false
+            contentScale = 0.985
+            contentOpacity = 0
+
+            DispatchQueue.main.async {
+                guard isExpanded else { return }
+                contentOpacity = 1
+                contentScale = 1
+            }
+        } else {
+            contentOpacity = 0
+            contentScale = 0.985
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + fadeOutDuration) {
+                guard isExpanded == false else { return }
+
+                isClosingCollapsed = true
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + collapseDuration) {
+                    guard isExpanded == false else { return }
+                    shouldRenderContent = false
+                    isClosingCollapsed = false
+                }
+            }
+        }
     }
 }
