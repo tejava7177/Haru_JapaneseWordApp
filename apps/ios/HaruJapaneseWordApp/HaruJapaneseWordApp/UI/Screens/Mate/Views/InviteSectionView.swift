@@ -9,40 +9,15 @@ struct InviteSectionView: View {
     let onJoin: (String) -> Void
     let isBusy: Bool
     let errorMessage: String?
+    @State private var hasAttemptedSubmit: Bool = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Button {
-                if isExpanded == false, myInviteCode.isEmpty {
-                    onShowInviteCode()
-                }
+        VStack(alignment: .leading, spacing: 0) {
+            headerButton
 
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    isExpanded.toggle()
-                }
-            } label: {
-                HStack(spacing: 10) {
-                    Text("초대코드")
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-
-                    Spacer()
-
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .buttonStyle(.plain)
-
-            Group {
-                if isExpanded {
-                    inviteContent
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                }
-            }
+            contentWrapper
         }
-        .animation(.easeInOut(duration: 0.25), value: isExpanded)
+        .animation(.easeInOut(duration: 0.22), value: isExpanded)
         .padding(14)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -52,6 +27,19 @@ struct InviteSectionView: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(Color(uiColor: .separator).opacity(0.3), lineWidth: 1)
         )
+        .onChange(of: inviteCodeInput) { _, _ in
+            hasAttemptedSubmit = false
+        }
+    }
+
+    private var contentWrapper: some View {
+        inviteContent
+            .padding(.top, isExpanded ? 12 : 0)
+            .opacity(isExpanded ? 1 : 0)
+            .frame(height: isExpanded ? nil : 0, alignment: .top)
+            .clipped()
+            .allowsHitTesting(isExpanded)
+            .accessibilityHidden(isExpanded == false)
     }
 
     private var inviteContent: some View {
@@ -59,6 +47,35 @@ struct InviteSectionView: View {
             myInviteCodeBlock
             inviteCodeJoinBlock
         }
+    }
+
+    private var headerButton: some View {
+        Button {
+            if isExpanded == false, myInviteCode.isEmpty {
+                onShowInviteCode()
+            }
+
+            withAnimation(.easeInOut(duration: 0.22)) {
+                isExpanded.toggle()
+            }
+        } label: {
+            HStack(spacing: 10) {
+                Text("초대코드")
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+
+                Spacer()
+
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                    .animation(.easeInOut(duration: 0.22), value: isExpanded)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private var myInviteCodeBlock: some View {
@@ -118,7 +135,7 @@ struct InviteSectionView: View {
                 .autocorrectionDisabled(true)
                 .submitLabel(.go)
                 .onSubmit {
-                    onJoin(inviteCodeInput)
+                    handleJoin()
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
@@ -129,7 +146,7 @@ struct InviteSectionView: View {
                 .disabled(isBusy)
 
             Button("연결") {
-                onJoin(inviteCodeInput)
+                handleJoin()
             }
             .font(.caption.weight(.semibold))
             .padding(.horizontal, 14)
@@ -141,11 +158,33 @@ struct InviteSectionView: View {
             .foregroundStyle(Color.white)
             .disabled(isBusy)
 
-            if let errorMessage, errorMessage.isEmpty == false {
-                Text(errorMessage)
+            if let visibleErrorMessage {
+                Text(visibleErrorMessage)
                     .font(.caption)
                     .foregroundStyle(.red)
             }
         }
+    }
+
+    private var visibleErrorMessage: String? {
+        let trimmedInput = inviteCodeInput.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard hasAttemptedSubmit else { return nil }
+
+        if trimmedInput.isEmpty {
+            return "초대 코드를 입력해 주세요."
+        }
+
+        guard let errorMessage, errorMessage.isEmpty == false else { return nil }
+        return errorMessage
+    }
+
+    private func handleJoin() {
+        hasAttemptedSubmit = true
+
+        let trimmedInput = inviteCodeInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedInput.isEmpty == false else { return }
+
+        onJoin(inviteCodeInput)
     }
 }
