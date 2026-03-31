@@ -45,7 +45,16 @@ struct BuddyAPIService: BuddyAPIServiceProtocol, Sendable {
             path: "api/buddies",
             queryItems: [URLQueryItem(name: "userId", value: userId)]
         )
-        return try await client.get(endpoint, responseType: [BuddySummaryResponse].self)
+        let response = try await client.get(endpoint, responseType: [BuddySummaryResponse].self)
+        for buddy in response {
+            print(
+                "[BuddyAPI] decoded buddy summary id=\(buddy.id) " +
+                "userId=\(buddy.userId.map(String.init) ?? "nil") " +
+                "buddyUserId=\(buddy.buddyUserId.map(String.init) ?? "nil") " +
+                "lastActiveAt=\(buddy.lastActiveAt ?? "nil")"
+            )
+        }
+        return response
     }
 
     nonisolated func fetchMyBuddyCode(userId: String) async throws -> MyBuddyCodeResponse {
