@@ -28,6 +28,11 @@ final class HomeViewModel: ObservableObject {
     private var hasLoadedInbox: Bool = false
     private var lastInboxLoadUserId: String?
     private var isLoadingInbox: Bool = false
+    private var refreshTask: Task<Void, Never>?
+    private var pendingForcedRefresh: Bool = false
+    private var pendingForcedRefreshBypassesThrottle: Bool = false
+    private var lastRefreshAt: Date?
+    private let minimumRefreshInterval: TimeInterval = 3
 
     init(
         repository: DictionaryRepository,
@@ -62,57 +67,39 @@ final class HomeViewModel: ObservableObject {
                 self?.loadInboxSummary(triggerSource: "notification", force: true)
             }
             .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: .buddyPetalStatusDidChange)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] notification in
+                let trigger = BuddyPushPayload.trigger(from: notification.userInfo) ?? .pushForeground
+                self?.requestImmediateRefresh(trigger: trigger)
+            }
+            .store(in: &cancellables)
     }
 
     func loadDeck(triggerSource: String = "manual", force: Bool = false) {
-        print("[Home] trigger source=\(triggerSource)")
-        let loadKey = makeDeckLoadKey()
-        if isLoadingDeck, force == false {
-            print("[Home] fetch skipped already loaded")
-            return
-        }
-        if force == false, hasLoadedDeck, lastDeckLoadKey == loadKey {
-            print("[Home] fetch skipped already loaded")
-            return
-        }
-
-        isLoadingDeck = true
-        isLoading = true
-        lastDeckLoadKey = loadKey
-        Task {
-            async let deckLoad: Void = loadDeckFromPrimarySource()
-            async let inboxLoad: Void = loadInboxSummaryFromPrimarySource(force: force)
-            _ = await (deckLoad, inboxLoad)
-            self.isLoadingDeck = false
-            self.isLoading = false
-            self.hasLoadedDeck = true
-        }
+        refreshHomeContent(triggerSource: triggerSource, force: force)
     }
 
     func refreshDeckIfNeeded(triggerSource: String) {
         let currentLoadKey = makeDeckLoadKey()
         let shouldForceReload = hasLoadedDeck && lastDeckLoadKey != currentLoadKey
-        loadDeck(triggerSource: triggerSource, force: shouldForceReload)
+        refreshHomeContent(triggerSource: triggerSource, force: shouldForceReload)
     }
 
     func loadInboxSummary(triggerSource: String = "manual", force: Bool = false) {
-        print("[Home] trigger source=\(triggerSource)")
-        let userId = settingsStore.currentBackendUserId
-        if isLoadingInbox, force == false {
-            print("[Home] fetch skipped already loaded")
-            return
-        }
-        if force == false, hasLoadedInbox, lastInboxLoadUserId == userId {
-            print("[Home] fetch skipped already loaded")
-            return
-        }
+        refreshHomeContent(triggerSource: triggerSource, force: force)
+    }
 
-        isLoadingInbox = true
-        Task {
-            await loadInboxSummaryFromPrimarySource(force: force)
-            self.isLoadingInbox = false
-            self.hasLoadedInbox = true
-        }
+    func onSceneDidBecomeActive() {
+        requestImmediateRefresh(trigger: .sceneActive)
+    }
+
+    func manualRefresh() async {
+        print("[Home] home manual refresh started")
+        requestImmediateRefresh(source: "manualPullToRefresh")
+        await waitForRefreshCompletion(source: "manualPullToRefresh")
+        print("[Home] home manual refresh completed")
     }
 
     private func loadDeckFromPrimarySource() async {
@@ -257,5 +244,97 @@ final class HomeViewModel: ObservableObject {
             return "server:\(backendUserId):\(todayKey)"
         }
         return "local:\(settingsStore.settings.homeDeckLevel.rawValue):\(todayKey)"
+    }
+
+    private func refreshHomeContent(triggerSource: String, force: Bool = false, bypassThrottle: Bool = false) {
+        print("[Home] refresh requested source=\(triggerSource) force=\(force) bypassThrottle=\(bypassThrottle)")
+        let loadKey = makeDeckLoadKey()
+        let userId = settingsStore.currentBackendUserId
+
+        if refreshTask != nil {
+            if force {
+                pendingForcedRefresh = true
+                pendingForcedRefreshBypassesThrottle = pendingForcedRefreshBypassesThrottle || bypassThrottle
+                print("[Home] home pending refresh queued source=\(triggerSource)")
+            } else {
+                print("[Home] refresh skipped in-flight source=\(triggerSource)")
+            }
+            return
+        }
+
+        if force,
+           bypassThrottle == false,
+           let lastRefreshAt,
+           Date().timeIntervalSince(lastRefreshAt) < minimumRefreshInterval {
+            print("[Home] refresh throttled source=\(triggerSource)")
+            return
+        }
+
+        if force == false,
+           hasLoadedDeck,
+           lastDeckLoadKey == loadKey,
+           hasLoadedInbox,
+           lastInboxLoadUserId == userId {
+            print("[Home] fetch skipped already loaded source=\(triggerSource)")
+            return
+        }
+
+        lastDeckLoadKey = loadKey
+        lastInboxLoadUserId = userId
+        isLoading = true
+        isLoadingDeck = true
+        isLoadingInbox = true
+        if force {
+            print("[Home] force refresh executed source=\(triggerSource) bypassThrottle=\(bypassThrottle)")
+        }
+        print("[Home] refresh started source=\(triggerSource)")
+
+        refreshTask = Task { [weak self] in
+            guard let self else { return }
+            async let deckLoad: Void = self.loadDeckFromPrimarySource()
+            async let inboxLoad: Void = self.loadInboxSummaryFromPrimarySource(force: true)
+            _ = await (deckLoad, inboxLoad)
+
+            self.isLoadingDeck = false
+            self.isLoadingInbox = false
+            self.isLoading = false
+            self.hasLoadedDeck = true
+            self.hasLoadedInbox = self.settingsStore.currentBackendUserId != nil
+            self.lastRefreshAt = Date()
+            self.refreshTask = nil
+            print("[Home] refresh completed source=\(triggerSource)")
+
+            if self.pendingForcedRefresh {
+                let shouldBypassThrottle = self.pendingForcedRefreshBypassesThrottle
+                self.pendingForcedRefresh = false
+                self.pendingForcedRefreshBypassesThrottle = false
+                print("[Home] home pending refresh executed source=pendingForcedRefresh")
+                self.refreshHomeContent(
+                    triggerSource: "pendingForcedRefresh",
+                    force: true,
+                    bypassThrottle: shouldBypassThrottle
+                )
+            }
+        }
+    }
+
+    private func requestImmediateRefresh(trigger: BuddyPetalStatusChangeTrigger) {
+        print("[Home] home refresh trigger=\(trigger.rawValue)")
+        requestImmediateRefresh(source: trigger.rawValue)
+    }
+
+    private func requestImmediateRefresh(source: String) {
+        refreshHomeContent(
+            triggerSource: source,
+            force: true,
+            bypassThrottle: true
+        )
+    }
+
+    private func waitForRefreshCompletion(source: String) async {
+        while refreshTask != nil || pendingForcedRefresh {
+            try? await Task.sleep(nanoseconds: 150_000_000)
+        }
+        print("[Home] refresh wait completed source=\(source)")
     }
 }

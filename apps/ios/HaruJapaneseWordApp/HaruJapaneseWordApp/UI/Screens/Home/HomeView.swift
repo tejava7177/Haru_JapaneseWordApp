@@ -81,6 +81,9 @@ struct HomeView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .background(Color.appBackground)
+            .refreshable {
+                await viewModel.manualRefresh()
+            }
             .navigationTitle("하루")
             .navigationDestination(for: Int.self) { wordId in
                 WordDetailView(wordId: wordId, repository: repository)
@@ -97,7 +100,7 @@ struct HomeView: View {
         }
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
-            viewModel.refreshDeckIfNeeded(triggerSource: "scenePhaseActive")
+            viewModel.onSceneDidBecomeActive()
         }
     }
 

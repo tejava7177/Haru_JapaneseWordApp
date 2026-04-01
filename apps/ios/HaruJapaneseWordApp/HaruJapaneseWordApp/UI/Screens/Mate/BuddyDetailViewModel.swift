@@ -46,6 +46,8 @@ final class BuddyDetailViewModel: ObservableObject {
     private var refreshTask: Task<Void, Never>?
     private var pollingTask: Task<Void, Never>?
     private var pendingForcedRefresh: Bool = false
+    private var pendingForcedRefreshBypassesThrottle: Bool = false
+    private var cancellables: Set<AnyCancellable> = []
 
     init(
         buddyId: String,
@@ -58,6 +60,14 @@ final class BuddyDetailViewModel: ObservableObject {
         self.settingsStore = settingsStore
         self.service = service
         print("[BuddyDetail] init currentLoginUser=\(settingsStore.mateUserId) myUserId=\(resolvedMyUserId ?? "<nil>") buddyId=\(buddyId) buddyName=\(buddyName)")
+
+        NotificationCenter.default.publisher(for: .buddyPetalStatusDidChange)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] notification in
+                let trigger = BuddyPushPayload.trigger(from: notification.userInfo) ?? .pushForeground
+                self?.requestImmediateRefresh(trigger: trigger)
+            }
+            .store(in: &cancellables)
     }
 
     var selectedItem: BuddyWordItemUIModel? {
@@ -106,13 +116,21 @@ final class BuddyDetailViewModel: ObservableObject {
     func onScenePhaseChanged(_ phase: ScenePhase) {
         isAppActive = phase == .active
         if phase == .active {
-            refresh(force: true, reason: "sceneActive")
+            requestImmediateRefresh(trigger: .sceneActive)
         }
         updatePollingIfNeeded()
     }
 
-    func refresh(force: Bool, reason: String) {
+    func manualRefresh() async {
+        print("[BuddyDetail] manual pull-to-refresh requested")
+        requestImmediateRefresh(source: "manualPullToRefresh")
+        await waitForRefreshCompletion(source: "manualPullToRefresh")
+    }
+
+    func refresh(force: Bool, reason: String, bypassThrottle: Bool = false) {
+        print("[BuddyDetail] refresh requested reason=\(reason) force=\(force) bypassThrottle=\(bypassThrottle)")
         if force,
+           bypassThrottle == false,
            let lastRefreshAt,
            Date().timeIntervalSince(lastRefreshAt) < minimumRefreshInterval {
             print("[BuddyDetail] refresh throttled reason=\(reason)")
@@ -122,6 +140,8 @@ final class BuddyDetailViewModel: ObservableObject {
         if refreshTask != nil {
             if force {
                 pendingForcedRefresh = true
+                pendingForcedRefreshBypassesThrottle = pendingForcedRefreshBypassesThrottle || bypassThrottle
+                print("[BuddyDetail] pending refresh queued reason=\(reason) bypassThrottle=\(pendingForcedRefreshBypassesThrottle)")
             }
             print("[BuddyDetail] refresh skipped in-flight reason=\(reason)")
             return
@@ -146,6 +166,10 @@ final class BuddyDetailViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
         nonFatalMessage = nil
+        if force {
+            print("[BuddyDetail] force refresh executed reason=\(reason) bypassThrottle=\(bypassThrottle)")
+        }
+        print("[BuddyDetail] refresh started reason=\(reason)")
         print("[BuddyDetail] currentLoginUser=\(settingsStore.mateUserId) myUserId=\(myUserId) buddyId=\(buddyId) buddyName=\(buddyName)")
         print("[BuddyDetail] dailyWordsRequestUserId=\(dailyWordsUserId)")
         print("[BuddyDetail] tsuntsunTodayRequest userId=\(tsunTsunUserId) buddyId=\(tsunTsunBuddyId)")
@@ -183,10 +207,18 @@ final class BuddyDetailViewModel: ObservableObject {
             self.hasLoadedAtLeastOnce = true
             self.lastRefreshAt = Date()
             self.refreshTask = nil
+            print("[BuddyDetail] refresh completed reason=\(reason)")
 
             if self.pendingForcedRefresh {
+                let shouldBypassThrottle = self.pendingForcedRefreshBypassesThrottle
                 self.pendingForcedRefresh = false
-                self.refresh(force: true, reason: "pendingForcedRefresh")
+                self.pendingForcedRefreshBypassesThrottle = false
+                print("[BuddyDetail] pending refresh executed reason=pendingForcedRefresh bypassThrottle=\(shouldBypassThrottle)")
+                self.refresh(
+                    force: true,
+                    reason: "pendingForcedRefresh",
+                    bypassThrottle: shouldBypassThrottle
+                )
             }
         }
     }
@@ -229,8 +261,8 @@ final class BuddyDetailViewModel: ObservableObject {
                 )
                 selectedItemId = nil
                 sendSuccessMessage = "꽃잎을 날렸어요."
-                NotificationCenter.default.post(name: .buddyPetalStatusDidChange, object: nil)
-                refresh(force: true, reason: "sendSuccess")
+                BuddyPushPayload.postPetalStatusDidChange(trigger: .localSend)
+                requestImmediateRefresh(trigger: .localSend)
                 isSending = false
             } catch {
                 if let alert = userAlert(for: error) {
@@ -299,6 +331,29 @@ final class BuddyDetailViewModel: ObservableObject {
 
     private var resolvedMyUserId: String? {
         settingsStore.currentBackendUserId
+    }
+
+    private func requestImmediateRefresh(trigger: BuddyPetalStatusChangeTrigger) {
+        print("[BuddyDetail] immediate refresh requested trigger=\(trigger.rawValue)")
+        if trigger == .pushTap {
+            print("[BuddyDetail] notification tap refresh requested")
+        }
+        requestImmediateRefresh(source: trigger.rawValue)
+    }
+
+    private func requestImmediateRefresh(source: String) {
+        refresh(
+            force: true,
+            reason: source,
+            bypassThrottle: true
+        )
+    }
+
+    private func waitForRefreshCompletion(source: String) async {
+        while refreshTask != nil || pendingForcedRefresh {
+            try? await Task.sleep(nanoseconds: 150_000_000)
+        }
+        print("[BuddyDetail] refresh wait completed source=\(source)")
     }
 
     private func apply(dailyWords: DailyWordsTodayResponse, tsunTsunToday: TsunTsunTodayResponse) {

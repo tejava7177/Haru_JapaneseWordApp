@@ -10,6 +10,7 @@ struct ServerUserProfileResponse: Decodable {
     let profileImageUrl: String?
     let avatarBase64: String?
     let randomMatchingEnabled: Bool?
+    let petalNotificationsEnabled: Bool?
 
     private enum CodingKeys: String, CodingKey {
         case userId
@@ -38,6 +39,7 @@ struct ServerUserProfileResponse: Decodable {
         case randomMatchingEnabled
         case enabled
         case isEnabled
+        case petalNotificationsEnabled
     }
 
     init(
@@ -49,7 +51,8 @@ struct ServerUserProfileResponse: Decodable {
         buddyCode: String?,
         profileImageUrl: String?,
         avatarBase64: String?,
-        randomMatchingEnabled: Bool?
+        randomMatchingEnabled: Bool?,
+        petalNotificationsEnabled: Bool?
     ) {
         self.userId = userId
         self.nickname = nickname
@@ -60,6 +63,7 @@ struct ServerUserProfileResponse: Decodable {
         self.profileImageUrl = profileImageUrl
         self.avatarBase64 = avatarBase64
         self.randomMatchingEnabled = randomMatchingEnabled
+        self.petalNotificationsEnabled = petalNotificationsEnabled
     }
 
     init(from decoder: Decoder) throws {
@@ -77,6 +81,7 @@ struct ServerUserProfileResponse: Decodable {
         randomMatchingEnabled = try container.decodeFlexibleBoolIfPresent(forKey: .randomMatchingEnabled)
             ?? container.decodeFlexibleBoolIfPresent(forKey: .enabled)
             ?? container.decodeFlexibleBoolIfPresent(forKey: .isEnabled)
+        petalNotificationsEnabled = try container.decodeFlexibleBoolIfPresent(forKey: .petalNotificationsEnabled)
     }
 }
 
@@ -162,6 +167,33 @@ struct ToggleRandomMatchingResponse: Decodable {
         enabled = try container.decodeFlexibleBoolIfPresent(forKey: .randomMatchingEnabled)
             ?? container.decodeFlexibleBoolIfPresent(forKey: .enabled)
             ?? container.decodeFlexibleBoolIfPresent(forKey: .isEnabled)
+    }
+}
+
+struct UpdatePetalNotificationsRequest: Encodable {
+    let petalNotificationsEnabled: Bool
+}
+
+struct UpdatePetalNotificationsResponse: Decodable {
+    let userId: Int?
+    let petalNotificationsEnabled: Bool?
+
+    private enum CodingKeys: String, CodingKey {
+        case userId
+        case id
+        case petalNotificationsEnabled
+    }
+
+    init(userId: Int?, petalNotificationsEnabled: Bool?) {
+        self.userId = userId
+        self.petalNotificationsEnabled = petalNotificationsEnabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        userId = try container.decodeFlexibleIntIfPresent(forKey: .userId)
+            ?? container.decodeFlexibleIntIfPresent(forKey: .id)
+        petalNotificationsEnabled = try container.decodeFlexibleBoolIfPresent(forKey: .petalNotificationsEnabled)
     }
 }
 

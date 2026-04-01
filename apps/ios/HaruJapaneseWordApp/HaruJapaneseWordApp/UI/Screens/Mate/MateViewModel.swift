@@ -187,6 +187,8 @@ final class MateViewModel: ObservableObject {
     private var serverProfileByUserId: [Int: BuddyServerProfile] = [:]
     private var lastBuddyRefreshAt: Date?
     private let minimumBuddyRefreshInterval: TimeInterval = 3
+    private var pendingForcedRefresh: Bool = false
+    private var pendingForcedRefreshBypassesThrottle: Bool = false
 
     init(
         settingsStore: AppSettingsStore,
@@ -222,8 +224,9 @@ final class MateViewModel: ObservableObject {
 
         NotificationCenter.default.publisher(for: .buddyPetalStatusDidChange)
             .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                self?.load(triggerSource: "buddyPetalStatusDidChange", force: true)
+            .sink { [weak self] notification in
+                let trigger = BuddyPushPayload.trigger(from: notification.userInfo) ?? .pushForeground
+                self?.requestImmediateRefresh(trigger: trigger)
             }
             .store(in: &cancellables)
     }
@@ -262,11 +265,17 @@ final class MateViewModel: ObservableObject {
     func onViewDisappear() { }
 
     func onSceneDidBecomeActive() {
-        load(triggerSource: "sceneActive", force: true)
+        requestImmediateRefresh(trigger: .sceneActive)
     }
 
-    func load(triggerSource: String = "manual", force: Bool = false) {
-        print("[Buddy] trigger source=\(triggerSource)")
+    func manualRefresh() async {
+        print("[Buddy] manual pull-to-refresh requested")
+        requestImmediateRefresh(source: "manualPullToRefresh")
+        await waitForRefreshCompletion(source: "manualPullToRefresh")
+    }
+
+    func load(triggerSource: String = "manual", force: Bool = false, bypassThrottle: Bool = false) {
+        print("[Buddy] load requested source=\(triggerSource) force=\(force) bypassThrottle=\(bypassThrottle)")
         guard let backendUserId = settingsStore.currentBackendUserId else {
             connectedRoomCards = []
             incomingRequests = []
@@ -284,6 +293,8 @@ final class MateViewModel: ObservableObject {
             isLoadingBuddyData = false
             serverProfileByUserId = [:]
             lastBuddyRefreshAt = nil
+            pendingForcedRefresh = false
+            pendingForcedRefreshBypassesThrottle = false
             return
         }
 
@@ -294,14 +305,20 @@ final class MateViewModel: ObservableObject {
         }
 
         if isLoadingBuddyData {
-            print("[Buddy] fetch skipped loading in progress")
+            if force {
+                pendingForcedRefresh = true
+                pendingForcedRefreshBypassesThrottle = pendingForcedRefreshBypassesThrottle || bypassThrottle
+                print("[Buddy] pending refresh queued source=\(triggerSource) bypassThrottle=\(pendingForcedRefreshBypassesThrottle)")
+            }
+            print("[Buddy] fetch skipped loading in progress source=\(triggerSource)")
             return
         }
 
         if force,
+           bypassThrottle == false,
            let lastBuddyRefreshAt,
            Date().timeIntervalSince(lastBuddyRefreshAt) < minimumBuddyRefreshInterval {
-            print("[Buddy] forced fetch throttled")
+            print("[Buddy] forced fetch throttled source=\(triggerSource)")
             return
         }
 
@@ -315,13 +332,53 @@ final class MateViewModel: ObservableObject {
 
         isLoadingBuddyData = true
         lastLoadedBackendUserId = backendUserId
+        if force {
+            print("[Buddy] force refresh executed source=\(triggerSource) bypassThrottle=\(bypassThrottle)")
+        }
+        print("[Buddy] refresh started source=\(triggerSource)")
         Task {
             await refreshAllData(userId: backendUserId)
             await loadRandomCandidatesIfNeeded(userId: backendUserId)
             self.isLoadingBuddyData = false
             self.hasLoadedBuddyData = true
             self.lastBuddyRefreshAt = Date()
+            print("[Buddy] refresh completed source=\(triggerSource)")
+
+            if self.pendingForcedRefresh {
+                let shouldBypassThrottle = self.pendingForcedRefreshBypassesThrottle
+                self.pendingForcedRefresh = false
+                self.pendingForcedRefreshBypassesThrottle = false
+                print("[Buddy] pending refresh executed source=pendingForcedRefresh bypassThrottle=\(shouldBypassThrottle)")
+                self.load(
+                    triggerSource: "pendingForcedRefresh",
+                    force: true,
+                    bypassThrottle: shouldBypassThrottle
+                )
+            }
         }
+    }
+
+    private func requestImmediateRefresh(trigger: BuddyPetalStatusChangeTrigger) {
+        print("[Buddy] immediate refresh requested trigger=\(trigger.rawValue)")
+        if trigger == .pushTap {
+            print("[Buddy] notification tap refresh requested")
+        }
+        requestImmediateRefresh(source: trigger.rawValue)
+    }
+
+    private func requestImmediateRefresh(source: String) {
+        load(
+            triggerSource: source,
+            force: true,
+            bypassThrottle: true
+        )
+    }
+
+    private func waitForRefreshCompletion(source: String) async {
+        while isLoadingBuddyData || pendingForcedRefresh {
+            try? await Task.sleep(nanoseconds: 150_000_000)
+        }
+        print("[Buddy] refresh wait completed source=\(source)")
     }
 
     func fetchMyInviteCode() {

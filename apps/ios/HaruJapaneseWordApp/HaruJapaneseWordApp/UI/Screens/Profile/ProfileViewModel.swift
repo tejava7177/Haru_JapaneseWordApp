@@ -700,12 +700,17 @@ final class ProfileViewModel: ObservableObject {
     private func commitPetalNotificationSettings(_ updatedSettings: PetalNotificationSettings) {
         guard isUpdatingPetalNotification == false else { return }
         guard updatedSettings != settings.petalNotificationSettings else { return }
+        guard let backendUserId = settingsStore.currentBackendUserId else {
+            petalNotificationErrorMessage = "현재 로그인 사용자 ID를 확인하지 못했어요."
+            return
+        }
 
         petalNotificationErrorMessage = nil
         petalNotificationNotice = nil
         isUpdatingPetalNotification = true
 
         let previousHadAnyPushNotification = settingsStore.settings.isAnyPushNotificationEnabled
+        let previousEnabled = settingsStore.settings.isPetalNotificationEnabled
 
         Task {
             defer { isUpdatingPetalNotification = false }
@@ -715,27 +720,35 @@ final class ProfileViewModel: ObservableObject {
                 await refreshLearningNotificationAuthorizationStatus()
 
                 guard granted else {
-                    petalNotificationNotice = "알림 권한이 꺼져 있어요. 설정에서 알림을 허용해 주세요."
+                    isPetalNotificationEnabled = previousEnabled
+                    petalNotificationErrorMessage = "알림 권한이 꺼져 있어요. 설정 앱에서 알림을 허용해 주세요."
                     return
                 }
+            } else {
+                await refreshLearningNotificationAuthorizationStatus()
+            }
 
-                settingsStore.updatePetalNotificationSettings(updatedSettings)
-                isPetalNotificationEnabled = true
+            do {
+                let response = try await profileAPIService.updatePetalNotifications(
+                    userId: backendUserId,
+                    enabled: updatedSettings.isEnabled
+                )
+                let resolvedEnabled = response.petalNotificationsEnabled ?? updatedSettings.isEnabled
+                settingsStore.setPetalNotificationEnabled(resolvedEnabled)
+                isPetalNotificationEnabled = resolvedEnabled
                 await syncPushRegistrationStateIfNeeded(
                     previousHadAnyPushNotification: previousHadAnyPushNotification,
                     updatedHadAnyPushNotification: settingsStore.settings.isAnyPushNotificationEnabled
                 )
-                petalNotificationNotice = "꽃잎 알림을 켰어요."
-                return
-            }
 
-            settingsStore.updatePetalNotificationSettings(updatedSettings)
-            isPetalNotificationEnabled = false
-            await syncPushRegistrationStateIfNeeded(
-                previousHadAnyPushNotification: previousHadAnyPushNotification,
-                updatedHadAnyPushNotification: settingsStore.settings.isAnyPushNotificationEnabled
-            )
-            petalNotificationNotice = "꽃잎 알림을 껐어요."
+                petalNotificationNotice = resolvedEnabled
+                    ? "꽃잎 알림을 켰어요."
+                    : "꽃잎 알림을 껐어요."
+            } catch {
+                settingsStore.setPetalNotificationEnabled(previousEnabled)
+                isPetalNotificationEnabled = previousEnabled
+                petalNotificationErrorMessage = "꽃잎 알림 설정을 변경하지 못했어요. 잠시 후 다시 시도해 주세요."
+            }
         }
     }
 
@@ -830,6 +843,7 @@ final class ProfileViewModel: ObservableObject {
             fallbackValue: cachedProfile?.jlptLevel
         ) ?? .n5
         let resolvedRandomMatchingEnabled = response.randomMatchingEnabled ?? settingsStore.currentMateRandomMatchingEnabled()
+        let resolvedPetalNotificationsEnabled = response.petalNotificationsEnabled ?? settingsStore.settings.isPetalNotificationEnabled
         let resolvedProfileImageUrl = trimmedNonEmpty(response.profileImageUrl)
         if resolvedProfileImageUrl != nil {
             avatarImageRefreshKey = UUID().uuidString
@@ -844,7 +858,8 @@ final class ProfileViewModel: ObservableObject {
             jlptLevel: resolvedLevel,
             profileImageUrl: resolvedProfileImageUrl,
             avatarData: avatarData,
-            randomMatchingEnabled: resolvedRandomMatchingEnabled
+            randomMatchingEnabled: resolvedRandomMatchingEnabled,
+            petalNotificationsEnabled: resolvedPetalNotificationsEnabled
         )
         if didUpdateStore {
             print("[Profile] using server profile values")

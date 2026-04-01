@@ -237,6 +237,14 @@ final class AppSettingsStore: ObservableObject {
         save(settings: updated)
     }
 
+    func setPetalNotificationEnabled(_ enabled: Bool) {
+        guard settings.isPetalNotificationEnabled != enabled else { return }
+        var updated = settings
+        updated.isPetalNotificationEnabled = enabled
+        settings = updated
+        save(settings: updated)
+    }
+
     func setAPNSDeviceToken(_ token: String?) {
         let trimmedToken = token?.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedToken = trimmedToken?.isEmpty == false ? trimmedToken : nil
@@ -408,7 +416,8 @@ final class AppSettingsStore: ObservableObject {
         jlptLevel: JLPTLevel?,
         profileImageUrl: String?,
         avatarData: Data?,
-        randomMatchingEnabled: Bool?
+        randomMatchingEnabled: Bool?,
+        petalNotificationsEnabled: Bool?
     ) -> Bool {
         guard userId.isEmpty == false else { return false }
 
@@ -437,14 +446,16 @@ final class AppSettingsStore: ObservableObject {
             didChange = setBoolIfNeeded(randomMatchingEnabled, forKey: mateProfileKey(userId: userId, field: randomMatchingEnabledField)) || didChange
         }
 
-        if settings.mateUserId == userId, let jlptLevel {
+        if settings.mateUserId == userId {
+            let resolvedLevel = jlptLevel ?? settings.homeDeckLevel
+            let resolvedPetalEnabled = petalNotificationsEnabled ?? settings.isPetalNotificationEnabled
             let updated = AppSettings(
-                homeDeckLevel: jlptLevel,
+                homeDeckLevel: resolvedLevel,
                 mateUserId: settings.mateUserId,
                 isLearningNotificationEnabled: settings.isLearningNotificationEnabled,
                 learningNotificationSettings: settings.learningNotificationSettings,
-                isPetalNotificationEnabled: settings.isPetalNotificationEnabled,
-                petalNotificationSettings: settings.petalNotificationSettings
+                isPetalNotificationEnabled: resolvedPetalEnabled,
+                petalNotificationSettings: PetalNotificationSettings(isEnabled: resolvedPetalEnabled)
             )
             if updated != settings {
                 settings = updated

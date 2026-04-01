@@ -7,6 +7,7 @@ protocol ProfileAPIServiceProtocol {
     func updateLearningLevel(userId: String, level: JLPTLevel) async throws -> UpdateLearningLevelResponse
     func regenerateTodayDailyWords(userId: String) async throws -> RegenerateDailyWordsResponse
     func updateRandomMatching(userId: String, enabled: Bool) async throws -> ToggleRandomMatchingResponse
+    func updatePetalNotifications(userId: String, enabled: Bool) async throws -> UpdatePetalNotificationsResponse
 }
 
 extension ProfileAPIServiceProtocol {
@@ -20,7 +21,8 @@ extension ProfileAPIServiceProtocol {
             buddyCode: nil,
             profileImageUrl: nil,
             avatarBase64: nil,
-            randomMatchingEnabled: nil
+            randomMatchingEnabled: nil,
+            petalNotificationsEnabled: nil
         )
     }
     func updateUserProfile(userId: String, nickname: String, bio: String, instagramId: String) async throws -> ServerUserProfileResponse {
@@ -28,6 +30,9 @@ extension ProfileAPIServiceProtocol {
     }
     func uploadProfileImage(userId: String, imageData: Data, fileName: String, mimeType: String) async throws -> UploadProfileImageResponse {
         UploadProfileImageResponse(userId: Int(userId), profileImageUrl: nil)
+    }
+    func updatePetalNotifications(userId: String, enabled: Bool) async throws -> UpdatePetalNotificationsResponse {
+        UpdatePetalNotificationsResponse(userId: Int(userId), petalNotificationsEnabled: enabled)
     }
 }
 
@@ -124,6 +129,16 @@ struct ProfileAPIService: ProfileAPIServiceProtocol, Sendable {
         )
         let request = ToggleRandomMatchingRequest(enabled: enabled)
         return try await client.patch(endpoint, body: request, responseType: ToggleRandomMatchingResponse.self)
+    }
+
+    nonisolated func updatePetalNotifications(userId: String, enabled: Bool) async throws -> UpdatePetalNotificationsResponse {
+        print("[ProfileAPI] PATCH /api/users/\(userId)/petal-notifications petalNotificationsEnabled=\(enabled)")
+        let endpoint = APIEndpoint(
+            path: "api/users/\(userId)/petal-notifications",
+            method: .patch
+        )
+        let request = UpdatePetalNotificationsRequest(petalNotificationsEnabled: enabled)
+        return try await client.patch(endpoint, body: request, responseType: UpdatePetalNotificationsResponse.self)
     }
 }
 

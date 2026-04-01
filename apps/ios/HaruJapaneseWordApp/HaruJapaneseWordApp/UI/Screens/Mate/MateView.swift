@@ -76,6 +76,9 @@ struct MateView: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
+            .refreshable {
+                await viewModel.manualRefresh()
+            }
             .navigationTitle("Buddy")
             .navigationDestination(isPresented: $isShowingBuddyDetail) {
                 if let item = selectedBuddy {

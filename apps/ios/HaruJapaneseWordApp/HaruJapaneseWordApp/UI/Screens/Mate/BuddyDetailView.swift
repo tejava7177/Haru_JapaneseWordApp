@@ -48,6 +48,9 @@ struct BuddyDetailView: View {
                     .padding(.top, 16)
                     .padding(.bottom, 12)
                 }
+                .refreshable {
+                    await viewModel.manualRefresh()
+                }
             }
         }
         .navigationTitle(viewModel.buddyName)
