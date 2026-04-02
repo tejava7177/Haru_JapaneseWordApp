@@ -74,6 +74,28 @@ final class NotebookStore: ObservableObject {
         items(for: notebookId).first { $0.id == itemId }
     }
 
+    func containsJLPTWord(
+        wordId: Int?,
+        word: String,
+        reading: String?,
+        in notebookId: UUID
+    ) -> Bool {
+        guard let notebook = notebook(for: notebookId) else { return false }
+
+        let trimmedWord = word.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedReading = reading?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedReading = trimmedReading?.isEmpty == false ? trimmedReading : nil
+
+        return notebook.items.contains {
+            isDuplicate(
+                existingItem: $0,
+                newWordId: wordId,
+                newWord: trimmedWord,
+                newReading: normalizedReading
+            )
+        }
+    }
+
     func wordListItems(in notebookIds: Set<UUID>) -> [WordListItem] {
         notebooks
             .filter { notebookIds.contains($0.id) }
@@ -122,10 +144,15 @@ final class NotebookStore: ObservableObject {
             return .notebookNotFound
         }
 
-        let isDuplicate = notebooks[notebookIndex].items.contains {
-            $0.word == trimmedWord && normalizedReadingValue($0.reading) == normalizedReadingValue(normalizedReading)
+        let hasDuplicate = notebooks[notebookIndex].items.contains {
+            isDuplicate(
+                existingItem: $0,
+                newWordId: wordId,
+                newWord: trimmedWord,
+                newReading: normalizedReading
+            )
         }
-        guard isDuplicate == false else {
+        guard hasDuplicate == false else {
             return .duplicate
         }
 
@@ -191,7 +218,13 @@ final class NotebookStore: ObservableObject {
         }
 
         do {
-            notebooks = try JSONDecoder().decode([WordNotebook].self, from: data)
+            let decoded = try JSONDecoder().decode([WordNotebook].self, from: data)
+            let deduplicated = sanitizeNotebooks(decoded)
+            notebooks = deduplicated
+
+            if deduplicated != decoded {
+                save()
+            }
         } catch {
             notebooks = []
         }
@@ -199,6 +232,7 @@ final class NotebookStore: ObservableObject {
 
     func save() {
         do {
+            notebooks = sanitizeNotebooks(notebooks)
             let data = try JSONEncoder().encode(notebooks)
             userDefaults.set(data, forKey: notebooksKey)
         } catch {
@@ -206,8 +240,67 @@ final class NotebookStore: ObservableObject {
         }
     }
 
+    private func sanitizeNotebooks(_ notebooks: [WordNotebook]) -> [WordNotebook] {
+        notebooks.map { notebook in
+            WordNotebook(
+                id: notebook.id,
+                title: notebook.title,
+                descriptionText: notebook.descriptionText,
+                items: deduplicatedItems(notebook.items),
+                createdAt: notebook.createdAt
+            )
+        }
+    }
+
+    private func deduplicatedItems(_ items: [WordNotebookItem]) -> [WordNotebookItem] {
+        var seenWordIds = Set<Int>()
+        var seenWords = Set<String>()
+        var deduplicated: [WordNotebookItem] = []
+        deduplicated.reserveCapacity(items.count)
+
+        for item in items {
+            let normalizedWord = normalizedWordValue(item.word)
+            if seenWords.contains(normalizedWord) {
+                continue
+            }
+
+            if let wordId = item.wordId {
+                guard seenWordIds.insert(wordId).inserted else { continue }
+            }
+
+            seenWords.insert(normalizedWord)
+            deduplicated.append(item)
+        }
+
+        return deduplicated
+    }
+
+    private func isDuplicate(
+        existingItem: WordNotebookItem,
+        newWordId: Int?,
+        newWord: String,
+        newReading: String?
+    ) -> Bool {
+        let hasSameWordId: Bool
+        if let newWordId, let existingWordId = existingItem.wordId {
+            hasSameWordId = existingWordId == newWordId
+        } else {
+            hasSameWordId = false
+        }
+
+        let hasSameExpression = normalizedWordValue(existingItem.word) == normalizedWordValue(newWord)
+        let hasSameFallback = existingItem.word == newWord &&
+            normalizedReadingValue(existingItem.reading) == normalizedReadingValue(newReading)
+
+        return hasSameWordId || hasSameExpression || hasSameFallback
+    }
+
     private func normalizedReadingValue(_ reading: String?) -> String? {
         let trimmedReading = reading?.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmedReading?.isEmpty == false ? trimmedReading : nil
+    }
+
+    private func normalizedWordValue(_ word: String) -> String {
+        word.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

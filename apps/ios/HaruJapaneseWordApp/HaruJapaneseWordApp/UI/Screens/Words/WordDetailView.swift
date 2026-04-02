@@ -6,6 +6,7 @@ struct WordDetailView: View {
     @State private var isReadingExpanded: Bool = false
     @State private var isNotebookPickerPresented: Bool = false
     @State private var feedbackMessage: String?
+    @State private var selectedNotebook: WordNotebook?
     private let wordId: Int
     private let repository: DictionaryRepository
 
@@ -89,6 +90,8 @@ struct WordDetailView: View {
                     meaning: notebookMeaning(for: detail)
                 ) { result in
                     handleNotebookPickResult(result)
+                } onOpenNotebook: { notebook in
+                    selectedNotebook = notebook
                 }
             }
         }
@@ -98,6 +101,9 @@ struct WordDetailView: View {
                     .padding(.top, 12)
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
+        }
+        .navigationDestination(item: $selectedNotebook) { notebook in
+            NotebookDetailView(store: notebookStore, notebookId: notebook.id)
         }
         .task(id: wordId) {
             viewModel.load(wordId: wordId)
@@ -125,7 +131,7 @@ struct WordDetailView: View {
             message = "단어장에 추가했어요"
             feedbackType = .success
         case .duplicate:
-            message = "이미 이 단어장에 있어요"
+            message = "이미 이 단어장에 추가된 단어예요."
             feedbackType = .warning
         case .notebookNotFound:
             message = "단어장을 찾을 수 없어요"
