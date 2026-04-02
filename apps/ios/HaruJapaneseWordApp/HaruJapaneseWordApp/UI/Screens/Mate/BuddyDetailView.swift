@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct BuddyDetailView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var viewModel: BuddyDetailViewModel
 
@@ -138,21 +139,13 @@ struct BuddyDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.white,
-                                Color(red: 0.99, green: 0.96, blue: 0.93)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+                    .fill(headerCardBackground)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(Color.black.opacity(0.05), lineWidth: 1)
+                    .stroke(headerCardStroke, lineWidth: 1)
             )
+            .shadow(color: headerCardShadow, radius: 12, x: 0, y: 4)
 
             if isPerfectCompletion {
                 HStack(spacing: 8) {
@@ -238,6 +231,38 @@ private extension BuddyDetailView {
 
     var isPerfectCompletion: Bool {
         viewModel.pairCompletedToday && clampedProgressCount == resolvedProgressGoal
+    }
+
+    var headerCardBackground: LinearGradient {
+        if colorScheme == .dark {
+            return LinearGradient(
+                colors: [
+                    Color(uiColor: .secondarySystemBackground),
+                    Color(uiColor: .tertiarySystemBackground).opacity(0.96)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+
+        return LinearGradient(
+            colors: [
+                Color.white,
+                Color(red: 0.99, green: 0.96, blue: 0.93)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    var headerCardStroke: Color {
+        colorScheme == .dark
+            ? Color.white.opacity(0.06)
+            : Color.black.opacity(0.05)
+    }
+
+    var headerCardShadow: Color {
+        Color.black.opacity(colorScheme == .dark ? 0.16 : 0.04)
     }
 }
 
