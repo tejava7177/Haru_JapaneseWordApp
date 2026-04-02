@@ -29,7 +29,7 @@ struct TsunTsunAnswerView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 20)
         }
-        .background(Color(uiColor: .systemGroupedBackground))
+        .background(Color.appBackground)
         .navigationTitle("답변하기")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
@@ -62,51 +62,46 @@ struct TsunTsunAnswerView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(viewModel.item.senderName.isEmpty ? "버디가 날린 꽃잎" : "\(viewModel.item.senderName)이 날린 꽃잎")
                 .font(.headline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.textSecondary)
 
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(viewModel.item.expression)
                     .font(.largeTitle.weight(.bold))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color.textPrimary)
                 if viewModel.item.reading.isEmpty == false {
                     Text(viewModel.item.reading)
                         .font(.title3)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.textSecondary)
                 }
             }
 
             Text("이 단어의 뜻을 알고 있나요?")
                 .font(.title3.weight(.semibold))
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color.textPrimary)
 
             if viewModel.item.targetDate.isEmpty == false {
                 Text(viewModel.item.targetDate)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.textTertiary)
             }
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white)
-        .overlay(
-            RoundedRectangle(cornerRadius: 18)
-                .stroke(Color.black.opacity(0.06), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .appCardStyle(cornerRadius: 18, shadowRadius: 8, shadowY: 2)
     }
 
     private var choicesView: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("보기")
                 .font(.headline)
+                .foregroundStyle(Color.textPrimary)
 
             ForEach(viewModel.item.choices) { choice in
                 Button {
                     viewModel.selectedMeaningId = choice.meaningId
                 } label: {
                     HStack(spacing: 12) {
-                        Image(systemName: iconName(for: choice))
-                            .foregroundStyle(iconColor(for: choice))
+                        choiceIndicator(for: choice)
 
                         Text(choice.text)
                             .font(.body.weight(.medium))
@@ -130,7 +125,7 @@ struct TsunTsunAnswerView: View {
             if let feedbackText = viewModel.feedbackText, viewModel.hasSubmitted == false {
                 Text(feedbackText)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.textSecondary)
                     .padding(.top, 6)
             }
         }
@@ -145,8 +140,8 @@ struct TsunTsunAnswerView: View {
                 .buttonStyle(.plain)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-                .foregroundStyle(.white)
-                .background(Color.black)
+                .foregroundStyle(Color.ctaPrimaryText)
+                .background(Color.ctaPrimary)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             } else {
                 Button {
@@ -155,7 +150,7 @@ struct TsunTsunAnswerView: View {
                     HStack(spacing: 10) {
                         if viewModel.isSubmitting {
                             ProgressView()
-                                .tint(.white)
+                                .tint(Color.ctaPrimaryText)
                         }
                         Text("답변 제출")
                             .font(.headline)
@@ -164,8 +159,8 @@ struct TsunTsunAnswerView: View {
                     .padding(.vertical, 14)
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.white)
-                .background(viewModel.canSubmit ? Color.black : Color(uiColor: .systemGray3))
+                .foregroundStyle(viewModel.canSubmit ? Color.ctaPrimaryText : Color.textSecondary)
+                .background(viewModel.canSubmit ? Color.ctaPrimary : Color.ctaDisabled)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .disabled(viewModel.canSubmit == false)
             }
@@ -244,63 +239,111 @@ struct TsunTsunAnswerView: View {
         }
     }
 
+    @ViewBuilder
+    private func choiceIndicator(for choice: TsunTsunChoiceResponse) -> some View {
+        Image(systemName: iconName(for: choice))
+            .font(.system(size: 18, weight: .semibold))
+            .foregroundStyle(iconColor(for: choice))
+            .frame(width: 28, height: 28)
+            .background(
+                Circle()
+                    .fill(indicatorBackgroundColor(for: choice))
+            )
+            .overlay(
+                Circle()
+                    .stroke(indicatorBorderColor(for: choice), lineWidth: 1)
+            )
+    }
+
     private func backgroundColor(for choice: TsunTsunChoiceResponse) -> Color {
         switch visualState(for: choice) {
         case .idle:
-            return .white
+            return .surfacePrimary
         case .selected:
-            return Color.orange.opacity(0.12)
+            return Color.brandSoft
         case .correct:
-            return Color.mint.opacity(0.16)
+            return Color.successSoft
         case .incorrect:
-            return Color.red.opacity(0.12)
+            return Color.dangerSoft
         case .unknown:
-            return Color.orange.opacity(0.10)
+            return Color.brandSoft.opacity(0.9)
         case .dimmed:
-            return Color(uiColor: .systemGray6)
+            return Color.surfaceSecondary
         }
     }
 
     private func borderColor(for choice: TsunTsunChoiceResponse) -> Color {
         switch visualState(for: choice) {
         case .idle:
-            return Color.black.opacity(0.06)
+            return Color.divider
         case .selected:
-            return Color.orange.opacity(0.45)
+            return Color.chipActive.opacity(0.7)
         case .correct:
-            return Color.mint.opacity(0.55)
+            return Color.success.opacity(0.8)
         case .incorrect:
-            return Color.red.opacity(0.4)
+            return Color.danger.opacity(0.75)
         case .unknown:
-            return Color.orange.opacity(0.35)
+            return Color.chipActive.opacity(0.6)
         case .dimmed:
-            return Color.gray.opacity(0.18)
+            return Color.divider
         }
     }
 
     private func textColor(for choice: TsunTsunChoiceResponse) -> Color {
         switch visualState(for: choice) {
         case .dimmed:
-            return Color.secondary
+            return Color.textSecondary
         default:
-            return Color.primary
+            return Color.textPrimary
         }
     }
 
     private func iconColor(for choice: TsunTsunChoiceResponse) -> Color {
         switch visualState(for: choice) {
         case .idle:
-            return .secondary
+            return .iconSecondary
         case .selected:
-            return .orange
+            return .chipActive
         case .correct:
-            return .mint
+            return .success
         case .incorrect:
-            return .red
+            return .danger
         case .unknown:
-            return .orange
+            return .chipActive
         case .dimmed:
-            return .gray
+            return .textTertiary
+        }
+    }
+
+    private func indicatorBackgroundColor(for choice: TsunTsunChoiceResponse) -> Color {
+        switch visualState(for: choice) {
+        case .idle:
+            return .surfaceSecondary
+        case .selected:
+            return .brandSoft
+        case .correct:
+            return .successSoft
+        case .incorrect:
+            return .dangerSoft
+        case .unknown:
+            return .brandSoft
+        case .dimmed:
+            return .surfaceSecondary
+        }
+    }
+
+    private func indicatorBorderColor(for choice: TsunTsunChoiceResponse) -> Color {
+        switch visualState(for: choice) {
+        case .selected:
+            return .chipActive.opacity(0.75)
+        case .correct:
+            return .success.opacity(0.8)
+        case .incorrect:
+            return .danger.opacity(0.75)
+        case .unknown:
+            return .chipActive.opacity(0.6)
+        case .idle, .dimmed:
+            return .divider
         }
     }
 

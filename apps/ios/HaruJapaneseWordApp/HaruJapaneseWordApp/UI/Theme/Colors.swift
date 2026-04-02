@@ -73,6 +73,48 @@ extension Color {
             dark: UIColor(red: 0.820, green: 0.478, blue: 0.286, alpha: 0.22)
         )
     )
+    static let ctaPrimary = Color(
+        uiColor: UIColor.dynamicColor(
+            light: UIColor(red: 0.094, green: 0.106, blue: 0.125, alpha: 1),
+            dark: UIColor(red: 0.953, green: 0.965, blue: 0.980, alpha: 1)
+        )
+    )
+    static let ctaPrimaryText = Color(
+        uiColor: UIColor.dynamicColor(
+            light: UIColor(red: 1, green: 1, blue: 1, alpha: 1),
+            dark: UIColor(red: 0.067, green: 0.078, blue: 0.090, alpha: 1)
+        )
+    )
+    static let ctaDisabled = Color(
+        uiColor: UIColor.dynamicColor(
+            light: UIColor(red: 0.780, green: 0.800, blue: 0.835, alpha: 1),
+            dark: UIColor(red: 0.243, green: 0.267, blue: 0.310, alpha: 1)
+        )
+    )
+    static let success = Color(
+        uiColor: UIColor.dynamicColor(
+            light: UIColor(red: 0.145, green: 0.627, blue: 0.518, alpha: 1),
+            dark: UIColor(red: 0.373, green: 0.824, blue: 0.702, alpha: 1)
+        )
+    )
+    static let successSoft = Color(
+        uiColor: UIColor.dynamicColor(
+            light: UIColor(red: 0.145, green: 0.627, blue: 0.518, alpha: 0.12),
+            dark: UIColor(red: 0.373, green: 0.824, blue: 0.702, alpha: 0.18)
+        )
+    )
+    static let danger = Color(
+        uiColor: UIColor.dynamicColor(
+            light: UIColor(red: 0.835, green: 0.239, blue: 0.239, alpha: 1),
+            dark: UIColor(red: 1.000, green: 0.482, blue: 0.482, alpha: 1)
+        )
+    )
+    static let dangerSoft = Color(
+        uiColor: UIColor.dynamicColor(
+            light: UIColor(red: 0.835, green: 0.239, blue: 0.239, alpha: 0.10),
+            dark: UIColor(red: 1.000, green: 0.482, blue: 0.482, alpha: 0.16)
+        )
+    )
     static let appShadow = Color(
         uiColor: UIColor.dynamicColor(
             light: UIColor(white: 0, alpha: 0.07),

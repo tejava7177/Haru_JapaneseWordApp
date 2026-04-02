@@ -43,6 +43,20 @@ final class NotebookStore: ObservableObject {
         save()
     }
 
+    func updateNotebook(_ notebookId: UUID, title: String, descriptionText: String?) {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedDescription = descriptionText?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard trimmedTitle.isEmpty == false,
+              let index = notebooks.firstIndex(where: { $0.id == notebookId }) else {
+            return
+        }
+
+        notebooks[index].title = trimmedTitle
+        notebooks[index].descriptionText = trimmedDescription?.isEmpty == false ? trimmedDescription : nil
+        save()
+    }
+
     func deleteNotebook(_ notebookId: UUID) {
         notebooks.removeAll { $0.id == notebookId }
         save()

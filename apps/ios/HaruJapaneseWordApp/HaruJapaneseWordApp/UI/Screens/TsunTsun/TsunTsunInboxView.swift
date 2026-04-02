@@ -46,7 +46,7 @@ struct TsunTsunInboxView: View {
                 }
             }
         }
-        .background(Color(uiColor: .systemGroupedBackground))
+        .background(Color.appBackground)
         .navigationTitle("도착한 꽃잎")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
@@ -58,10 +58,10 @@ struct TsunTsunInboxView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("답변이 필요한 꽃잎만 모아봤어요.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.textSecondary)
             Text(viewModel.unansweredCountText)
                 .font(.headline)
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color.textPrimary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -70,12 +70,13 @@ struct TsunTsunInboxView: View {
         VStack(spacing: 12) {
             Image(systemName: "tray")
                 .font(.system(size: 28))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.iconSecondary)
             Text("도착한 꽃잎이 없어요")
                 .font(.headline)
+                .foregroundStyle(Color.textPrimary)
             Text("새 꽃잎이 도착하면 여기에서 바로 답할 수 있어요.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.textSecondary)
                 .multilineTextAlignment(.center)
         }
         .padding(24)
@@ -86,9 +87,10 @@ struct TsunTsunInboxView: View {
         VStack(spacing: 12) {
             Text("도착한 꽃잎을 불러오지 못했어요")
                 .font(.headline)
+                .foregroundStyle(Color.textPrimary)
             Text(message)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.textSecondary)
                 .multilineTextAlignment(.center)
             Button("다시 시도") {
                 viewModel.load()
@@ -106,7 +108,7 @@ private struct TsunTsunInboxRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Circle()
-                .fill(Color.orange.opacity(0.8))
+                .fill(Color.chipActive)
                 .frame(width: 10, height: 10)
                 .padding(.top, 7)
 
@@ -114,47 +116,42 @@ private struct TsunTsunInboxRow: View {
                 HStack(alignment: .firstTextBaseline) {
                     Text(item.senderName.isEmpty ? "버디" : item.senderName)
                         .font(.headline)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Color.textPrimary)
                     Spacer(minLength: 12)
                     Text(item.targetDate)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.textTertiary)
                 }
 
                 HStack(spacing: 8) {
                     Text(item.expression)
                         .font(.title3.weight(.semibold))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Color.textPrimary)
 
                     if item.reading.isEmpty == false {
                         Text(item.reading)
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.textSecondary)
                     }
                 }
 
                 Text("이 단어의 뜻을 알고 있나요?")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.textSecondary)
 
                 HStack {
                     Text("꽃잎 답하기")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Color.chipActive)
                     Spacer(minLength: 8)
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.iconSecondary)
                 }
             }
         }
         .padding(14)
-        .background(Color.white)
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.black.opacity(0.06), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .appCardStyle(cornerRadius: 16, shadowRadius: 8, shadowY: 2)
     }
 }
 

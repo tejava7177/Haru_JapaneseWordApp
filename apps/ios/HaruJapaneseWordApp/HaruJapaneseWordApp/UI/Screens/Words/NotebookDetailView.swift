@@ -4,9 +4,10 @@ struct NotebookDetailView: View {
     @ObservedObject var store: NotebookStore
     let notebookId: UUID
     @State private var isAddWordPresented: Bool = false
-    @State private var isNotebookTitleEditorPresented: Bool = false
+    @State private var isNotebookEditorPresented: Bool = false
     @State private var isNotebookDeleteDialogPresented: Bool = false
     @State private var notebookTitleDraft: String = ""
+    @State private var notebookDescriptionDraft: String = ""
     @State private var selectedItem: WordNotebookItem?
     @Environment(\.dismiss) private var dismiss
 
@@ -70,9 +71,10 @@ struct NotebookDetailView: View {
                     }
 
                     Menu {
-                        Button("이름 수정") {
+                        Button("단어장 수정") {
                             notebookTitleDraft = notebook?.title ?? ""
-                            isNotebookTitleEditorPresented = true
+                            notebookDescriptionDraft = notebook?.descriptionText ?? ""
+                            isNotebookEditorPresented = true
                         }
 
                         Button("삭제", role: .destructive) {
@@ -87,13 +89,23 @@ struct NotebookDetailView: View {
         .sheet(isPresented: $isAddWordPresented) {
             AddNotebookWordView(store: store, notebookId: notebookId)
         }
-        .alert("단어장 이름 수정", isPresented: $isNotebookTitleEditorPresented) {
-            TextField("단어장 이름", text: $notebookTitleDraft)
-            Button("취소", role: .cancel) {}
-            Button("저장") {
-                store.updateNotebookTitle(notebookId, title: notebookTitleDraft)
-            }
-        } 
+        .sheet(isPresented: $isNotebookEditorPresented) {
+            NotebookEditorSheet(
+                title: $notebookTitleDraft,
+                descriptionText: $notebookDescriptionDraft,
+                onCancel: {
+                    isNotebookEditorPresented = false
+                },
+                onSave: {
+                    store.updateNotebook(
+                        notebookId,
+                        title: notebookTitleDraft,
+                        descriptionText: notebookDescriptionDraft
+                    )
+                    isNotebookEditorPresented = false
+                }
+            )
+        }
         .confirmationDialog("이 단어장을 삭제할까요?", isPresented: $isNotebookDeleteDialogPresented, titleVisibility: .visible) {
             Button("삭제", role: .destructive) {
                 store.deleteNotebook(notebookId)
@@ -103,6 +115,119 @@ struct NotebookDetailView: View {
         } message: {
             Text("포함된 단어도 모두 삭제됩니다")
         }
+    }
+}
+
+private struct NotebookEditorSheet: View {
+    private enum Field: Hashable {
+        case title
+        case description
+    }
+
+    @Binding var title: String
+    @Binding var descriptionText: String
+    let onCancel: () -> Void
+    let onSave: () -> Void
+    @FocusState private var focusedField: Field?
+
+    private var trimmedTitle: String {
+        title.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var trimmedDescription: String {
+        descriptionText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        Text("단어장 이름과 설명을 함께 수정할 수 있어요.")
+                            .font(.headline)
+                            .foregroundStyle(Color.textPrimary)
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("이름")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(Color.textPrimary)
+
+                            TextField("예: N3 문법 표현", text: $title)
+                                .textFieldStyle(.roundedBorder)
+                                .focused($focusedField, equals: .title)
+                                .id(Field.title)
+                        }
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("설명")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(Color.textPrimary)
+
+                            ZStack(alignment: .topLeading) {
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(Color.surfaceSecondary)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                            .stroke(Color.divider, lineWidth: 1)
+                                    )
+
+                                if trimmedDescription.isEmpty {
+                                    Text("이 단어장을 어떻게 사용할지 적어보세요")
+                                        .font(.body)
+                                        .foregroundStyle(Color.textTertiary)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 14)
+                                }
+
+                                TextEditor(text: $descriptionText)
+                                    .scrollContentBackground(.hidden)
+                                    .foregroundStyle(Color.textPrimary)
+                                    .focused($focusedField, equals: .description)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 8)
+                                    .frame(minHeight: 112, maxHeight: 140)
+                                    .background(Color.clear)
+                            }
+                            .frame(minHeight: 112, maxHeight: 140)
+                            .id(Field.description)
+                        }
+
+                        Spacer(minLength: 0)
+                    }
+                    .padding(20)
+                    .padding(.bottom, 32)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
+                .background(Color.appBackground)
+                .scrollDismissesKeyboard(.interactively)
+                .onChange(of: focusedField) { _, field in
+                    guard let field else { return }
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        proxy.scrollTo(field, anchor: .center)
+                    }
+                }
+            }
+            .navigationTitle("단어장 수정")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("취소") {
+                        focusedField = nil
+                        onCancel()
+                    }
+                }
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("저장") {
+                        focusedField = nil
+                        onSave()
+                    }
+                    .disabled(trimmedTitle.isEmpty)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 }
 
