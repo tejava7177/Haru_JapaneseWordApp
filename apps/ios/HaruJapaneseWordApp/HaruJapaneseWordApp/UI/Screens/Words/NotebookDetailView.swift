@@ -20,6 +20,10 @@ struct NotebookDetailView: View {
         store.items(for: notebookId)
     }
 
+    private var explorerItems: [WordListItem] {
+        items.map { WordListItem(notebookId: notebookId, item: $0) }
+    }
+
     init(
         store: NotebookStore,
         notebookId: UUID,
@@ -31,6 +35,49 @@ struct NotebookDetailView: View {
     }
 
     var body: some View {
+        content
+            .navigationDestination(item: $selectedItem) { item in
+                if let currentIndex = items.firstIndex(where: { $0.id == item.id }) {
+                    WordDetailExplorerView(
+                        items: explorerItems,
+                        initialIndex: currentIndex,
+                        repository: repository,
+                        notebookStore: store
+                    )
+                }
+            }
+        .sheet(isPresented: $isAddWordPresented) {
+            AddNotebookWordView(store: store, notebookId: notebookId, repository: repository)
+        }
+        .sheet(isPresented: $isNotebookEditorPresented) {
+            NotebookEditorSheet(
+                title: $notebookTitleDraft,
+                descriptionText: $notebookDescriptionDraft,
+                onCancel: {
+                    isNotebookEditorPresented = false
+                },
+                onSave: {
+                    store.updateNotebook(
+                        notebookId,
+                        title: notebookTitleDraft,
+                        descriptionText: notebookDescriptionDraft
+                    )
+                    isNotebookEditorPresented = false
+                }
+            )
+        }
+        .confirmationDialog("이 단어장을 삭제할까요?", isPresented: $isNotebookDeleteDialogPresented, titleVisibility: .visible) {
+            Button("삭제", role: .destructive) {
+                store.deleteNotebook(notebookId)
+                dismiss()
+            }
+            Button("취소", role: .cancel) {}
+        } message: {
+            Text("포함된 단어도 모두 삭제됩니다")
+        }
+    }
+
+    private var content: some View {
         List {
             summarySection
 
@@ -62,9 +109,6 @@ struct NotebookDetailView: View {
         .background(Color.appBackground)
         .navigationTitle(notebook?.title ?? "단어장")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationDestination(item: $selectedItem) { item in
-            NotebookWordDetailView(store: store, notebookId: notebookId, itemId: item.id, repository: repository)
-        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 HStack(spacing: 16) {
@@ -96,35 +140,6 @@ struct NotebookDetailView: View {
                     }
                 }
             }
-        }
-        .sheet(isPresented: $isAddWordPresented) {
-            AddNotebookWordView(store: store, notebookId: notebookId, repository: repository)
-        }
-        .sheet(isPresented: $isNotebookEditorPresented) {
-            NotebookEditorSheet(
-                title: $notebookTitleDraft,
-                descriptionText: $notebookDescriptionDraft,
-                onCancel: {
-                    isNotebookEditorPresented = false
-                },
-                onSave: {
-                    store.updateNotebook(
-                        notebookId,
-                        title: notebookTitleDraft,
-                        descriptionText: notebookDescriptionDraft
-                    )
-                    isNotebookEditorPresented = false
-                }
-            )
-        }
-        .confirmationDialog("이 단어장을 삭제할까요?", isPresented: $isNotebookDeleteDialogPresented, titleVisibility: .visible) {
-            Button("삭제", role: .destructive) {
-                store.deleteNotebook(notebookId)
-                dismiss()
-            }
-            Button("취소", role: .cancel) {}
-        } message: {
-            Text("포함된 단어도 모두 삭제됩니다")
         }
     }
 }

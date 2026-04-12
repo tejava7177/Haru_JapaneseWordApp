@@ -98,8 +98,10 @@ struct WordDetailView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
-        .navigationDestination(item: $selectedNotebook) { notebook in
-            NotebookDetailView(store: notebookStore, notebookId: notebook.id, repository: repository)
+        .sheet(item: $selectedNotebook) { notebook in
+            NavigationStack {
+                NotebookDetailView(store: notebookStore, notebookId: notebook.id, repository: repository)
+            }
         }
         .task(id: wordId) {
             viewModel.load(wordId: wordId)

@@ -24,26 +24,20 @@ struct WordListView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                screenBackground
-                    .ignoresSafeArea()
-
-                Group {
-                    switch selectedTab {
-                    case .jlpt:
-                        jlptContent
-                    case .notebook:
-                        notebookContent
-                    }
-                }
-                .navigationBarTitleDisplayMode(.inline)
+            rootContent
                 .navigationDestination(item: $selectedWord) { word in
-                    destinationView(for: word)
+                    if let currentIndex = viewModel.displayedWords.firstIndex(of: word) {
+                        WordDetailExplorerView(
+                            items: viewModel.displayedWords,
+                            initialIndex: currentIndex,
+                            repository: repository,
+                            notebookStore: notebookStore
+                        )
+                    }
                 }
                 .navigationDestination(item: $selectedNotebook) { notebook in
                     NotebookDetailView(store: notebookStore, notebookId: notebook.id, repository: repository)
                 }
-            }
         }
         .toolbarBackground(.hidden, for: .navigationBar)
         .onChange(of: viewModel.searchText) {
@@ -95,6 +89,23 @@ struct WordListView: View {
 }
 
 private extension WordListView {
+    var rootContent: some View {
+        ZStack {
+            screenBackground
+                .ignoresSafeArea()
+
+            Group {
+                switch selectedTab {
+                case .jlpt:
+                    jlptContent
+                case .notebook:
+                    notebookContent
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
     @ViewBuilder
     var jlptContent: some View {
         if viewModel.isLoading {
@@ -298,16 +309,6 @@ private extension WordListView {
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    @ViewBuilder
-    func destinationView(for word: WordListItem) -> some View {
-        switch word.source {
-        case let .jlpt(_, wordId):
-            WordDetailView(wordId: wordId, repository: repository, notebookStore: notebookStore)
-        case let .notebook(notebookId, itemId):
-            NotebookWordDetailView(store: notebookStore, notebookId: notebookId, itemId: itemId)
-        }
     }
 
     var emptyFilteredStateRow: some View {
