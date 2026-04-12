@@ -18,6 +18,7 @@ struct RootView: View {
         self.repository = repository
         AppTheme.configureTabBarAppearance()
         let settingsStore = AppSettingsStore()
+        ReviewWordStore.shared.configure(settingsStore: settingsStore)
         _settingsStore = StateObject(wrappedValue: settingsStore)
         _mateViewModel = StateObject(wrappedValue: MateViewModel(settingsStore: settingsStore))
 

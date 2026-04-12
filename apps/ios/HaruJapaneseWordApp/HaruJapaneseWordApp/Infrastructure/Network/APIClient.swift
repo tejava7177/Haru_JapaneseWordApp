@@ -67,6 +67,14 @@ final class APIClient: @unchecked Sendable {
         _ = try await sendWithoutResponseBody(endpoint)
     }
 
+    func put<Response: Decodable>(_ endpoint: APIEndpoint, responseType: Response.Type) async throws -> Response {
+        try await send(endpoint, responseType: responseType)
+    }
+
+    func put(_ endpoint: APIEndpoint) async throws {
+        _ = try await sendWithoutResponseBody(endpoint)
+    }
+
     func postMultipart<Response: Decodable>(
         _ endpoint: APIEndpoint,
         fileData: Data,

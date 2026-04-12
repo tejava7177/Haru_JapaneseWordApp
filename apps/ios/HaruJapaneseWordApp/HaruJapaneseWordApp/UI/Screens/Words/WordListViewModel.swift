@@ -171,19 +171,13 @@ final class WordListViewModel: ObservableObject {
     }
 
     private func addToReview(_ wordId: Int) {
-        print("[WordListViewModel] review state before action=add wordId=\(wordId) isReview=\(reviewStore.contains(wordId))")
+        print("[WordListViewModel] review toggle request action=add wordId=\(wordId)")
         reviewStore.add(wordId)
-        print("[WordListViewModel] review state after action=add wordId=\(wordId) isReview=\(reviewStore.contains(wordId))")
-        let feedback = UINotificationFeedbackGenerator()
-        feedback.notificationOccurred(.success)
     }
 
     private func removeFromReview(_ wordId: Int) {
-        print("[WordListViewModel] review state before action=remove wordId=\(wordId) isReview=\(reviewStore.contains(wordId))")
+        print("[WordListViewModel] review toggle request action=remove wordId=\(wordId)")
         reviewStore.remove(wordId)
-        print("[WordListViewModel] review state after action=remove wordId=\(wordId) isReview=\(reviewStore.contains(wordId))")
-        let feedback = UINotificationFeedbackGenerator()
-        feedback.notificationOccurred(.success)
     }
 
     private func fetchWords() {

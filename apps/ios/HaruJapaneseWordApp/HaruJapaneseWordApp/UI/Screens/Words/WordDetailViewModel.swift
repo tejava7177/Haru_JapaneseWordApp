@@ -53,15 +53,8 @@ final class WordDetailViewModel: ObservableObject {
 
     func toggleReview() {
         guard let wordId = currentWordId else { return }
-        let before = reviewStore.contains(wordId)
         print("[WordDetail] detail review button tapped wordId=\(wordId)")
-        print("[WordDetail] review state before wordId=\(wordId) isReview=\(before)")
         reviewStore.toggle(wordId)
-        let after = reviewStore.contains(wordId)
-        print("[WordDetail] review state after wordId=\(wordId) isReview=\(after)")
-        isReview = after
-        let feedback = UINotificationFeedbackGenerator()
-        feedback.notificationOccurred(.success)
     }
 
     private func loadRecommendations(for detail: WordDetail) -> [(kanji: String, words: [WordSummary])] {
