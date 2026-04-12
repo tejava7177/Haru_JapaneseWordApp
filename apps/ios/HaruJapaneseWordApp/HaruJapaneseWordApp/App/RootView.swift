@@ -59,7 +59,7 @@ struct RootView: View {
                 }
                 .tag(RootTab.home)
 
-            WordListView(repository: repository, viewModel: wordListViewModel)
+            WordListView(repository: repository, viewModel: wordListViewModel, settingsStore: settingsStore)
                 .tabItem {
                     Label("Words", systemImage: "book")
                 }
@@ -86,7 +86,14 @@ struct RootView: View {
                 .tag(RootTab.profile)
         }
         .background(Color.appBackground.ignoresSafeArea())
+        .onReceive(NotificationCenter.default.publisher(for: .wordListRequiresLoginNavigation)) { _ in
+            selectedTab = .profile
+        }
     }
+}
+
+extension Notification.Name {
+    static let wordListRequiresLoginNavigation = Notification.Name("wordListRequiresLoginNavigation")
 }
 
 #Preview {

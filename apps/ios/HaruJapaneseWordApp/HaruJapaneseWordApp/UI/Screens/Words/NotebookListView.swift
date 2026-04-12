@@ -2,7 +2,9 @@ import SwiftUI
 
 struct NotebookListView<Header: View>: View {
     @ObservedObject var store: NotebookStore
+    let isLoggedIn: Bool
     let onSelectNotebook: (WordNotebook) -> Void
+    let onRequestLogin: () -> Void
     @ViewBuilder let header: () -> Header
 
     var body: some View {
@@ -33,17 +35,38 @@ struct NotebookListView<Header: View>: View {
 private extension NotebookListView {
     var emptyState: some View {
         VStack(spacing: 10) {
-            Image(systemName: "books.vertical")
-                .font(.system(size: 30))
-                .foregroundStyle(Color.iconSecondary)
+            if isLoggedIn {
+                Image(systemName: "books.vertical")
+                    .font(.system(size: 30))
+                    .foregroundStyle(Color.iconSecondary)
 
-            Text("아직 만든 단어장이 없어요")
-                .font(.headline)
+                Text("아직 만든 단어장이 없어요")
+                    .font(.headline)
 
-            Text("+ 버튼으로 첫 단어장을 만들어 보세요")
-                .font(.subheadline)
-                .foregroundStyle(Color.textSecondary)
-                .multilineTextAlignment(.center)
+                Text("+ 버튼으로 첫 단어장을 만들어 보세요")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.textSecondary)
+                    .multilineTextAlignment(.center)
+            } else {
+                Image(systemName: "person.crop.circle.badge.plus")
+                    .font(.system(size: 32))
+                    .foregroundStyle(Color.iconSecondary)
+
+                Text("로그인하고 나만의 단어장을 만들어보세요")
+                    .font(.headline)
+                    .multilineTextAlignment(.center)
+
+                Text("단어장을 만들고, 단어를 저장하고, 다시 로그인해도 이어서 학습할 수 있어요.")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.textSecondary)
+                    .multilineTextAlignment(.center)
+
+                Button("로그인하기") {
+                    onRequestLogin()
+                }
+                .buttonStyle(.borderedProminent)
+                .padding(.top, 6)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 48)
@@ -90,7 +113,7 @@ private extension NotebookListView {
 }
 
 #Preview {
-    NotebookListView(store: previewStore, onSelectNotebook: { _ in }) {
+    NotebookListView(store: previewStore, isLoggedIn: true, onSelectNotebook: { _ in }, onRequestLogin: {}) {
         EmptyView()
     }
 }

@@ -7,6 +7,7 @@ struct WordListView: View {
     }
 
     @ObservedObject private var viewModel: WordListViewModel
+    @ObservedObject private var settingsStore: AppSettingsStore
     private let repository: DictionaryRepository
     @StateObject private var notebookStore = NotebookStore()
     @State private var isRangeSheetPresented: Bool = false
@@ -17,9 +18,10 @@ struct WordListView: View {
     @State private var selectedNotebook: WordNotebook?
     @AppStorage("words.showMeaning") private var showMeaning: Bool = true
 
-    init(repository: DictionaryRepository, viewModel: WordListViewModel) {
+    init(repository: DictionaryRepository, viewModel: WordListViewModel, settingsStore: AppSettingsStore) {
         self.repository = repository
         _viewModel = ObservedObject(wrappedValue: viewModel)
+        _settingsStore = ObservedObject(wrappedValue: settingsStore)
     }
 
     var body: some View {
@@ -168,9 +170,16 @@ private extension WordListView {
     }
 
     var notebookContent: some View {
-        NotebookListView(store: notebookStore, onSelectNotebook: { notebook in
+        NotebookListView(
+            store: notebookStore,
+            isLoggedIn: isNotebookLoginAvailable,
+            onSelectNotebook: { notebook in
             selectedNotebook = notebook
-        }) {
+        },
+            onRequestLogin: {
+                openProfileLogin()
+            }
+        ) {
             headerRow
             tabRow
             searchRow
@@ -179,19 +188,22 @@ private extension WordListView {
 
     var actionButtons: some View {
         HStack(spacing: 12) {
-            Button {
-                isCreateNotebookPresented = true
-            } label: {
-                Image(systemName: "plus")
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(Color.iconPrimary)
-                    .frame(width: 38, height: 38)
-                    .background(Color.surfaceSecondary)
-                    .clipShape(Circle())
-                    .overlay(Circle().stroke(Color.divider, lineWidth: 1))
-                    .shadow(color: Color.appShadow, radius: 10, x: 0, y: 4)
+            if shouldShowCreateNotebookButton {
+                Button {
+                    guard isNotebookLoginAvailable else { return }
+                    isCreateNotebookPresented = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(Color.iconPrimary)
+                        .frame(width: 38, height: 38)
+                        .background(Color.surfaceSecondary)
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(Color.divider, lineWidth: 1))
+                        .shadow(color: Color.appShadow, radius: 10, x: 0, y: 4)
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
 
             Button {
                 isRangeSheetPresented = true
@@ -335,6 +347,19 @@ private extension WordListView {
     var screenBackground: some View {
         Color.appBackground
     }
+
+    var isNotebookLoginAvailable: Bool {
+        settingsStore.currentBackendUserId?.isEmpty == false
+    }
+
+    var shouldShowCreateNotebookButton: Bool {
+        selectedTab != .notebook || isNotebookLoginAvailable
+    }
+
+    func openProfileLogin() {
+        selectedTab = .jlpt
+        NotificationCenter.default.post(name: .wordListRequiresLoginNavigation, object: nil)
+    }
 }
 
 private struct WordTabButton: View {
@@ -462,7 +487,8 @@ private struct ShuffleHUD: View {
 #Preview {
     WordListView(
         repository: StubDictionaryRepository(),
-        viewModel: WordListViewModel(repository: StubDictionaryRepository())
+        viewModel: WordListViewModel(repository: StubDictionaryRepository()),
+        settingsStore: AppSettingsStore()
     )
 }
 
