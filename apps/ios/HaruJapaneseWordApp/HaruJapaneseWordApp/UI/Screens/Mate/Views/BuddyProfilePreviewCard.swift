@@ -10,6 +10,7 @@ struct BuddyProfilePreviewItem: Equatable {
     let detailTitle: String
     let detailValue: String
     let detailIcon: String
+    let isDetailEmphasized: Bool
 }
 
 struct BuddyProfilePreviewCard: View {
@@ -67,7 +68,8 @@ struct BuddyProfilePreviewCard: View {
                 infoRow(
                     icon: item.detailIcon,
                     title: item.detailTitle,
-                    value: item.detailValue
+                    value: item.detailValue,
+                    isEmphasized: item.isDetailEmphasized
                 )
 
                 if let bioText {
@@ -100,13 +102,16 @@ struct BuddyProfilePreviewCard: View {
         .padding(.horizontal, 24)
     }
 
-    private func infoRow(icon: String, title: String, value: String) -> some View {
+    private func infoRow(icon: String, title: String, value: String, isEmphasized: Bool = false) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: icon)
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(isEmphasized ? Color(red: 0.92, green: 0.48, blue: 0.66) : Color.accentColor)
                 .frame(width: 24, height: 24)
-                .background(Color.accentColor.opacity(0.12))
+                .background(
+                    (isEmphasized ? Color(red: 0.92, green: 0.48, blue: 0.66) : Color.accentColor)
+                        .opacity(isEmphasized ? 0.16 : 0.12)
+                )
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             VStack(alignment: .leading, spacing: 3) {
@@ -115,8 +120,8 @@ struct BuddyProfilePreviewCard: View {
                     .foregroundStyle(.secondary)
 
                 Text(value)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.primary)
+                    .font(.subheadline.weight(isEmphasized ? .semibold : .medium))
+                    .foregroundStyle(isEmphasized ? Color(red: 0.92, green: 0.48, blue: 0.66) : .primary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 

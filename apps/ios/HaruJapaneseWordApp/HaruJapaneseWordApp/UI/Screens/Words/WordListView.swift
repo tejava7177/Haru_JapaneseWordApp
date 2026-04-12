@@ -41,7 +41,7 @@ struct WordListView: View {
                     destinationView(for: word)
                 }
                 .navigationDestination(item: $selectedNotebook) { notebook in
-                    NotebookDetailView(store: notebookStore, notebookId: notebook.id)
+                    NotebookDetailView(store: notebookStore, notebookId: notebook.id, repository: repository)
                 }
             }
         }

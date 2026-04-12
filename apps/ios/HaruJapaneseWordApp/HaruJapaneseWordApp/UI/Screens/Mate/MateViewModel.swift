@@ -29,6 +29,11 @@ private struct BuddyServerProfile: Equatable {
 }
 
 struct MateRoomCardItem: Identifiable, Equatable {
+    private enum Copy {
+        static let exchangedPetalsTitle = "주고받은 꽃잎 🌸"
+        static let petalsPreparing = "주고받은 꽃잎 준비중"
+    }
+
     let id: Int
     let counterpartUserId: String
     let counterpartRawUserId: String
@@ -43,13 +48,13 @@ struct MateRoomCardItem: Identifiable, Equatable {
     var resolvedTikiTakaCount: Int { max(tikiTakaCount ?? 0, 0) }
     var buddyStatusText: String {
         if resolvedTikiTakaCount > 0 {
-            return "🔥 티키타카 \(resolvedTikiTakaCount)회"
+            return "🌸 주고받은 꽃잎 \(resolvedTikiTakaCount)개"
         }
-        return "티키타카 준비중"
+        return Copy.petalsPreparing
     }
 
     var miniProfileTikiTakaText: String {
-        "\(resolvedTikiTakaCount)회"
+        "\(resolvedTikiTakaCount)개"
     }
 
     var previewItem: BuddyProfilePreviewItem {
@@ -60,9 +65,10 @@ struct MateRoomCardItem: Identifiable, Equatable {
             instagramId: profile.instagramId,
             profileImageUrl: profile.profileImageUrl,
             avatarData: profile.avatarData,
-            detailTitle: "티키타카",
+            detailTitle: Copy.exchangedPetalsTitle,
             detailValue: miniProfileTikiTakaText,
-            detailIcon: "flame.fill"
+            detailIcon: "sparkles",
+            isDetailEmphasized: resolvedTikiTakaCount > 0
         )
     }
 }
@@ -105,7 +111,8 @@ struct IncomingBuddyRequestItem: Identifiable, Equatable {
             avatarData: avatarData,
             detailTitle: "최근 접속일",
             detailValue: recentAccessText,
-            detailIcon: "clock.fill"
+            detailIcon: "clock.fill",
+            isDetailEmphasized: false
         )
     }
 }
@@ -148,7 +155,8 @@ struct RandomCandidateItem: Identifiable, Equatable {
             avatarData: avatarData,
             detailTitle: "최근 접속일",
             detailValue: recentAccessText,
-            detailIcon: "clock.fill"
+            detailIcon: "clock.fill",
+            isDetailEmphasized: false
         )
     }
 }
@@ -976,9 +984,9 @@ final class MateViewModel: ObservableObject {
     private func tikiTakaStatusText(for count: Int?) -> String {
         let resolvedCount = max(count ?? 0, 0)
         if resolvedCount > 0 {
-            return "🔥 티키타카 \(resolvedCount)회"
+            return "🌸 주고받은 꽃잎 \(resolvedCount)개"
         }
-        return "티키타카 준비중"
+        return "주고받은 꽃잎 준비중"
     }
 
     private func decodeAvatarData(from base64: String?) -> Data? {

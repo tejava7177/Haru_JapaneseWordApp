@@ -2,6 +2,7 @@ import SwiftUI
 
 struct NotebookDetailView: View {
     @ObservedObject var store: NotebookStore
+    private let repository: DictionaryRepository
     let notebookId: UUID
     @State private var isAddWordPresented: Bool = false
     @State private var isNotebookEditorPresented: Bool = false
@@ -17,6 +18,16 @@ struct NotebookDetailView: View {
 
     private var items: [WordNotebookItem] {
         store.items(for: notebookId)
+    }
+
+    init(
+        store: NotebookStore,
+        notebookId: UUID,
+        repository: DictionaryRepository = StubDictionaryRepository()
+    ) {
+        self.store = store
+        self.notebookId = notebookId
+        self.repository = repository
     }
 
     var body: some View {
@@ -52,7 +63,7 @@ struct NotebookDetailView: View {
         .navigationTitle(notebook?.title ?? "단어장")
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(item: $selectedItem) { item in
-            NotebookWordDetailView(store: store, notebookId: notebookId, itemId: item.id)
+            NotebookWordDetailView(store: store, notebookId: notebookId, itemId: item.id, repository: repository)
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -87,7 +98,7 @@ struct NotebookDetailView: View {
             }
         }
         .sheet(isPresented: $isAddWordPresented) {
-            AddNotebookWordView(store: store, notebookId: notebookId)
+            AddNotebookWordView(store: store, notebookId: notebookId, repository: repository)
         }
         .sheet(isPresented: $isNotebookEditorPresented) {
             NotebookEditorSheet(

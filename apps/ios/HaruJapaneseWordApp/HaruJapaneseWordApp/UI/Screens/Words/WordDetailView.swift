@@ -68,7 +68,7 @@ struct WordDetailView: View {
         .navigationTitle("단어 상세")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if let detail = viewModel.detail {
+            if viewModel.detail != nil {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Button("내 단어장에 추가") {
@@ -103,7 +103,7 @@ struct WordDetailView: View {
             }
         }
         .navigationDestination(item: $selectedNotebook) { notebook in
-            NotebookDetailView(store: notebookStore, notebookId: notebook.id)
+            NotebookDetailView(store: notebookStore, notebookId: notebook.id, repository: repository)
         }
         .task(id: wordId) {
             viewModel.load(wordId: wordId)

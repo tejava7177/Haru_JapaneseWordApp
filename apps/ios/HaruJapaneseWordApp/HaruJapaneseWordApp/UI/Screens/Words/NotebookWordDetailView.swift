@@ -2,6 +2,7 @@ import SwiftUI
 
 struct NotebookWordDetailView: View {
     @ObservedObject var store: NotebookStore
+    private let repository: DictionaryRepository
     let notebookId: UUID
     let itemId: UUID
     @Environment(\.dismiss) private var dismiss
@@ -9,6 +10,18 @@ struct NotebookWordDetailView: View {
 
     private var item: WordNotebookItem? {
         store.item(for: notebookId, itemId: itemId)
+    }
+
+    init(
+        store: NotebookStore,
+        notebookId: UUID,
+        itemId: UUID,
+        repository: DictionaryRepository = StubDictionaryRepository()
+    ) {
+        self.store = store
+        self.notebookId = notebookId
+        self.itemId = itemId
+        self.repository = repository
     }
 
     var body: some View {
@@ -43,7 +56,7 @@ struct NotebookWordDetailView: View {
         }
         .sheet(isPresented: $isEditPresented) {
             if let item {
-                AddNotebookWordView(store: store, notebookId: notebookId, editingItem: item)
+                AddNotebookWordView(store: store, notebookId: notebookId, repository: repository, editingItem: item)
             }
         }
     }

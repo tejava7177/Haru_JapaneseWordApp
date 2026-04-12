@@ -3,6 +3,13 @@ import Combine
 
 @MainActor
 final class NotebookStore: ObservableObject {
+    enum ManualWordSaveResult {
+        case success
+        case duplicateExpression(existingItem: WordNotebookItem)
+        case notebookNotFound
+        case itemNotFound
+    }
+
     enum AddJLPTWordResult {
         case success
         case duplicate
@@ -83,16 +90,28 @@ final class NotebookStore: ObservableObject {
         guard let notebook = notebook(for: notebookId) else { return false }
 
         let trimmedWord = word.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedReading = reading?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedReading = trimmedReading?.isEmpty == false ? trimmedReading : nil
 
         return notebook.items.contains {
             isDuplicate(
                 existingItem: $0,
                 newWordId: wordId,
                 newWord: trimmedWord,
-                newReading: normalizedReading
+                newReading: reading
             )
+        }
+    }
+
+    func findItemWithSameExpression(
+        in notebookId: UUID,
+        expression: String,
+        excluding itemId: UUID? = nil
+    ) -> WordNotebookItem? {
+        guard let notebook = notebook(for: notebookId) else { return nil }
+        let normalizedExpression = normalizedWordValue(expression)
+        guard normalizedExpression.isEmpty == false else { return nil }
+
+        return notebook.items.first { item in
+            item.id != itemId && normalizedWordValue(item.word) == normalizedExpression
         }
     }
 
@@ -104,7 +123,14 @@ final class NotebookStore: ObservableObject {
             }
     }
 
-    func addItem(to notebookId: UUID, word: String, reading: String, meaning: String, note: String? = nil) {
+    @discardableResult
+    func addItem(
+        to notebookId: UUID,
+        word: String,
+        reading: String,
+        meaning: String,
+        note: String? = nil
+    ) -> ManualWordSaveResult {
         let trimmedWord = word.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedReading = reading.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedMeaning = meaning.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -113,7 +139,11 @@ final class NotebookStore: ObservableObject {
         guard trimmedWord.isEmpty == false,
               trimmedMeaning.isEmpty == false,
               let index = notebooks.firstIndex(where: { $0.id == notebookId }) else {
-            return
+            return .notebookNotFound
+        }
+
+        if let duplicateItem = findItemWithSameExpression(in: notebookId, expression: trimmedWord) {
+            return .duplicateExpression(existingItem: duplicateItem)
         }
 
         let item = WordNotebookItem(
@@ -124,6 +154,7 @@ final class NotebookStore: ObservableObject {
         )
         notebooks[index].items.append(item)
         save()
+        return .success
     }
 
     func addJLPTWord(
@@ -169,6 +200,7 @@ final class NotebookStore: ObservableObject {
         return .success
     }
 
+    @discardableResult
     func updateItem(
         in notebookId: UUID,
         itemId: UUID,
@@ -176,17 +208,27 @@ final class NotebookStore: ObservableObject {
         reading: String,
         meaning: String,
         note: String? = nil
-    ) {
+    ) -> ManualWordSaveResult {
         let trimmedWord = word.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedReading = reading.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedMeaning = meaning.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard trimmedWord.isEmpty == false,
-              trimmedMeaning.isEmpty == false,
-              let notebookIndex = notebooks.firstIndex(where: { $0.id == notebookId }),
-              let itemIndex = notebooks[notebookIndex].items.firstIndex(where: { $0.id == itemId }) else {
-            return
+              trimmedMeaning.isEmpty == false else {
+            return .itemNotFound
+        }
+
+        guard let notebookIndex = notebooks.firstIndex(where: { $0.id == notebookId }) else {
+            return .notebookNotFound
+        }
+
+        guard let itemIndex = notebooks[notebookIndex].items.firstIndex(where: { $0.id == itemId }) else {
+            return .itemNotFound
+        }
+
+        if let duplicateItem = findItemWithSameExpression(in: notebookId, expression: trimmedWord, excluding: itemId) {
+            return .duplicateExpression(existingItem: duplicateItem)
         }
 
         let existing = notebooks[notebookIndex].items[itemIndex]
@@ -200,6 +242,7 @@ final class NotebookStore: ObservableObject {
             addedAt: existing.addedAt
         )
         save()
+        return .success
     }
 
     func deleteItem(in notebookId: UUID, itemId: UUID) {
@@ -253,7 +296,6 @@ final class NotebookStore: ObservableObject {
     }
 
     private func deduplicatedItems(_ items: [WordNotebookItem]) -> [WordNotebookItem] {
-        var seenWordIds = Set<Int>()
         var seenWords = Set<String>()
         var deduplicated: [WordNotebookItem] = []
         deduplicated.reserveCapacity(items.count)
@@ -262,10 +304,6 @@ final class NotebookStore: ObservableObject {
             let normalizedWord = normalizedWordValue(item.word)
             if seenWords.contains(normalizedWord) {
                 continue
-            }
-
-            if let wordId = item.wordId {
-                guard seenWordIds.insert(wordId).inserted else { continue }
             }
 
             seenWords.insert(normalizedWord)
@@ -289,7 +327,7 @@ final class NotebookStore: ObservableObject {
         }
 
         let hasSameExpression = normalizedWordValue(existingItem.word) == normalizedWordValue(newWord)
-        let hasSameFallback = existingItem.word == newWord &&
+        let hasSameFallback = normalizedWordValue(existingItem.word) == normalizedWordValue(newWord) &&
             normalizedReadingValue(existingItem.reading) == normalizedReadingValue(newReading)
 
         return hasSameWordId || hasSameExpression || hasSameFallback
@@ -301,6 +339,8 @@ final class NotebookStore: ObservableObject {
     }
 
     private func normalizedWordValue(_ word: String) -> String {
-        word.trimmingCharacters(in: .whitespacesAndNewlines)
+        word
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .precomposedStringWithCanonicalMapping
     }
 }

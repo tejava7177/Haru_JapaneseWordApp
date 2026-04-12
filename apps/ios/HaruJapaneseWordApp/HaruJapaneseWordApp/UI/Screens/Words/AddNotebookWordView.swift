@@ -2,6 +2,12 @@ import SwiftUI
 import UIKit
 
 struct AddNotebookWordView: View {
+    private enum DuplicateAlertContext: Identifiable {
+        case notebook
+
+        var id: String { "notebook" }
+    }
+
     private enum Field: Hashable {
         case word
         case reading
@@ -10,6 +16,7 @@ struct AddNotebookWordView: View {
     }
 
     @ObservedObject var store: NotebookStore
+    private let repository: DictionaryRepository
     let notebookId: UUID
     let editingItemId: UUID?
 
@@ -19,15 +26,23 @@ struct AddNotebookWordView: View {
     @State private var meaning: String = ""
     @State private var note: String = ""
     @State private var toastMessage: String?
+    @State private var duplicateAlertContext: DuplicateAlertContext?
+    @State private var isWordListDuplicateConfirmationPresented: Bool = false
     @FocusState private var focusedField: Field?
 
     private var isEditing: Bool {
         editingItemId != nil
     }
 
-    init(store: NotebookStore, notebookId: UUID, editingItem: WordNotebookItem? = nil) {
+    init(
+        store: NotebookStore,
+        notebookId: UUID,
+        repository: DictionaryRepository = StubDictionaryRepository(),
+        editingItem: WordNotebookItem? = nil
+    ) {
         self.store = store
         self.notebookId = notebookId
+        self.repository = repository
         self.editingItemId = editingItem?.id
         _word = State(initialValue: editingItem?.word ?? "")
         _reading = State(initialValue: editingItem?.reading ?? "")
@@ -136,25 +151,60 @@ struct AddNotebookWordView: View {
                     focusedField = .word
                 }
             }
+            .alert(item: $duplicateAlertContext) { context in
+                switch context {
+                case .notebook:
+                    return Alert(
+                        title: Text("이미 이 단어장에 있는 단어예요"),
+                        message: Text("새로 추가하는 대신 수정해서 사용해보세요."),
+                        primaryButton: .default(Text("단어장 보기")) {
+                            dismiss()
+                        },
+                        secondaryButton: .cancel(Text("확인"))
+                    )
+                }
+            }
+            .alert("이미 Word 목록에 있는 단어예요", isPresented: $isWordListDuplicateConfirmationPresented) {
+                Button("취소", role: .cancel) {}
+                Button("추가하기") {
+                    persistCurrentInput(shouldDismissOnSuccess: false)
+                }
+            } message: {
+                Text("다른 의미나 메모와 함께 내 단어장에 추가할까요?")
+            }
         }
     }
 
     private func saveAndDismiss() {
-        saveCurrentInput()
-        dismiss()
+        attemptSave(shouldDismissOnSuccess: true)
     }
 
     private func saveAndContinue() {
-        saveCurrentInput()
-        clearInputs()
-        focusedField = .word
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
-        showToast("저장했어요")
+        attemptSave(shouldDismissOnSuccess: false)
     }
 
-    private func saveCurrentInput() {
+    private func attemptSave(shouldDismissOnSuccess: Bool) {
+        let expression = normalizedExpression
+
+        if store.findItemWithSameExpression(in: notebookId, expression: expression, excluding: editingItemId) != nil {
+            duplicateAlertContext = .notebook
+            UINotificationFeedbackGenerator().notificationOccurred(.warning)
+            return
+        }
+
+        if isEditing == false, hasMatchingDictionaryWord(expression: expression) {
+            isWordListDuplicateConfirmationPresented = true
+            return
+        }
+
+        persistCurrentInput(shouldDismissOnSuccess: shouldDismissOnSuccess)
+    }
+
+    private func persistCurrentInput(shouldDismissOnSuccess: Bool) {
+        let result: NotebookStore.ManualWordSaveResult
+
         if let editingItemId {
-            store.updateItem(
+            result = store.updateItem(
                 in: notebookId,
                 itemId: editingItemId,
                 word: word,
@@ -163,7 +213,41 @@ struct AddNotebookWordView: View {
                 note: note
             )
         } else {
-            store.addItem(to: notebookId, word: word, reading: reading, meaning: meaning, note: note)
+            result = store.addItem(to: notebookId, word: word, reading: reading, meaning: meaning, note: note)
+        }
+
+        switch result {
+        case .success:
+            if shouldDismissOnSuccess {
+                dismiss()
+            } else {
+                clearInputs()
+                focusedField = .word
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                showToast("저장했어요")
+            }
+        case .duplicateExpression:
+            duplicateAlertContext = .notebook
+            UINotificationFeedbackGenerator().notificationOccurred(.warning)
+        case .notebookNotFound, .itemNotFound:
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            showToast("저장하지 못했어요")
+        }
+    }
+
+    private var normalizedExpression: String {
+        word
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .precomposedStringWithCanonicalMapping
+    }
+
+    private func hasMatchingDictionaryWord(expression: String) -> Bool {
+        guard expression.isEmpty == false else { return false }
+
+        do {
+            return try repository.findByExpression(expression) != nil
+        } catch {
+            return false
         }
     }
 
