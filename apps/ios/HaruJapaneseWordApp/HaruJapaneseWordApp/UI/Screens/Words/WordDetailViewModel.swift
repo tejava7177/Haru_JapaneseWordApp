@@ -11,11 +11,20 @@ final class WordDetailViewModel: ObservableObject {
     @Published var isReview: Bool = false
 
     private let repository: DictionaryRepository
-    private let reviewStore = ReviewWordStore()
+    private let reviewStore: ReviewWordStore
     private var currentWordId: Int?
+    private var cancellables: Set<AnyCancellable> = []
 
-    init(repository: DictionaryRepository) {
+    init(repository: DictionaryRepository, reviewStore: ReviewWordStore = .shared) {
         self.repository = repository
+        self.reviewStore = reviewStore
+        reviewStore.$reviewWordIds
+            .receive(on: RunLoop.main)
+            .sink { [weak self] ids in
+                guard let self, let wordId = self.currentWordId else { return }
+                self.isReview = ids.contains(wordId)
+            }
+            .store(in: &cancellables)
     }
 
     func load(wordId: Int) {
@@ -44,15 +53,13 @@ final class WordDetailViewModel: ObservableObject {
 
     func toggleReview() {
         guard let wordId = currentWordId else { return }
-        var reviewIds = reviewStore.loadReviewSet()
-        if reviewIds.contains(wordId) {
-            reviewIds.remove(wordId)
-            isReview = false
-        } else {
-            reviewIds.insert(wordId)
-            isReview = true
-        }
-        reviewStore.saveReviewSet(reviewIds)
+        let before = reviewStore.contains(wordId)
+        print("[WordDetail] detail review button tapped wordId=\(wordId)")
+        print("[WordDetail] review state before wordId=\(wordId) isReview=\(before)")
+        reviewStore.toggle(wordId)
+        let after = reviewStore.contains(wordId)
+        print("[WordDetail] review state after wordId=\(wordId) isReview=\(after)")
+        isReview = after
         let feedback = UINotificationFeedbackGenerator()
         feedback.notificationOccurred(.success)
     }

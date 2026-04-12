@@ -35,20 +35,16 @@ struct WordDetailView: View {
                     .padding(.top, 32)
             } else if let detail = viewModel.detail {
                 VStack(alignment: .leading, spacing: 20) {
-                    ReviewSwipeCard(isReviewWord: $viewModel.isReview, onToggle: {
-                        viewModel.toggleReview()
-                    }) {
-                        WordHeaderCard(
-                            expression: displayExpression(for: detail),
-                            rawExpression: detail.expression,
-                            reading: detail.reading,
-                            level: detail.level.title,
-                            meanings: detail.meanings,
-                            isExpanded: $isReadingExpanded,
-                            isReviewWord: viewModel.isReview,
-                            onToggleReview: { viewModel.toggleReview() }
-                        )
-                    }
+                    WordHeaderCard(
+                        expression: displayExpression(for: detail),
+                        rawExpression: detail.expression,
+                        reading: detail.reading,
+                        level: detail.level.title,
+                        meanings: detail.meanings,
+                        isExpanded: $isReadingExpanded,
+                        isReviewWord: viewModel.isReview,
+                        onToggleReview: { viewModel.toggleReview() }
+                    )
 
                     MeaningCard(meanings: detail.meanings)
 
@@ -201,14 +197,18 @@ private struct WordHeaderCard: View {
                         .foregroundStyle(.secondary)
 
                     Button {
+                        print("[WordDetail] button hit source=reviewButton")
                         onToggleReview()
                     } label: {
                         Image(systemName: isReviewWord ? "book.fill" : "book")
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundStyle(isReviewWord ? Color.orange : .secondary)
                             .frame(width: 36, height: 36)
+                            .contentShape(Circle())
                     }
                     .buttonStyle(.plain)
+                    .frame(width: 36, height: 36)
+                    .contentShape(Circle())
                     .accessibilityLabel("복습 단어")
 
                     copyButton
@@ -239,6 +239,7 @@ private struct WordHeaderCard: View {
         .shadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 2)
         .contentShape(Rectangle())
         .onTapGesture {
+            print("[WordDetail] surrounding tap ignored action=toggleReading")
             withAnimation(.easeInOut(duration: 0.25)) {
                 isExpanded.toggle()
             }
@@ -303,90 +304,6 @@ private struct WordHeaderCard: View {
                 didCopy = false
             }
         }
-    }
-}
-
-private struct ReviewSwipeCard<Content: View>: View {
-    @Binding var isReviewWord: Bool
-    let onToggle: () -> Void
-    @State private var dragOffset: CGFloat = 0
-    @State private var cardWidth: CGFloat = 0
-    private let content: Content
-    private let cornerRadius: CGFloat = 18
-
-    init(isReviewWord: Binding<Bool>, onToggle: @escaping () -> Void, @ViewBuilder content: () -> Content) {
-        _isReviewWord = isReviewWord
-        self.onToggle = onToggle
-        self.content = content()
-    }
-
-    var body: some View {
-        ZStack(alignment: .leading) {
-            ReviewActionBackground(isReviewWord: isReviewWord)
-                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-
-            content
-                .offset(x: dragOffset)
-        }
-        .contentShape(Rectangle())
-        .background(
-            GeometryReader { proxy in
-                Color.clear
-                    .preference(key: ReviewCardWidthKey.self, value: proxy.size.width)
-            }
-        )
-        .onPreferenceChange(ReviewCardWidthKey.self) { value in
-            cardWidth = value
-        }
-        .simultaneousGesture(
-            DragGesture()
-                .onChanged { value in
-                    let translation = max(0, value.translation.width)
-                    dragOffset = min(translation, cardWidth)
-                }
-                .onEnded { value in
-                    let translation = max(0, value.translation.width)
-                    let threshold = cardWidth * 0.6
-                    if translation >= threshold {
-                        toggleReview()
-                    }
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                        dragOffset = 0
-                    }
-                }
-        )
-    }
-
-    private func toggleReview() {
-        onToggle()
-        let feedback = UINotificationFeedbackGenerator()
-        feedback.notificationOccurred(.success)
-    }
-}
-
-private struct ReviewActionBackground: View {
-    let isReviewWord: Bool
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "book.fill")
-                .font(.system(size: 16, weight: .semibold))
-            Text("복습 단어")
-                .font(.footnote)
-                .fontWeight(.semibold)
-        }
-        .foregroundStyle(isReviewWord ? Color(uiColor: .systemGreen) : Color.accentColor)
-        .padding(.leading, 16)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .background(isReviewWord ? Color(uiColor: .systemGreen).opacity(0.18) : Color.accentColor.opacity(0.18))
-    }
-}
-
-private struct ReviewCardWidthKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
     }
 }
 

@@ -43,13 +43,15 @@ final class WordListViewModel: ObservableObject {
     @Published var isShuffling: Bool = false
 
     private let repository: DictionaryRepository
-    private let reviewStore = ReviewWordStore()
+    private let reviewStore: ReviewWordStore
     private var baseJLPTWords: [WordSummary] = []
     private var notebooks: [WordNotebook] = []
     private var shuffledWordIds: [String] = []
+    private var cancellables: Set<AnyCancellable> = []
 
-    init(repository: DictionaryRepository) {
+    init(repository: DictionaryRepository, reviewStore: ReviewWordStore = .shared) {
         self.repository = repository
+        self.reviewStore = reviewStore
         self.selectedLevels = Self.loadSelectedLevels()
         self.reviewOnly = Self.loadReviewOnly()
         self.showJLPTWords = Self.loadShowJLPTWords()
@@ -58,6 +60,13 @@ final class WordListViewModel: ObservableObject {
         self.shuffledWordIds = Self.loadShuffledWordIds()
         self.preferences = Self.loadPreferences()
         self.reviewWordIds = reviewStore.loadReviewSet()
+        reviewStore.$reviewWordIds
+            .receive(on: RunLoop.main)
+            .sink { [weak self] ids in
+                self?.reviewWordIds = ids
+                self?.applyFiltersAndOrder()
+            }
+            .store(in: &cancellables)
     }
 
     func load() {
@@ -162,21 +171,17 @@ final class WordListViewModel: ObservableObject {
     }
 
     private func addToReview(_ wordId: Int) {
-        reviewWordIds.insert(wordId)
-        reviewStore.saveReviewSet(reviewWordIds)
-        if reviewOnly {
-            applyFiltersAndOrder()
-        }
+        print("[WordListViewModel] review state before action=add wordId=\(wordId) isReview=\(reviewStore.contains(wordId))")
+        reviewStore.add(wordId)
+        print("[WordListViewModel] review state after action=add wordId=\(wordId) isReview=\(reviewStore.contains(wordId))")
         let feedback = UINotificationFeedbackGenerator()
         feedback.notificationOccurred(.success)
     }
 
     private func removeFromReview(_ wordId: Int) {
-        reviewWordIds.remove(wordId)
-        reviewStore.saveReviewSet(reviewWordIds)
-        if reviewOnly {
-            applyFiltersAndOrder()
-        }
+        print("[WordListViewModel] review state before action=remove wordId=\(wordId) isReview=\(reviewStore.contains(wordId))")
+        reviewStore.remove(wordId)
+        print("[WordListViewModel] review state after action=remove wordId=\(wordId) isReview=\(reviewStore.contains(wordId))")
         let feedback = UINotificationFeedbackGenerator()
         feedback.notificationOccurred(.success)
     }
