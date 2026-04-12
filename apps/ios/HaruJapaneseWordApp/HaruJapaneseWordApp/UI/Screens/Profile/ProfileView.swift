@@ -426,29 +426,31 @@ struct ProfileView: View {
                 }
             }
 
-            Toggle(isOn: Binding(
-                get: { viewModel.isPetalNotificationEnabled },
-                set: { viewModel.updatePetalNotificationEnabled($0) }
-            )) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("꽃잎 알림 받기")
-                    Text("버디가 꽃잎을 보내면 알림으로 받아요")
+            if viewModel.hasResolvedServerSession {
+                Toggle(isOn: Binding(
+                    get: { viewModel.isPetalNotificationEnabled },
+                    set: { viewModel.updatePetalNotificationEnabled($0) }
+                )) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("꽃잎 알림 받기")
+                        Text("버디가 꽃잎을 보내면 알림으로 받아요")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .disabled(viewModel.isUpdatingPetalNotification)
+
+                if viewModel.isUpdatingPetalNotification {
+                    ProgressView("꽃잎 알림 설정 중...")
+                        .font(.footnote)
+                }
+
+                if viewModel.isPetalNotificationEnabled,
+                   viewModel.learningNotificationAuthorizationStatus == .denied {
+                    Text("알림 권한이 꺼져 있어요. 설정 앱에서 알림을 허용해 주세요.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
-            }
-            .disabled(viewModel.isUpdatingPetalNotification)
-
-            if viewModel.isUpdatingPetalNotification {
-                ProgressView("꽃잎 알림 설정 중...")
-                    .font(.footnote)
-            }
-
-            if viewModel.isPetalNotificationEnabled,
-               viewModel.learningNotificationAuthorizationStatus == .denied {
-                Text("알림 권한이 꺼져 있어요. 설정 앱에서 알림을 허용해 주세요.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
         }
     }

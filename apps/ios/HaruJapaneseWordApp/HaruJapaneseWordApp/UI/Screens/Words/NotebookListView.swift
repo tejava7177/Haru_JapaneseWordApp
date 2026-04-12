@@ -56,7 +56,7 @@ private extension NotebookListView {
                     .font(.headline)
                     .multilineTextAlignment(.center)
 
-                Text("단어장을 만들고, 단어를 저장하고, 다시 로그인해도 이어서 학습할 수 있어요.")
+                Text("단어장을 만들고, 단어를 저장하고, \n다시 로그인해도 이어서 학습할 수 있어요.")
                     .font(.subheadline)
                     .foregroundStyle(Color.textSecondary)
                     .multilineTextAlignment(.center)
