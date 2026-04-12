@@ -69,52 +69,12 @@ struct AddNotebookWordView: View {
                 }
 
                 Section("메모") {
-                    ZStack(alignment: .topLeading) {
-                        if note.isEmpty {
-                            Text("예문, 암기 팁, 메모를 자유롭게 적어보세요")
-                                .foregroundStyle(.tertiary)
-                                .padding(.top, 8)
-                                .padding(.leading, 5)
-                        }
-
-                        TextEditor(text: $note)
-                            .frame(minHeight: 120)
-                            .scrollContentBackground(.hidden)
-                            .focused($focusedField, equals: .note)
-                    }
-                }
-
-                if isEditing == false {
-                    Section {
-                        HStack(spacing: 12) {
-                            Spacer(minLength: 0)
-
-                            Button("저장 후 계속") {
-                                saveAndContinue()
-                            }
-                            .buttonStyle(.bordered)
-                            .tint(.gray)
-                            .disabled(canSave == false)
-                            .opacity(canSave ? 1.0 : 0.4)
-
-                            Button("저장") {
-                                saveAndDismiss()
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .tint(.black)
-                            .disabled(canSave == false)
-                            .opacity(canSave ? 1.0 : 0.4)
-
-                            Spacer(minLength: 0)
-                        }
-                        .padding(.top, 10)
-                        .padding(.bottom, 2)
-                    }
-                    .listRowBackground(Color.clear)
+                    TextField("예문, 암기 팁, 메모를 자유롭게 적어보세요", text: $note)
+                        .focused($focusedField, equals: .note)
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle(isEditing ? "단어 수정" : "단어 추가")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -128,6 +88,21 @@ struct AddNotebookWordView: View {
                         Button("저장") {
                             saveAndDismiss()
                         }
+                        .foregroundStyle(canSave ? Color.ctaPrimary : Color.textTertiary)
+                        .disabled(canSave == false)
+                    }
+                } else {
+                    ToolbarItemGroup(placement: .topBarTrailing) {
+                        Button("저장 후 계속") {
+                            saveAndContinue()
+                        }
+                        .foregroundStyle(canSave ? Color.chipActive : Color.textTertiary)
+                        .disabled(canSave == false)
+
+                        Button("저장") {
+                            saveAndDismiss()
+                        }
+                        .foregroundStyle(canSave ? Color.ctaPrimary : Color.textTertiary)
                         .disabled(canSave == false)
                     }
                 }
