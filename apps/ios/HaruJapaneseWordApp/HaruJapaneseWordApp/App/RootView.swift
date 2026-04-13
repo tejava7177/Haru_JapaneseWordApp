@@ -1,11 +1,14 @@
 import SwiftUI
 
 struct RootView: View {
+    @Environment(\.scenePhase) private var scenePhase
     private let repository: DictionaryRepository
     @StateObject private var settingsStore: AppSettingsStore
     @StateObject private var wordListViewModel: WordListViewModel
     @StateObject private var mateViewModel: MateViewModel
+    @StateObject private var appActivePingManager: AppActivePingManager
     @State private var selectedTab: RootTab = .home
+    @State private var lastScenePhase: ScenePhase?
 
     enum RootTab: Hashable {
         case home
@@ -21,6 +24,7 @@ struct RootView: View {
         ReviewWordStore.shared.configure(settingsStore: settingsStore)
         _settingsStore = StateObject(wrappedValue: settingsStore)
         _mateViewModel = StateObject(wrappedValue: MateViewModel(settingsStore: settingsStore))
+        _appActivePingManager = StateObject(wrappedValue: AppActivePingManager(settingsStore: settingsStore))
 
         _wordListViewModel = StateObject(wrappedValue: WordListViewModel(repository: repository))
     }
@@ -44,10 +48,19 @@ struct RootView: View {
             )
             await PushRegistrationManager.shared.syncRegistrationState()
         }
-        .onChange(of: settingsStore.serverUserId) { _ in
+        .onChange(of: settingsStore.serverUserId) { _, _ in
             Task {
                 await PushRegistrationManager.shared.syncRegistrationState()
             }
+        }
+        .onAppear {
+            lastScenePhase = scenePhase
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            defer { lastScenePhase = newPhase }
+
+            guard newPhase == .active, lastScenePhase != .active else { return }
+            appActivePingManager.sendActivePingIfNeeded(source: "scenePhase.active")
         }
     }
 

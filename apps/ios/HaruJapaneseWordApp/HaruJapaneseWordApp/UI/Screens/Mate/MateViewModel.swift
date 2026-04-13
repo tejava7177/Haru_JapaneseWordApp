@@ -924,61 +924,11 @@ final class MateViewModel: ObservableObject {
     }
 
     private func recentAccessText(from rawValue: String?, fallbackText: String? = nil) -> String {
-        guard let rawValue = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines),
-              rawValue.isEmpty == false else {
-            if let fallbackText = fallbackText?.trimmingCharacters(in: .whitespacesAndNewlines),
-               fallbackText.isEmpty == false {
-                print("[Buddy] recent access fallback raw=nil using fallbackText=\(fallbackText)")
-                return fallbackText
-            }
-            print("[Buddy] recent access fallback raw=nil fallbackText=nil -> 최근 접속일 정보 없음")
-            return "최근 접속일 정보 없음"
-        }
-
-        if let date = parsedBuddyRecentAccessDate(from: rawValue) {
-            let days = DateKey.daysBetweenKST(from: date, to: Date())
-            let text: String
-            if days <= 0 {
-                text = "오늘 접속"
-            } else {
-                text = "\(days)일 전"
-            }
-            print("[Buddy] recent access parsed raw=\(rawValue) days=\(days) text=\(text)")
-            return text
-        }
-
-        if let fallbackText = fallbackText?.trimmingCharacters(in: .whitespacesAndNewlines),
-           fallbackText.isEmpty == false {
-            print("[Buddy] recent access parse failed raw=\(rawValue) using fallbackText=\(fallbackText)")
-            return fallbackText
-        }
-
-        print("[Buddy] recent access parse failed raw=\(rawValue) fallbackText=nil -> 최근 접속일 정보 없음")
-        return "최근 접속일 정보 없음"
-    }
-
-    private func parsedBuddyRecentAccessDate(from rawValue: String) -> Date? {
-        if let parsed = ISO8601DateFormatter.fractionalOrInternet.date(from: rawValue)
-            ?? ISO8601DateFormatter.internet.date(from: rawValue) {
-            return parsed
-        }
-
-        let normalized = normalizedISO8601StringAssumingKST(from: rawValue)
-        if normalized != rawValue,
-           let parsed = ISO8601DateFormatter.fractionalOrInternet.date(from: normalized)
-            ?? ISO8601DateFormatter.internet.date(from: normalized) {
-            print("[Buddy] recent access normalized raw=\(rawValue) normalized=\(normalized)")
-            return parsed
-        }
-
-        return nil
-    }
-
-    private func normalizedISO8601StringAssumingKST(from rawValue: String) -> String {
-        let hasTimezone = rawValue.hasSuffix("Z")
-            || rawValue.range(of: "[+-]\\d{2}:?\\d{2}$", options: .regularExpression) != nil
-        guard hasTimezone == false else { return rawValue }
-        return "\(rawValue)+09:00"
+        RecentAccessTextFormatter.text(
+            from: rawValue,
+            fallbackText: fallbackText,
+            logPrefix: "[BuddyRecentAccess]"
+        )
     }
 
     private func tikiTakaStatusText(for count: Int?) -> String {
@@ -1137,7 +1087,7 @@ final class MateViewModel: ObservableObject {
     }
 }
 
-private extension ISO8601DateFormatter {
+extension ISO8601DateFormatter {
     static let fractionalOrInternet: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]

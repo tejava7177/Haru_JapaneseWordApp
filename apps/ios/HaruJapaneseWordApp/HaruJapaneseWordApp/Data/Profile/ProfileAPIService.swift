@@ -8,6 +8,7 @@ protocol ProfileAPIServiceProtocol {
     func regenerateTodayDailyWords(userId: String) async throws -> RegenerateDailyWordsResponse
     func updateRandomMatching(userId: String, enabled: Bool) async throws -> ToggleRandomMatchingResponse
     func updatePetalNotifications(userId: String, enabled: Bool) async throws -> UpdatePetalNotificationsResponse
+    func sendActivePing(userId: String) async throws
 }
 
 extension ProfileAPIServiceProtocol {
@@ -34,6 +35,7 @@ extension ProfileAPIServiceProtocol {
     func updatePetalNotifications(userId: String, enabled: Bool) async throws -> UpdatePetalNotificationsResponse {
         UpdatePetalNotificationsResponse(userId: Int(userId), petalNotificationsEnabled: enabled)
     }
+    func sendActivePing(userId: String) async throws {}
 }
 
 struct ProfileAPIService: ProfileAPIServiceProtocol, Sendable {
@@ -139,6 +141,15 @@ struct ProfileAPIService: ProfileAPIServiceProtocol, Sendable {
         )
         let request = UpdatePetalNotificationsRequest(petalNotificationsEnabled: enabled)
         return try await client.patch(endpoint, body: request, responseType: UpdatePetalNotificationsResponse.self)
+    }
+
+    nonisolated func sendActivePing(userId: String) async throws {
+        print("[ProfileAPI] POST /api/users/\(userId)/active-ping")
+        let endpoint = APIEndpoint(
+            path: "api/users/\(userId)/active-ping",
+            method: .post
+        )
+        try await client.post(endpoint, body: EmptyRequestBody())
     }
 }
 
