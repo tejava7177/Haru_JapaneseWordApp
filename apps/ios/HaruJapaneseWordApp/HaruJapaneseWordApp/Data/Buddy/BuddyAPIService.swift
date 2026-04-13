@@ -9,7 +9,7 @@ protocol BuddyAPIServiceProtocol {
     func fetchTsunTsunToday(userId: String, buddyId: String) async throws -> TsunTsunTodayResponse
     func sendTsunTsun(senderId: String, receiverId: String, dailyWordItemId: Int) async throws -> SendTsunTsunResponse?
     func fetchTsunTsunInbox(userId: String) async throws -> TsunTsunInboxResponse
-    func answerTsunTsun(tsuntsunId: Int, meaningId: Int) async throws -> AnswerTsunTsunResponse
+    func answerTsunTsun(tsuntsunId: Int, choiceId: Int) async throws -> AnswerTsunTsunResponse
     func fetchRandomCandidates(userId: String) async throws -> [RandomCandidateResponse]
     func fetchIncomingBuddyRequests(userId: String) async throws -> [BuddyRequestResponse]
     func fetchOutgoingBuddyRequests(userId: String) async throws -> [BuddyRequestResponse]
@@ -141,9 +141,10 @@ struct BuddyAPIService: BuddyAPIServiceProtocol, Sendable {
         return try await client.get(endpoint, responseType: TsunTsunInboxResponse.self)
     }
 
-    nonisolated func answerTsunTsun(tsuntsunId: Int, meaningId: Int) async throws -> AnswerTsunTsunResponse {
+    nonisolated func answerTsunTsun(tsuntsunId: Int, choiceId: Int) async throws -> AnswerTsunTsunResponse {
         let endpoint = APIEndpoint(path: "api/tsuntsun/answer", method: .post)
-        let request = AnswerTsunTsunRequest(tsuntsunId: tsuntsunId, meaningId: meaningId)
+        let request = AnswerTsunTsunRequest(tsuntsunId: tsuntsunId, choiceId: choiceId)
+        print("[TsunTsun] submit answer choiceId=\(choiceId) tsuntsunId=\(tsuntsunId)")
 
         do {
             return try await client.post(endpoint, body: request, responseType: AnswerTsunTsunResponse.self)
@@ -154,9 +155,9 @@ struct BuddyAPIService: BuddyAPIServiceProtocol, Sendable {
                 success: true,
                 message: nil,
                 isCorrect: nil,
-                correctMeaningId: nil,
+                correctChoiceId: nil,
                 correctText: nil,
-                selectedMeaningId: meaningId,
+                selectedChoiceId: choiceId,
                 selectedText: nil,
                 remainingUnansweredCount: nil
             )

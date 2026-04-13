@@ -3,9 +3,9 @@ import Combine
 
 @MainActor
 final class TsunTsunAnswerViewModel: ObservableObject {
-    @Published var selectedMeaningId: Int?
-    @Published private(set) var submittedMeaningId: Int?
-    @Published private(set) var correctMeaningId: Int?
+    @Published var selectedChoiceId: Int?
+    @Published private(set) var submittedChoiceId: Int?
+    @Published private(set) var correctChoiceId: Int?
     @Published private(set) var isCorrect: Bool?
     @Published private(set) var submissionMessage: String?
     @Published private(set) var isSubmitting: Bool = false
@@ -21,10 +21,11 @@ final class TsunTsunAnswerViewModel: ObservableObject {
     ) {
         self.item = item
         self.service = service
+        print("[TsunTsun] quiz type received type=\(item.type.rawValue) tsuntsunId=\(item.tsuntsunId)")
     }
 
     var canSubmit: Bool {
-        selectedMeaningId != nil && isSubmitting == false && hasSubmitted == false
+        selectedChoiceId != nil && isSubmitting == false && hasSubmitted == false
     }
 
     var hasAnsweredSuccessfully: Bool {
@@ -32,22 +33,44 @@ final class TsunTsunAnswerViewModel: ObservableObject {
     }
 
     var hasSubmitted: Bool {
-        submittedMeaningId != nil
+        submittedChoiceId != nil
     }
 
-    var effectiveCorrectMeaningId: Int? {
-        correctMeaningId ?? item.choices.first(where: { $0.meaningId == submittedMeaningId })?.meaningId
+    var effectiveCorrectChoiceId: Int? {
+        correctChoiceId ?? item.choices.first(where: { $0.choiceId == submittedChoiceId })?.choiceId
     }
 
     var selectedChoiceText: String? {
-        let meaningId = submittedMeaningId ?? selectedMeaningId
-        guard let meaningId else { return nil }
-        return item.choices.first(where: { $0.meaningId == meaningId })?.text
+        let choiceId = submittedChoiceId ?? selectedChoiceId
+        guard let choiceId else { return nil }
+        return item.choices.first(where: { $0.choiceId == choiceId })?.text
     }
 
     var correctChoiceText: String? {
-        guard let effectiveCorrectMeaningId else { return nil }
-        return item.choices.first(where: { $0.meaningId == effectiveCorrectMeaningId })?.text
+        guard let effectiveCorrectChoiceId else { return nil }
+        return item.choices.first(where: { $0.choiceId == effectiveCorrectChoiceId })?.text
+    }
+
+    var quizType: TsunTsunInboxItemResponse.QuizType {
+        item.type
+    }
+
+    var typeHintText: String {
+        switch quizType {
+        case .meaning:
+            return "뜻 문제"
+        case .reading:
+            return "읽기 문제"
+        }
+    }
+
+    var promptText: String {
+        switch quizType {
+        case .meaning:
+            return "다음 중 알맞은 뜻은?"
+        case .reading:
+            return "다음 중 올바른 읽기는?"
+        }
     }
 
     var feedbackText: String? {
@@ -57,7 +80,7 @@ final class TsunTsunAnswerViewModel: ObservableObject {
             return submissionMessage
         }
 
-        if submittedMeaningId == -1 {
+        if submittedChoiceId == -1 {
             return "정답을 확인하고 다음 꽃잎을 날려보세요."
         }
 
@@ -72,7 +95,7 @@ final class TsunTsunAnswerViewModel: ObservableObject {
     }
 
     func submitAnswer() {
-        guard let selectedMeaningId, canSubmit else { return }
+        guard let selectedChoiceId, canSubmit else { return }
 
         isSubmitting = true
         errorMessage = nil
@@ -81,9 +104,9 @@ final class TsunTsunAnswerViewModel: ObservableObject {
             do {
                 let response = try await service.answerTsunTsun(
                     tsuntsunId: item.tsuntsunId,
-                    meaningId: selectedMeaningId
+                    choiceId: selectedChoiceId
                 )
-                applySubmission(from: response, selectedMeaningId: selectedMeaningId)
+                applySubmission(from: response, selectedChoiceId: selectedChoiceId)
                 NotificationCenter.default.post(name: .tsunTsunInboxDidChange, object: nil)
                 isSubmitting = false
             } catch {
@@ -95,11 +118,15 @@ final class TsunTsunAnswerViewModel: ObservableObject {
 
     private func applySubmission(
         from response: AnswerTsunTsunResponse,
-        selectedMeaningId: Int
+        selectedChoiceId: Int
     ) {
-        submittedMeaningId = response.selectedMeaningId ?? selectedMeaningId
-        correctMeaningId = response.correctMeaningId
+        submittedChoiceId = response.selectedChoiceId ?? selectedChoiceId
+        correctChoiceId = response.correctChoiceId
         isCorrect = response.isCorrect
         submissionMessage = response.message
+        print(
+            "[TsunTsun] answer result selectedChoiceId=\(submittedChoiceId.map(String.init) ?? "nil") " +
+            "correctChoiceId=\(correctChoiceId.map(String.init) ?? "nil")"
+        )
     }
 }

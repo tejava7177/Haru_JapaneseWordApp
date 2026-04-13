@@ -313,10 +313,24 @@ struct TsunTsunInboxResponse: Decodable {
 }
 
 struct TsunTsunInboxItemResponse: Decodable, Identifiable, Hashable {
+    enum QuizType: String, Decodable, Hashable {
+        case meaning = "MEANING"
+        case reading = "READING"
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.singleValueContainer()
+            let rawValue = (try? container.decode(String.self))?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .uppercased() ?? ""
+            self = QuizType(rawValue: rawValue) ?? .meaning
+        }
+    }
+
     let tsuntsunId: Int
     let senderId: Int?
     let senderName: String
     let wordId: Int
+    let type: QuizType
     let expression: String
     let reading: String
     let targetDate: String
@@ -329,6 +343,7 @@ struct TsunTsunInboxItemResponse: Decodable, Identifiable, Hashable {
         case senderId
         case senderName
         case wordId
+        case type
         case expression
         case reading
         case targetDate
@@ -340,6 +355,7 @@ struct TsunTsunInboxItemResponse: Decodable, Identifiable, Hashable {
         senderId: Int?,
         senderName: String,
         wordId: Int,
+        type: QuizType = .meaning,
         expression: String,
         reading: String,
         targetDate: String,
@@ -349,6 +365,7 @@ struct TsunTsunInboxItemResponse: Decodable, Identifiable, Hashable {
         self.senderId = senderId
         self.senderName = senderName
         self.wordId = wordId
+        self.type = type
         self.expression = expression
         self.reading = reading
         self.targetDate = targetDate
@@ -361,6 +378,7 @@ struct TsunTsunInboxItemResponse: Decodable, Identifiable, Hashable {
         senderId = try container.decodeFlexibleIntIfPresent(forKey: .senderId)
         senderName = try container.decodeIfPresent(String.self, forKey: .senderName) ?? ""
         wordId = try container.decodeFlexibleInt(forKey: .wordId)
+        type = try container.decodeIfPresent(QuizType.self, forKey: .type) ?? .meaning
         expression = try container.decode(String.self, forKey: .expression)
         reading = try container.decodeIfPresent(String.self, forKey: .reading) ?? ""
         targetDate = try container.decodeIfPresent(String.self, forKey: .targetDate) ?? ""
@@ -369,31 +387,41 @@ struct TsunTsunInboxItemResponse: Decodable, Identifiable, Hashable {
 }
 
 struct TsunTsunChoiceResponse: Decodable, Identifiable, Hashable {
-    let meaningId: Int
+    let choiceId: Int
     let text: String
 
-    var id: Int { meaningId }
+    var id: Int { choiceId }
 
     private enum CodingKeys: String, CodingKey {
+        case choiceId
         case meaningId
         case text
     }
 
-    init(meaningId: Int, text: String) {
-        self.meaningId = meaningId
+    init(choiceId: Int, text: String) {
+        self.choiceId = choiceId
         self.text = text
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        meaningId = try container.decodeFlexibleInt(forKey: .meaningId)
+        if let decodedChoiceId = try container.decodeFlexibleIntIfPresent(forKey: .choiceId) {
+            choiceId = decodedChoiceId
+        } else {
+            choiceId = try container.decodeFlexibleInt(forKey: .meaningId)
+        }
         text = try container.decode(String.self, forKey: .text)
     }
 }
 
 struct AnswerTsunTsunRequest: Encodable {
     let tsuntsunId: Int
-    let meaningId: Int
+    let choiceId: Int
+
+    private enum CodingKeys: String, CodingKey {
+        case tsuntsunId
+        case choiceId
+    }
 }
 
 struct AnswerTsunTsunResponse: Decodable {
@@ -401,9 +429,9 @@ struct AnswerTsunTsunResponse: Decodable {
     let success: Bool?
     let message: String?
     let isCorrect: Bool?
-    let correctMeaningId: Int?
+    let correctChoiceId: Int?
     let correctText: String?
-    let selectedMeaningId: Int?
+    let selectedChoiceId: Int?
     let selectedText: String?
     let remainingUnansweredCount: Int?
 
@@ -412,8 +440,10 @@ struct AnswerTsunTsunResponse: Decodable {
         case success
         case message
         case isCorrect
+        case correctChoiceId
         case correctMeaningId
         case correctText
+        case selectedChoiceId
         case selectedMeaningId
         case selectedText
         case remainingUnansweredCount
@@ -424,9 +454,9 @@ struct AnswerTsunTsunResponse: Decodable {
         success: Bool?,
         message: String?,
         isCorrect: Bool?,
-        correctMeaningId: Int?,
+        correctChoiceId: Int?,
         correctText: String?,
-        selectedMeaningId: Int?,
+        selectedChoiceId: Int?,
         selectedText: String?,
         remainingUnansweredCount: Int?
     ) {
@@ -434,9 +464,9 @@ struct AnswerTsunTsunResponse: Decodable {
         self.success = success
         self.message = message
         self.isCorrect = isCorrect
-        self.correctMeaningId = correctMeaningId
+        self.correctChoiceId = correctChoiceId
         self.correctText = correctText
-        self.selectedMeaningId = selectedMeaningId
+        self.selectedChoiceId = selectedChoiceId
         self.selectedText = selectedText
         self.remainingUnansweredCount = remainingUnansweredCount
     }
@@ -447,9 +477,11 @@ struct AnswerTsunTsunResponse: Decodable {
         success = try container.decodeFlexibleBoolIfPresent(forKey: .success)
         message = try container.decodeIfPresent(String.self, forKey: .message)
         isCorrect = try container.decodeFlexibleBoolIfPresent(forKey: .isCorrect)
-        correctMeaningId = try container.decodeFlexibleIntIfPresent(forKey: .correctMeaningId)
+        correctChoiceId = try container.decodeFlexibleIntIfPresent(forKey: .correctChoiceId)
+            ?? container.decodeFlexibleIntIfPresent(forKey: .correctMeaningId)
         correctText = try container.decodeIfPresent(String.self, forKey: .correctText)
-        selectedMeaningId = try container.decodeFlexibleIntIfPresent(forKey: .selectedMeaningId)
+        selectedChoiceId = try container.decodeFlexibleIntIfPresent(forKey: .selectedChoiceId)
+            ?? container.decodeFlexibleIntIfPresent(forKey: .selectedMeaningId)
         selectedText = try container.decodeIfPresent(String.self, forKey: .selectedText)
         remainingUnansweredCount = try container.decodeFlexibleIntIfPresent(forKey: .remainingUnansweredCount)
     }
@@ -487,7 +519,9 @@ struct TsunTsunInboxSummary: Equatable {
             senderName: resolveSenderName(firstItem),
             expression: firstItem.expression,
             reading: firstItem.reading,
-            promptText: "『\(firstItem.expression)』의 뜻을 알고 있나요?"
+            promptText: firstItem.type == .reading
+                ? "『\(firstItem.expression)』의 읽기를 알고 있나요?"
+                : "『\(firstItem.expression)』의 뜻을 알고 있나요?"
         )
     }
 }

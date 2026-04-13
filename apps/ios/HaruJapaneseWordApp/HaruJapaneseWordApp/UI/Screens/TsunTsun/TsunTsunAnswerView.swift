@@ -68,14 +68,24 @@ struct TsunTsunAnswerView: View {
                 Text(viewModel.item.expression)
                     .font(.largeTitle.weight(.bold))
                     .foregroundStyle(Color.textPrimary)
-                if viewModel.item.reading.isEmpty == false {
+                if viewModel.quizType == .meaning, viewModel.item.reading.isEmpty == false {
                     Text(viewModel.item.reading)
                         .font(.title3)
                         .foregroundStyle(Color.textSecondary)
                 }
             }
 
-            Text("이 단어의 뜻을 알고 있나요?")
+            Text(viewModel.typeHintText)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.chipActive)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color.brandSoft)
+                )
+
+            Text(viewModel.promptText)
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(Color.textPrimary)
 
@@ -98,7 +108,8 @@ struct TsunTsunAnswerView: View {
 
             ForEach(viewModel.item.choices) { choice in
                 Button {
-                    viewModel.selectedMeaningId = choice.meaningId
+                    viewModel.selectedChoiceId = choice.choiceId
+                    print("[TsunTsun] choice selected choiceId=\(choice.choiceId)")
                 } label: {
                     HStack(spacing: 12) {
                         choiceIndicator(for: choice)
@@ -128,7 +139,38 @@ struct TsunTsunAnswerView: View {
                     .foregroundStyle(Color.textSecondary)
                     .padding(.top, 6)
             }
+
+            if viewModel.hasSubmitted {
+                resultSummaryView
+                    .padding(.top, 8)
+            }
         }
+    }
+
+    private var resultSummaryView: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let feedbackText = viewModel.feedbackText {
+                Text(feedbackText)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.textPrimary)
+            }
+
+            if let selectedChoiceText = viewModel.selectedChoiceText {
+                Text("선택한 답: \(selectedChoiceText)")
+                    .font(.footnote)
+                    .foregroundStyle(Color.textSecondary)
+            }
+
+            if let correctChoiceText = viewModel.correctChoiceText {
+                Text("정답: \(correctChoiceText)")
+                    .font(.footnote)
+                    .foregroundStyle(Color.textSecondary)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.surfaceSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     private var bottomBar: some View {
@@ -200,12 +242,12 @@ struct TsunTsunAnswerView: View {
 
     private func visualState(for choice: TsunTsunChoiceResponse) -> ChoiceVisualState {
         if viewModel.hasSubmitted == false {
-            return viewModel.selectedMeaningId == choice.meaningId ? .selected : .idle
+            return viewModel.selectedChoiceId == choice.choiceId ? .selected : .idle
         }
 
-        let choiceId = choice.meaningId
-        let submittedId = viewModel.submittedMeaningId
-        let correctId = viewModel.effectiveCorrectMeaningId
+        let choiceId = choice.choiceId
+        let submittedId = viewModel.submittedChoiceId
+        let correctId = viewModel.effectiveCorrectChoiceId
 
         if choiceId == correctId {
             return .correct
@@ -391,14 +433,15 @@ private struct TsunTsunAnswerPreviewContainer: View {
                     senderId: 1,
                     senderName: "김민성",
                     wordId: 390,
+                    type: .meaning,
                     expression: "紹介",
                     reading: "しょうかい",
                     targetDate: "2026-03-12",
                     choices: [
-                        TsunTsunChoiceResponse(meaningId: 100, text: "소개"),
-                        TsunTsunChoiceResponse(meaningId: 200, text: "발표"),
-                        TsunTsunChoiceResponse(meaningId: 300, text: "변화"),
-                        TsunTsunChoiceResponse(meaningId: -1, text: "모르겠어요")
+                        TsunTsunChoiceResponse(choiceId: 100, text: "소개"),
+                        TsunTsunChoiceResponse(choiceId: 200, text: "발표"),
+                        TsunTsunChoiceResponse(choiceId: 300, text: "변화"),
+                        TsunTsunChoiceResponse(choiceId: -1, text: "모르겠어요")
                     ]
                 ),
                 settingsStore: settingsStore,
@@ -453,15 +496,15 @@ private struct TsunTsunAnswerPreviewStub: BuddyAPIServiceProtocol {
         TsunTsunInboxResponse(userId: 2, unansweredCount: 1, items: [])
     }
 
-    func answerTsunTsun(tsuntsunId: Int, meaningId: Int) async throws -> AnswerTsunTsunResponse {
+    func answerTsunTsun(tsuntsunId: Int, choiceId: Int) async throws -> AnswerTsunTsunResponse {
         AnswerTsunTsunResponse(
             tsuntsunId: tsuntsunId,
             success: true,
-            message: meaningId == 100 ? "정답이에요." : "정답을 확인해 보세요.",
-            isCorrect: meaningId == 100,
-            correctMeaningId: 100,
+            message: choiceId == 100 ? "정답이에요." : "정답을 확인해 보세요.",
+            isCorrect: choiceId == 100,
+            correctChoiceId: 100,
             correctText: "소개",
-            selectedMeaningId: meaningId,
+            selectedChoiceId: choiceId,
             selectedText: nil,
             remainingUnansweredCount: 0
         )

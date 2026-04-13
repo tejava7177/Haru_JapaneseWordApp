@@ -210,14 +210,15 @@ private struct TsunTsunInboxPreviewStub: BuddyAPIServiceProtocol {
                     senderId: 1,
                     senderName: "김민성",
                     wordId: 390,
+                    type: .meaning,
                     expression: "紹介",
                     reading: "しょうかい",
                     targetDate: "2026-03-12",
                     choices: [
-                        TsunTsunChoiceResponse(meaningId: 100, text: "소개"),
-                        TsunTsunChoiceResponse(meaningId: 200, text: "발표"),
-                        TsunTsunChoiceResponse(meaningId: 300, text: "변화"),
-                        TsunTsunChoiceResponse(meaningId: -1, text: "모르겠어요")
+                        TsunTsunChoiceResponse(choiceId: 100, text: "소개"),
+                        TsunTsunChoiceResponse(choiceId: 200, text: "발표"),
+                        TsunTsunChoiceResponse(choiceId: 300, text: "변화"),
+                        TsunTsunChoiceResponse(choiceId: -1, text: "모르겠어요")
                     ]
                 ),
                 TsunTsunInboxItemResponse(
@@ -225,29 +226,30 @@ private struct TsunTsunInboxPreviewStub: BuddyAPIServiceProtocol {
                     senderId: 3,
                     senderName: "사토",
                     wordId: 121,
+                    type: .reading,
                     expression: "準備",
                     reading: "じゅんび",
                     targetDate: "2026-03-11",
                     choices: [
-                        TsunTsunChoiceResponse(meaningId: 400, text: "준비"),
-                        TsunTsunChoiceResponse(meaningId: 500, text: "약속"),
-                        TsunTsunChoiceResponse(meaningId: 600, text: "체험"),
-                        TsunTsunChoiceResponse(meaningId: -1, text: "모르겠어요")
+                        TsunTsunChoiceResponse(choiceId: 400, text: "じゅんび"),
+                        TsunTsunChoiceResponse(choiceId: 500, text: "やくそく"),
+                        TsunTsunChoiceResponse(choiceId: 600, text: "たいけん"),
+                        TsunTsunChoiceResponse(choiceId: -1, text: "모르겠어요")
                     ]
                 )
             ]
         )
     }
 
-    func answerTsunTsun(tsuntsunId: Int, meaningId: Int) async throws -> AnswerTsunTsunResponse {
+    func answerTsunTsun(tsuntsunId: Int, choiceId: Int) async throws -> AnswerTsunTsunResponse {
         AnswerTsunTsunResponse(
             tsuntsunId: tsuntsunId,
             success: true,
-            message: meaningId == 100 ? "정답이에요." : "정답을 확인해 보세요.",
-            isCorrect: meaningId == 100,
-            correctMeaningId: 100,
+            message: choiceId == 100 ? "정답이에요." : "정답을 확인해 보세요.",
+            isCorrect: choiceId == 100,
+            correctChoiceId: 100,
             correctText: "소개",
-            selectedMeaningId: meaningId,
+            selectedChoiceId: choiceId,
             selectedText: nil,
             remainingUnansweredCount: 1
         )
