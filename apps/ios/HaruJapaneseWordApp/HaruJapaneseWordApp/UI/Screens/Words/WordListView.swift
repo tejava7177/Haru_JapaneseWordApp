@@ -9,7 +9,7 @@ struct WordListView: View {
     @ObservedObject private var viewModel: WordListViewModel
     @ObservedObject private var settingsStore: AppSettingsStore
     private let repository: DictionaryRepository
-    @StateObject private var notebookStore = NotebookStore()
+    @StateObject private var notebookStore = NotebookStore.shared
     @State private var isRangeSheetPresented: Bool = false
     @State private var isCreateNotebookPresented: Bool = false
     @State private var lastRefreshAction: WordListViewModel.RefreshAction = .shuffled

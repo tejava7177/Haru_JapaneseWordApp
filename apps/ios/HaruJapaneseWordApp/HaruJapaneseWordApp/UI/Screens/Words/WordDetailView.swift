@@ -12,7 +12,7 @@ struct WordDetailView: View {
 
     @MainActor
     init(wordId: Int, repository: DictionaryRepository) {
-        self.init(wordId: wordId, repository: repository, notebookStore: NotebookStore())
+        self.init(wordId: wordId, repository: repository, notebookStore: NotebookStore.shared)
     }
 
     @MainActor

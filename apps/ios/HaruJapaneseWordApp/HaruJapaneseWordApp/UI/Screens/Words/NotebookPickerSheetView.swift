@@ -10,6 +10,7 @@ struct NotebookPickerSheetView: View {
     let onOpenNotebook: (WordNotebook) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var duplicateNotebook: WordNotebook?
+    @State private var isSubmitting: Bool = false
 
     var body: some View {
         NavigationStack {
@@ -37,16 +38,21 @@ struct NotebookPickerSheetView: View {
                                 return
                             }
 
-                            let result = store.addJLPTWord(
-                                to: notebook.id,
-                                wordId: wordId,
-                                word: word,
-                                reading: reading,
-                                meaning: meaning
-                            )
-                            print("[NotebookPicker] add result=\(String(describing: result)) notebookId=\(notebook.id)")
-                            onSelect(result)
-                            dismiss()
+                            Task {
+                                guard isSubmitting == false else { return }
+                                isSubmitting = true
+                                let result = await store.addJLPTWord(
+                                    to: notebook.id,
+                                    wordId: wordId,
+                                    word: word,
+                                    reading: reading,
+                                    meaning: meaning
+                                )
+                                isSubmitting = false
+                                print("[NotebookPicker] add result=\(String(describing: result)) notebookId=\(notebook.id)")
+                                onSelect(result)
+                                dismiss()
+                            }
                         } label: {
                             notebookRow(notebook, isAlreadyAdded: isAlreadyAdded)
                         }

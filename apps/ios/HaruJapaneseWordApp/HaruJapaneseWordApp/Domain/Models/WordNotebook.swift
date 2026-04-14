@@ -2,6 +2,7 @@ import Foundation
 
 struct WordNotebook: Identifiable, Codable, Equatable, Hashable {
     let id: UUID
+    let serverId: Int?
     var title: String
     var descriptionText: String?
     var items: [WordNotebookItem]
@@ -9,12 +10,14 @@ struct WordNotebook: Identifiable, Codable, Equatable, Hashable {
 
     init(
         id: UUID = UUID(),
+        serverId: Int? = nil,
         title: String,
         descriptionText: String? = nil,
         items: [WordNotebookItem] = [],
         createdAt: Date = Date()
     ) {
         self.id = id
+        self.serverId = serverId
         self.title = title
         self.descriptionText = descriptionText
         self.items = items
@@ -24,6 +27,7 @@ struct WordNotebook: Identifiable, Codable, Equatable, Hashable {
 
 struct WordNotebookItem: Identifiable, Codable, Equatable, Hashable {
     let id: UUID
+    let serverId: Int?
     let wordId: Int?
     let word: String
     let reading: String?
@@ -33,6 +37,7 @@ struct WordNotebookItem: Identifiable, Codable, Equatable, Hashable {
 
     init(
         id: UUID = UUID(),
+        serverId: Int? = nil,
         wordId: Int? = nil,
         word: String,
         reading: String? = nil,
@@ -41,6 +46,7 @@ struct WordNotebookItem: Identifiable, Codable, Equatable, Hashable {
         addedAt: Date = Date()
     ) {
         self.id = id
+        self.serverId = serverId
         self.wordId = wordId
         self.word = word
         self.reading = reading

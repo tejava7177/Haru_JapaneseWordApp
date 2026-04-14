@@ -28,6 +28,7 @@ struct AddNotebookWordView: View {
     @State private var toastMessage: String?
     @State private var duplicateAlertContext: DuplicateAlertContext?
     @State private var isWordListDuplicateConfirmationPresented: Bool = false
+    @State private var isSaving: Bool = false
     @FocusState private var focusedField: Field?
 
     private var isEditing: Bool {
@@ -89,7 +90,7 @@ struct AddNotebookWordView: View {
                             saveAndDismiss()
                         }
                         .foregroundStyle(canSave ? Color.ctaPrimary : Color.textTertiary)
-                        .disabled(canSave == false)
+                        .disabled(canSave == false || isSaving)
                     }
                 } else {
                     ToolbarItemGroup(placement: .topBarTrailing) {
@@ -97,13 +98,13 @@ struct AddNotebookWordView: View {
                             saveAndContinue()
                         }
                         .foregroundStyle(canSave ? Color.chipActive : Color.textTertiary)
-                        .disabled(canSave == false)
+                        .disabled(canSave == false || isSaving)
 
                         Button("저장") {
                             saveAndDismiss()
                         }
                         .foregroundStyle(canSave ? Color.ctaPrimary : Color.textTertiary)
-                        .disabled(canSave == false)
+                        .disabled(canSave == false || isSaving)
                     }
                 }
             }
@@ -142,7 +143,9 @@ struct AddNotebookWordView: View {
             .alert("이미 Word 목록에 있는 단어예요", isPresented: $isWordListDuplicateConfirmationPresented) {
                 Button("취소", role: .cancel) {}
                 Button("추가하기") {
-                    persistCurrentInput(shouldDismissOnSuccess: false)
+                    Task {
+                        await persistCurrentInput(shouldDismissOnSuccess: false)
+                    }
                 }
             } message: {
                 Text("다른 의미나 메모와 함께 내 단어장에 추가할까요?")
@@ -159,6 +162,7 @@ struct AddNotebookWordView: View {
     }
 
     private func attemptSave(shouldDismissOnSuccess: Bool) {
+        guard isSaving == false else { return }
         let expression = normalizedExpression
 
         if store.findItemWithSameExpression(in: notebookId, expression: expression, excluding: editingItemId) != nil {
@@ -172,14 +176,20 @@ struct AddNotebookWordView: View {
             return
         }
 
-        persistCurrentInput(shouldDismissOnSuccess: shouldDismissOnSuccess)
+        Task {
+            await persistCurrentInput(shouldDismissOnSuccess: shouldDismissOnSuccess)
+        }
     }
 
-    private func persistCurrentInput(shouldDismissOnSuccess: Bool) {
+    private func persistCurrentInput(shouldDismissOnSuccess: Bool) async {
+        guard isSaving == false else { return }
+        isSaving = true
+        defer { isSaving = false }
+
         let result: NotebookStore.ManualWordSaveResult
 
         if let editingItemId {
-            result = store.updateItem(
+            result = await store.updateItem(
                 in: notebookId,
                 itemId: editingItemId,
                 word: word,
@@ -188,7 +198,7 @@ struct AddNotebookWordView: View {
                 note: note
             )
         } else {
-            result = store.addItem(to: notebookId, word: word, reading: reading, meaning: meaning, note: note)
+            result = await store.addItem(to: notebookId, word: word, reading: reading, meaning: meaning, note: note)
         }
 
         switch result {

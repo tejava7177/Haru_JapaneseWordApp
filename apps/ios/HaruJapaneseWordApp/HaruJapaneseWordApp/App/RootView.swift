@@ -22,6 +22,7 @@ struct RootView: View {
         AppTheme.configureTabBarAppearance()
         let settingsStore = AppSettingsStore()
         ReviewWordStore.shared.configure(settingsStore: settingsStore)
+        NotebookStore.shared.configure(settingsStore: settingsStore)
         _settingsStore = StateObject(wrappedValue: settingsStore)
         _mateViewModel = StateObject(wrappedValue: MateViewModel(settingsStore: settingsStore))
         _appActivePingManager = StateObject(wrappedValue: AppActivePingManager(settingsStore: settingsStore))

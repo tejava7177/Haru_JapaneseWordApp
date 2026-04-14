@@ -10,6 +10,7 @@ struct NotebookDetailView: View {
     @State private var notebookTitleDraft: String = ""
     @State private var notebookDescriptionDraft: String = ""
     @State private var selectedItem: WordNotebookItem?
+    @State private var isSubmittingMutation: Bool = false
     @Environment(\.dismiss) private var dismiss
 
     private var notebook: WordNotebook? {
@@ -57,19 +58,31 @@ struct NotebookDetailView: View {
                     isNotebookEditorPresented = false
                 },
                 onSave: {
-                    store.updateNotebook(
-                        notebookId,
-                        title: notebookTitleDraft,
-                        descriptionText: notebookDescriptionDraft
-                    )
-                    isNotebookEditorPresented = false
+                    Task {
+                        guard isSubmittingMutation == false else { return }
+                        isSubmittingMutation = true
+                        let didUpdate = await store.updateNotebook(
+                            notebookId,
+                            title: notebookTitleDraft,
+                            descriptionText: notebookDescriptionDraft
+                        )
+                        isSubmittingMutation = false
+
+                        if didUpdate {
+                            isNotebookEditorPresented = false
+                        }
+                    }
                 }
             )
         }
         .confirmationDialog("이 단어장을 삭제할까요?", isPresented: $isNotebookDeleteDialogPresented, titleVisibility: .visible) {
             Button("삭제", role: .destructive) {
-                store.deleteNotebook(notebookId)
-                dismiss()
+                Task {
+                    let didDelete = await store.deleteNotebook(notebookId)
+                    if didDelete {
+                        dismiss()
+                    }
+                }
             }
             Button("취소", role: .cancel) {}
         } message: {
@@ -96,7 +109,9 @@ struct NotebookDetailView: View {
                     .listRowBackground(Color.clear)
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button(role: .destructive) {
-                            store.deleteItem(in: notebookId, itemId: item.id)
+                            Task {
+                                await store.deleteItem(in: notebookId, itemId: item.id)
+                            }
                         } label: {
                             Image(systemName: "trash")
                         }

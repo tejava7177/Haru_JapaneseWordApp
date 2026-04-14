@@ -45,8 +45,12 @@ struct NotebookWordDetailView: View {
                     }
 
                     Button("삭제", role: .destructive) {
-                        store.deleteItem(in: notebookId, itemId: itemId)
-                        dismiss()
+                        Task {
+                            let didDelete = await store.deleteItem(in: notebookId, itemId: itemId)
+                            if didDelete {
+                                dismiss()
+                            }
+                        }
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")

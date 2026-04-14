@@ -5,6 +5,7 @@ struct CreateNotebookView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var title: String = ""
     @State private var descriptionText: String = ""
+    @State private var isSaving: Bool = false
 
     private var trimmedTitle: String {
         title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -58,14 +59,22 @@ struct CreateNotebookView: View {
                     Spacer()
 
                     Button("생성") {
-                        store.addNotebook(
-                            title: trimmedTitle,
-                            descriptionText: trimmedDescription.isEmpty ? nil : trimmedDescription
-                        )
-                        dismiss()
+                        Task {
+                            guard isSaving == false else { return }
+                            isSaving = true
+                            let didCreate = await store.addNotebook(
+                                title: trimmedTitle,
+                                descriptionText: trimmedDescription.isEmpty ? nil : trimmedDescription
+                            )
+                            isSaving = false
+
+                            if didCreate {
+                                dismiss()
+                            }
+                        }
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(trimmedTitle.isEmpty)
+                    .disabled(trimmedTitle.isEmpty || isSaving)
 
                     Spacer()
                 }
