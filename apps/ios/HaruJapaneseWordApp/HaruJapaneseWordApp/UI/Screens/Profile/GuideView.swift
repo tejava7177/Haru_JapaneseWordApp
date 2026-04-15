@@ -64,38 +64,50 @@ struct GuideView: View {
                 .padding(.top, 20)
                 .padding(.bottom, 24)
             }
+            .background(Color.appBackground)
             .navigationTitle("하루 사용법")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         dismiss()
                     } label: {
                         Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Color.iconPrimary)
+                            .frame(width: 32, height: 32)
+                            .background(
+                                Circle()
+                                    .fill(Color.surfaceSecondary)
+                            )
                     }
                 }
             }
         }
+        .background(Color.appBackground.ignoresSafeArea())
     }
 
     private func guideSection(title: String, items: [String]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
                 .font(.headline)
+                .foregroundStyle(Color.textPrimary)
             ForEach(items, id: \.self) { item in
                 Text(item)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(Color.white)
+        .background(Color.surfacePrimary)
         .overlay(
             RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.black.opacity(0.08), lineWidth: 1)
+                .stroke(Color.divider, lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(color: Color.appShadow.opacity(0.35), radius: 8, x: 0, y: 2)
     }
 }
 
