@@ -400,7 +400,7 @@ private struct LevelToggleButton: View {
                 .font(.callout)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .foregroundStyle(isOn ? Color.white : Color.textSecondary)
+                .foregroundStyle(isOn ? Color.white : Color.textPrimary)
                 .frame(minWidth: chipMinWidth, minHeight: chipHeight)
                 .background(isOn ? Color.chipActive : Color.chipInactive)
                 .overlay(
@@ -426,7 +426,7 @@ private struct BookChip: View {
                 .font(.callout)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .foregroundStyle(isOn ? Color.white : Color.textSecondary)
+                .foregroundStyle(isOn ? Color.white : Color.textPrimary)
                 .frame(minWidth: chipMinWidth, minHeight: chipHeight)
                 .background(isOn ? activeColor : Color.chipInactive)
                 .overlay(
@@ -567,7 +567,7 @@ private struct LevelFilterSheetContent: View {
                                 .padding(.vertical, 8)
                                 .background(
                                     Capsule()
-                                        .fill(Color.white)
+                                        .fill(Color.surfacePrimary)
                                 )
                             }
                         }
