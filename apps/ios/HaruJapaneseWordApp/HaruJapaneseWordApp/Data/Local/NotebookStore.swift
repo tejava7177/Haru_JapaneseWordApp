@@ -17,6 +17,7 @@ final class NotebookStore: ObservableObject {
         case success
         case duplicate
         case notebookNotFound
+        case saveFailed
     }
 
     @Published private(set) var notebooks: [WordNotebook] = []
@@ -370,7 +371,22 @@ final class NotebookStore: ObservableObject {
                 return .success
             } catch {
                 print("[NotebookStore] notebook item create failure userId=\(userId) notebookId=\(serverNotebookId) error=\(error.localizedDescription)")
-                return .notebookNotFound
+                await reload(triggerSource: "addJLPTWordFailureRecovery")
+
+                if containsJLPTWord(
+                    wordId: wordId,
+                    word: trimmedWord,
+                    reading: normalizedReading,
+                    in: notebookId
+                ) {
+                    return .success
+                }
+
+                if self.notebook(for: notebookId) == nil {
+                    return .notebookNotFound
+                }
+
+                return .saveFailed
             }
         }
 

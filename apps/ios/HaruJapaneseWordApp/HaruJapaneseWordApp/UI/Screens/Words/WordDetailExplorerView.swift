@@ -4,6 +4,7 @@ struct WordDetailExplorerView: View {
     let items: [WordListItem]
     private let repository: DictionaryRepository
     @ObservedObject private var notebookStore: NotebookStore
+    @ObservedObject private var settingsStore: AppSettingsStore
 
     @Environment(\.dismiss) private var dismiss
     @State private var currentIndex: Int
@@ -12,11 +13,13 @@ struct WordDetailExplorerView: View {
         items: [WordListItem],
         initialIndex: Int,
         repository: DictionaryRepository,
-        notebookStore: NotebookStore
+        notebookStore: NotebookStore,
+        settingsStore: AppSettingsStore? = nil
     ) {
         self.items = items
         self.repository = repository
         self._notebookStore = ObservedObject(wrappedValue: notebookStore)
+        self._settingsStore = ObservedObject(wrappedValue: settingsStore ?? AppSettingsStore())
         let boundedIndex = min(max(initialIndex, 0), max(items.count - 1, 0))
         _currentIndex = State(initialValue: boundedIndex)
     }
@@ -50,7 +53,12 @@ struct WordDetailExplorerView: View {
     private func content(for item: WordListItem) -> some View {
         switch item.source {
         case let .jlpt(_, wordId):
-            WordDetailView(wordId: wordId, repository: repository, notebookStore: notebookStore)
+            WordDetailView(
+                wordId: wordId,
+                repository: repository,
+                notebookStore: notebookStore,
+                settingsStore: settingsStore
+            )
         case let .notebook(notebookId, itemId):
             NotebookWordDetailView(
                 store: notebookStore,

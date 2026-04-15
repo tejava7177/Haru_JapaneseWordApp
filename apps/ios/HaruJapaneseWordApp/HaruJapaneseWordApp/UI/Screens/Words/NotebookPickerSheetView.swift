@@ -51,7 +51,10 @@ struct NotebookPickerSheetView: View {
                                 isSubmitting = false
                                 print("[NotebookPicker] add result=\(String(describing: result)) notebookId=\(notebook.id)")
                                 onSelect(result)
-                                dismiss()
+
+                                if case .success = result {
+                                    dismiss()
+                                }
                             }
                         } label: {
                             notebookRow(notebook, isAlreadyAdded: isAlreadyAdded)

@@ -33,7 +33,8 @@ struct WordListView: View {
                             items: viewModel.displayedWords,
                             initialIndex: currentIndex,
                             repository: repository,
-                            notebookStore: notebookStore
+                            notebookStore: notebookStore,
+                            settingsStore: settingsStore
                         )
                     }
                 }

@@ -86,7 +86,7 @@ struct HomeView: View {
             }
             .navigationTitle("하루")
             .navigationDestination(for: Int.self) { wordId in
-                WordDetailView(wordId: wordId, repository: repository)
+                WordDetailView(wordId: wordId, repository: repository, settingsStore: settingsStore)
             }
             .navigationDestination(isPresented: $isShowingTsunTsunInbox) {
                 TsunTsunInboxView(settingsStore: settingsStore)

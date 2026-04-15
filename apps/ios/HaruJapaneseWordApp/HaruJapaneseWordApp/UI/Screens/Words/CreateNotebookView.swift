@@ -2,10 +2,16 @@ import SwiftUI
 
 struct CreateNotebookView: View {
     @ObservedObject var store: NotebookStore
+    let onCreated: ((WordNotebook) -> Void)?
     @Environment(\.dismiss) private var dismiss
     @State private var title: String = ""
     @State private var descriptionText: String = ""
     @State private var isSaving: Bool = false
+
+    init(store: NotebookStore, onCreated: ((WordNotebook) -> Void)? = nil) {
+        self.store = store
+        self.onCreated = onCreated
+    }
 
     private var trimmedTitle: String {
         title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -62,6 +68,7 @@ struct CreateNotebookView: View {
                         Task {
                             guard isSaving == false else { return }
                             isSaving = true
+                            let existingNotebookIds = Set(store.notebooks.map(\.id))
                             let didCreate = await store.addNotebook(
                                 title: trimmedTitle,
                                 descriptionText: trimmedDescription.isEmpty ? nil : trimmedDescription
@@ -69,6 +76,9 @@ struct CreateNotebookView: View {
                             isSaving = false
 
                             if didCreate {
+                                if let createdNotebook = store.notebooks.first(where: { existingNotebookIds.contains($0.id) == false }) {
+                                    onCreated?(createdNotebook)
+                                }
                                 dismiss()
                             }
                         }
