@@ -156,8 +156,8 @@ final class ProfileViewModel: ObservableObject {
         }
 
         let trimmedNickname = nicknameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedBio = bioDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedInstagramId = instagramIdDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedBio = normalizedOptionalProfileField(bioDraft)
+        let trimmedInstagramId = normalizedOptionalProfileField(instagramIdDraft)
 
         guard let backendUserId = settingsStore.currentBackendUserId,
               backendUserId.isEmpty == false else {
@@ -177,7 +177,7 @@ final class ProfileViewModel: ObservableObject {
         isSavingProfile = true
 
         print("[ProfileEdit] start save userId=\(backendUserId)")
-        print("[ProfileEdit] request nickname=\(trimmedNickname) bioExists=\(trimmedBio.isEmpty == false) instagramExists=\(trimmedInstagramId.isEmpty == false)")
+        print("[ProfileEdit] request nickname=\(trimmedNickname) bioExists=\(trimmedBio != nil) instagramExists=\(trimmedInstagramId != nil)")
 
         Task {
             defer { isSavingProfile = false }
@@ -189,11 +189,23 @@ final class ProfileViewModel: ObservableObject {
                     bio: trimmedBio,
                     instagramId: trimmedInstagramId
                 )
+                let normalizedResponse = ServerUserProfileResponse(
+                    userId: response.userId,
+                    nickname: response.nickname ?? trimmedNickname,
+                    learningLevel: response.learningLevel,
+                    bio: response.bio ?? trimmedBio ?? "",
+                    instagramId: response.instagramId ?? trimmedInstagramId ?? "",
+                    buddyCode: response.buddyCode,
+                    profileImageUrl: response.profileImageUrl,
+                    avatarBase64: response.avatarBase64,
+                    randomMatchingEnabled: response.randomMatchingEnabled,
+                    petalNotificationsEnabled: response.petalNotificationsEnabled
+                )
                 let avatarData = await resolvedAvatarData(
-                    from: response,
+                    from: normalizedResponse,
                     fallbackAvatarData: settingsStore.currentMateProfile()?.avatarData ?? profile.avatarData
                 )
-                applyServerProfile(response, avatarData: avatarData, forceDraftSync: true)
+                applyServerProfile(normalizedResponse, avatarData: avatarData, forceDraftSync: true)
                 profileStore.save(profile: profile)
                 profileSaveSuccessMessage = "저장되었어요."
                 print("[ProfileEdit] success nickname=\(profile.nickname)")
@@ -898,6 +910,11 @@ final class ProfileViewModel: ObservableObject {
 
     private func normalizeProfileField(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func normalizedOptionalProfileField(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private func resolveLearningLevel(serverValue: JLPTLevel?, fallbackValue: JLPTLevel?) -> JLPTLevel? {

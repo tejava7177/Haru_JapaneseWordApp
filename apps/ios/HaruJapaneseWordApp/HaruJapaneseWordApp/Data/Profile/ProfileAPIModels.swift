@@ -122,8 +122,8 @@ struct UpdateLearningLevelRequest: Encodable {
 
 struct UpdateUserProfileRequest: Encodable {
     let nickname: String
-    let bio: String
-    let instagramId: String
+    let bio: String?
+    let instagramId: String?
 }
 
 struct UpdateLearningLevelResponse: Decodable {

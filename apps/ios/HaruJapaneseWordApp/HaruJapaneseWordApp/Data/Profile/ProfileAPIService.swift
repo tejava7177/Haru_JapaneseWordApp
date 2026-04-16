@@ -2,7 +2,7 @@ import Foundation
 
 protocol ProfileAPIServiceProtocol {
     func fetchUserProfile(userId: String) async throws -> ServerUserProfileResponse
-    func updateUserProfile(userId: String, nickname: String, bio: String, instagramId: String) async throws -> ServerUserProfileResponse
+    func updateUserProfile(userId: String, nickname: String, bio: String?, instagramId: String?) async throws -> ServerUserProfileResponse
     func uploadProfileImage(userId: String, imageData: Data, fileName: String, mimeType: String) async throws -> UploadProfileImageResponse
     func updateLearningLevel(userId: String, level: JLPTLevel) async throws -> UpdateLearningLevelResponse
     func regenerateTodayDailyWords(userId: String) async throws -> RegenerateDailyWordsResponse
@@ -26,7 +26,7 @@ extension ProfileAPIServiceProtocol {
             petalNotificationsEnabled: nil
         )
     }
-    func updateUserProfile(userId: String, nickname: String, bio: String, instagramId: String) async throws -> ServerUserProfileResponse {
+    func updateUserProfile(userId: String, nickname: String, bio: String?, instagramId: String?) async throws -> ServerUserProfileResponse {
         try await fetchUserProfile(userId: userId)
     }
     func uploadProfileImage(userId: String, imageData: Data, fileName: String, mimeType: String) async throws -> UploadProfileImageResponse {
@@ -54,8 +54,8 @@ struct ProfileAPIService: ProfileAPIServiceProtocol, Sendable {
     nonisolated func updateUserProfile(
         userId: String,
         nickname: String,
-        bio: String,
-        instagramId: String
+        bio: String?,
+        instagramId: String?
     ) async throws -> ServerUserProfileResponse {
         print("[ProfileAPI] PATCH /api/users/\(userId)/profile")
         let endpoint = APIEndpoint(
