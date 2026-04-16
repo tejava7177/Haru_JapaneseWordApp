@@ -766,7 +766,9 @@ private struct ProfileSummaryCardView<AvatarContent: View>: View {
                             .font(.title3.weight(.semibold))
                             .foregroundStyle(Color.textPrimary)
                             .lineLimit(1)
-                            .layoutPriority(2)
+                            .truncationMode(.tail)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .layoutPriority(1)
 
                         Text(learningLevelTitle)
                             .font(.caption.weight(.semibold))
@@ -776,7 +778,9 @@ private struct ProfileSummaryCardView<AvatarContent: View>: View {
                             .background(Color.surfaceSecondary)
                             .clipShape(Capsule())
                             .overlay(Capsule().stroke(Color.divider, lineWidth: 1))
+                            .fixedSize(horizontal: true, vertical: false)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                     if let bio {
                         Text(bio)
@@ -800,12 +804,11 @@ private struct ProfileSummaryCardView<AvatarContent: View>: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                Spacer(minLength: 8)
-
                 Button("수정", action: onEdit)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.chipActive)
                     .padding(.top, 2)
+                    .fixedSize(horizontal: true, vertical: false)
             }
         }
         .padding(14)
