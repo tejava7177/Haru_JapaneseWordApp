@@ -401,7 +401,12 @@ struct ProfileView: View {
                     get: { viewModel.learningNotificationSettings.isRepeating },
                     set: { viewModel.updateLearningNotificationRepeating($0) }
                 )) {
-                    Text("반복 알림")
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("반복 알림")
+                        Text(repeatingNotificationDescription)
+                            .font(.footnote)
+                            .foregroundStyle(Color.textSecondary)
+                    }
                 }
                 .disabled(viewModel.isUpdatingLearningNotification)
 
@@ -433,9 +438,9 @@ struct ProfileView: View {
                 )) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("꽃잎 알림 받기")
-                        Text("버디가 꽃잎을 보내면 알림으로 받아요")
+                        Text("꽃잎이 도착했을 때와, 아직 답하지 않은 꽃잎이 있을 때 알려드려요.")
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.textSecondary)
                     }
                 }
                 .disabled(viewModel.isUpdatingPetalNotification)
@@ -490,6 +495,14 @@ struct ProfileView: View {
         default:
             return "1.0.0"
         }
+    }
+
+    private var repeatingNotificationDescription: String {
+        if viewModel.learningNotificationSettings.isRepeating {
+            return "설정한 시간대와 간격에 따라 학습 알림을 보내드려요."
+        }
+
+        return "켜면 설정한 시간대와 간격에 따라 여러 번 알려드려요."
     }
 
     private var avatarView: some View {
