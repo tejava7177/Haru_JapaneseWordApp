@@ -5,6 +5,7 @@ struct NotebookDetailView: View {
     private let repository: DictionaryRepository
     let notebookId: UUID
     @State private var isReadingHidden: Bool = false
+    @State private var isMeaningHidden: Bool = false
     @State private var isShuffleEnabled: Bool = false
     @State private var shuffledItemIDs: [UUID] = []
     @State private var isAddWordPresented: Bool = false
@@ -343,7 +344,9 @@ private extension NotebookDetailView {
     }
 
     func itemRow(_ item: WordNotebookItem) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let trimmedMeaning = item.meaning.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return VStack(alignment: .leading, spacing: 8) {
             Text(item.word)
                 .font(.headline)
                 .foregroundStyle(.primary)
@@ -356,9 +359,12 @@ private extension NotebookDetailView {
                     .foregroundStyle(Color.textTertiary)
             }
 
-            Text(item.meaning)
-                .font(.subheadline)
-                .foregroundStyle(Color.textSecondary)
+            if isMeaningHidden == false,
+               trimmedMeaning.isEmpty == false {
+                Text(trimmedMeaning)
+                    .font(.subheadline)
+                    .foregroundStyle(Color.textSecondary)
+            }
         }
         .contentShape(Rectangle())
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -369,31 +375,32 @@ private extension NotebookDetailView {
 
     var controlBar: some View {
         HStack(spacing: 10) {
-            Toggle(isOn: $isReadingHidden) {
-                Label("읽기 숨김", systemImage: isReadingHidden ? "text.line.first.and.arrowtriangle.forward" : "text.line.first.and.arrowtriangle.backward")
-                    .font(.caption.weight(.semibold))
+            ToggleChipView(
+                iconName: "text.line.first.and.arrowtriangle.forward",
+                title: "읽기 숨김",
+                isActive: isReadingHidden
+            ) {
+                isReadingHidden.toggle()
             }
-            .toggleStyle(NotebookDetailChipToggleStyle())
 
-            Button {
+            ToggleChipView(
+                iconName: "character.textbox",
+                title: "뜻 숨김",
+                isActive: isMeaningHidden
+            ) {
+                isMeaningHidden.toggle()
+            }
+
+            ToggleChipView(
+                iconName: "shuffle",
+                title: "셔플",
+                isActive: isShuffleEnabled
+            ) {
                 isShuffleEnabled.toggle()
                 if isShuffleEnabled {
                     reshuffleDisplayedItems()
                 }
-            } label: {
-                Label("셔플", systemImage: "shuffle")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(isShuffleEnabled ? Color.chipActive : Color.textSecondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(isShuffleEnabled ? Color.brandSoft : Color.surfaceSecondary)
-                    .clipShape(Capsule())
-                    .overlay(
-                        Capsule()
-                            .stroke(isShuffleEnabled ? Color.chipActive.opacity(0.35) : Color.divider, lineWidth: 1)
-                    )
             }
-            .buttonStyle(.plain)
 
             Spacer(minLength: 0)
         }
@@ -416,20 +423,32 @@ private extension NotebookDetailView {
     }
 }
 
-private struct NotebookDetailChipToggleStyle: ToggleStyle {
-    func makeBody(configuration: Configuration) -> some View {
+private struct ToggleChipView: View {
+    let iconName: String
+    let title: String
+    let isActive: Bool
+    let action: () -> Void
+
+    var body: some View {
         Button {
-            configuration.isOn.toggle()
+            action()
         } label: {
-            configuration.label
-                .foregroundStyle(configuration.isOn ? Color.chipActive : Color.textSecondary)
+            HStack(spacing: 6) {
+                Image(systemName: iconName)
+                    .font(.caption.weight(.semibold))
+
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(isActive ? Color.white : Color.textSecondary)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(configuration.isOn ? Color.brandSoft : Color.surfaceSecondary)
+                .background(isActive ? Color.chipActive : Color.surfaceSecondary.opacity(0.9))
                 .clipShape(Capsule())
                 .overlay(
                     Capsule()
-                        .stroke(configuration.isOn ? Color.chipActive.opacity(0.35) : Color.divider, lineWidth: 1)
+                        .stroke(isActive ? Color.chipActive : Color.divider.opacity(0.9), lineWidth: 1)
                 )
         }
         .buttonStyle(.plain)
