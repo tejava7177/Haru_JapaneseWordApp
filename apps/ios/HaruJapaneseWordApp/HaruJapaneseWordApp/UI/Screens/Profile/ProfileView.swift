@@ -251,7 +251,8 @@ struct ProfileView: View {
                             }
                         )
                     },
-                    onEdit: beginProfileEditing
+                    onEdit: beginProfileEditing,
+                    onInstagramFeedback: showToast
                 )
             }
 
@@ -767,6 +768,7 @@ private struct ProfileSummaryCardView<AvatarContent: View>: View {
     let learningLevelTitle: String
     @ViewBuilder let avatarView: () -> AvatarContent
     let onEdit: () -> Void
+    let onInstagramFeedback: (String) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -804,14 +806,19 @@ private struct ProfileSummaryCardView<AvatarContent: View>: View {
                     }
 
                     if let instagramId {
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            Image(systemName: "camera")
-                                .font(.caption2)
-                                .foregroundStyle(Color.iconSecondary.opacity(0.8))
-                            Text("@\(instagramId)")
-                                .font(.caption)
-                                .foregroundStyle(Color.textSecondary)
-                                .fixedSize(horizontal: false, vertical: true)
+                        InstagramProfileActionView(rawValue: instagramId, onCopySuccess: onInstagramFeedback) { displayHandle in
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Image(systemName: "camera")
+                                    .font(.caption2)
+                                    .foregroundStyle(Color.iconSecondary.opacity(0.8))
+                                Text(displayHandle)
+                                    .font(.caption)
+                                    .foregroundStyle(Color.textSecondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Image(systemName: "chevron.up.right")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(Color.textTertiary)
+                            }
                         }
                     }
                 }

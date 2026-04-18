@@ -4,6 +4,9 @@ struct NotebookDetailView: View {
     @ObservedObject var store: NotebookStore
     private let repository: DictionaryRepository
     let notebookId: UUID
+    @State private var isReadingHidden: Bool = false
+    @State private var isShuffleEnabled: Bool = false
+    @State private var shuffledItemIDs: [UUID] = []
     @State private var isAddWordPresented: Bool = false
     @State private var isNotebookEditorPresented: Bool = false
     @State private var isNotebookDeleteDialogPresented: Bool = false
@@ -21,8 +24,20 @@ struct NotebookDetailView: View {
         store.items(for: notebookId)
     }
 
+    private var displayedItems: [WordNotebookItem] {
+        guard isShuffleEnabled else { return items }
+
+        let itemsByID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
+        let orderedItems = shuffledItemIDs.compactMap { itemsByID[$0] }
+        return orderedItems.count == items.count ? orderedItems : items
+    }
+
     private var explorerItems: [WordListItem] {
-        items.map { WordListItem(notebookId: notebookId, item: $0) }
+        displayedItems.map { WordListItem(notebookId: notebookId, item: $0) }
+    }
+
+    private var itemIDs: [UUID] {
+        items.map(\.id)
     }
 
     init(
@@ -38,7 +53,7 @@ struct NotebookDetailView: View {
     var body: some View {
         content
             .navigationDestination(item: $selectedItem) { item in
-                if let currentIndex = items.firstIndex(where: { $0.id == item.id }) {
+                if let currentIndex = displayedItems.firstIndex(where: { $0.id == item.id }) {
                     WordDetailExplorerView(
                         items: explorerItems,
                         initialIndex: currentIndex,
@@ -88,16 +103,22 @@ struct NotebookDetailView: View {
         } message: {
             Text("포함된 단어도 모두 삭제됩니다")
         }
+        .onAppear {
+            syncShuffledOrder()
+        }
+        .onChange(of: itemIDs) { _, _ in
+            syncShuffledOrder()
+        }
     }
 
     private var content: some View {
         List {
             summarySection
 
-            if items.isEmpty {
+            if displayedItems.isEmpty {
                 emptyState
             } else {
-                ForEach(items) { item in
+                ForEach(displayedItems) { item in
                     Button {
                         selectedItem = item
                     } label: {
@@ -285,6 +306,10 @@ private extension NotebookDetailView {
                     .font(.subheadline)
                     .foregroundStyle(Color.textSecondary)
             }
+
+            if items.isEmpty == false {
+                controlBar
+            }
         }
         .padding(.horizontal, 20)
         .padding(.top, 8)
@@ -323,6 +348,14 @@ private extension NotebookDetailView {
                 .font(.headline)
                 .foregroundStyle(.primary)
 
+            if isReadingHidden == false,
+               let reading = item.reading?.trimmingCharacters(in: .whitespacesAndNewlines),
+               reading.isEmpty == false {
+                Text(reading)
+                    .font(.subheadline)
+                    .foregroundStyle(Color.textTertiary)
+            }
+
             Text(item.meaning)
                 .font(.subheadline)
                 .foregroundStyle(Color.textSecondary)
@@ -332,6 +365,74 @@ private extension NotebookDetailView {
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
         .appCardStyle(cornerRadius: 16, shadowRadius: 4, shadowY: 1)
+    }
+
+    var controlBar: some View {
+        HStack(spacing: 10) {
+            Toggle(isOn: $isReadingHidden) {
+                Label("읽기 숨김", systemImage: isReadingHidden ? "text.line.first.and.arrowtriangle.forward" : "text.line.first.and.arrowtriangle.backward")
+                    .font(.caption.weight(.semibold))
+            }
+            .toggleStyle(NotebookDetailChipToggleStyle())
+
+            Button {
+                isShuffleEnabled.toggle()
+                if isShuffleEnabled {
+                    reshuffleDisplayedItems()
+                }
+            } label: {
+                Label("셔플", systemImage: "shuffle")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(isShuffleEnabled ? Color.chipActive : Color.textSecondary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(isShuffleEnabled ? Color.brandSoft : Color.surfaceSecondary)
+                    .clipShape(Capsule())
+                    .overlay(
+                        Capsule()
+                            .stroke(isShuffleEnabled ? Color.chipActive.opacity(0.35) : Color.divider, lineWidth: 1)
+                    )
+            }
+            .buttonStyle(.plain)
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    func syncShuffledOrder() {
+        guard isShuffleEnabled else {
+            shuffledItemIDs = itemIDs
+            return
+        }
+
+        let currentIDs = Set(itemIDs)
+        let preservedIDs = shuffledItemIDs.filter { currentIDs.contains($0) }
+        let missingIDs = itemIDs.filter { preservedIDs.contains($0) == false }.shuffled()
+        shuffledItemIDs = preservedIDs + missingIDs
+    }
+
+    func reshuffleDisplayedItems() {
+        shuffledItemIDs = itemIDs.shuffled()
+    }
+}
+
+private struct NotebookDetailChipToggleStyle: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Button {
+            configuration.isOn.toggle()
+        } label: {
+            configuration.label
+                .foregroundStyle(configuration.isOn ? Color.chipActive : Color.textSecondary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(configuration.isOn ? Color.brandSoft : Color.surfaceSecondary)
+                .clipShape(Capsule())
+                .overlay(
+                    Capsule()
+                        .stroke(configuration.isOn ? Color.chipActive.opacity(0.35) : Color.divider, lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
     }
 }
 

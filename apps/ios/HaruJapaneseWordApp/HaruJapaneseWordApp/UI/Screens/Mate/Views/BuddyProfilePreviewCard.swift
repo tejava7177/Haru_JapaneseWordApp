@@ -16,15 +16,11 @@ struct BuddyProfilePreviewItem: Equatable {
 struct BuddyProfilePreviewCard: View {
     let item: BuddyProfilePreviewItem
     let onClose: () -> Void
+    @State private var toastMessage: String?
 
     private var bioText: String? {
         let trimmed = item.bio.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
-    }
-
-    private var instagramText: String? {
-        let trimmed = item.instagramId.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : "@\(trimmed)"
     }
 
     var body: some View {
@@ -61,8 +57,13 @@ struct BuddyProfilePreviewCard: View {
             VStack(alignment: .leading, spacing: 14) {
                 infoRow(icon: "graduationcap.fill", title: "JLPT 레벨", value: item.jlptLevel.title)
 
-                if let instagramText {
-                    infoRow(icon: "camera.fill", title: "Instagram", value: instagramText)
+                InstagramProfileActionView(rawValue: item.instagramId, onCopySuccess: showToast) { displayHandle in
+                    infoRow(
+                        icon: "camera.fill",
+                        title: "Instagram",
+                        value: displayHandle,
+                        trailingIcon: "chevron.up.right"
+                    )
                 }
 
                 infoRow(
@@ -99,10 +100,29 @@ struct BuddyProfilePreviewCard: View {
                 .fill(Color(uiColor: .systemBackground))
                 .shadow(color: .black.opacity(0.18), radius: 22, x: 0, y: 14)
         )
+        .overlay(alignment: .bottom) {
+            if let toastMessage {
+                Text(toastMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Color.black.opacity(0.85))
+                    .clipShape(Capsule())
+                    .padding(.bottom, 18)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
         .padding(.horizontal, 24)
     }
 
-    private func infoRow(icon: String, title: String, value: String, isEmphasized: Bool = false) -> some View {
+    private func infoRow(
+        icon: String,
+        title: String,
+        value: String,
+        isEmphasized: Bool = false,
+        trailingIcon: String? = nil
+    ) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: icon)
                 .font(.system(size: 14, weight: .semibold))
@@ -119,13 +139,33 @@ struct BuddyProfilePreviewCard: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                Text(value)
-                    .font(.subheadline.weight(isEmphasized ? .semibold : .medium))
-                    .foregroundStyle(isEmphasized ? Color(red: 0.92, green: 0.48, blue: 0.66) : .primary)
-                    .fixedSize(horizontal: false, vertical: true)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(value)
+                        .font(.subheadline.weight(isEmphasized ? .semibold : .medium))
+                        .foregroundStyle(isEmphasized ? Color(red: 0.92, green: 0.48, blue: 0.66) : .primary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if let trailingIcon {
+                        Image(systemName: trailingIcon)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
             }
 
             Spacer(minLength: 0)
+        }
+    }
+
+    private func showToast(_ message: String) {
+        withAnimation(.easeOut(duration: 0.2)) {
+            toastMessage = message
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+            withAnimation(.easeIn(duration: 0.2)) {
+                toastMessage = nil
+            }
         }
     }
 }
